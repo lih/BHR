@@ -1,0 +1,120 @@
+{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo, NoMonomorphismRestriction #-}
+module Curly.Session.Commands.Common where
+
+import Curly.Core
+import Curly.Core.Library
+import Curly.Core.Security
+import Curly.UI
+import Curly.UI.Options hiding (nbsp,spc)
+import Curly.Core.Parser
+import Curly.Style
+import Data.IORef 
+import Language.Format hiding (space)
+import Control.Exception (fromException)
+import Control.DeepSeq (($!!))
+
+showPath l = intercalate "." (map (foldMap quote) l)
+  where quote '.' = "\\."
+        quote '\\' = "\\\\"
+        quote c = [c]
+subPath :: [String] -> [String] -> [String]
+subPath = foldl' enter
+  where enter [] ":" = []
+        enter l ":" = init l
+        enter p s = p+[s]
+
+showMetaDir (Pure x) = x
+showMetaDir (Join (ModDir m)) = intercalate "\n" [showSM s a | (s,a) <- m]
+  where showSM s x@(Join (ModDir _)) = format "* %s:\n%s" s (indent "  " (showMetaDir x))
+        showSM s (Pure y) = format "- %s: %s" s y
+
+optimized e = lift (getl l'library) <&> \l -> optExprIn l e
+
+liftIOWarn :: (?sessionState :: IORef SessionState,?serve :: Bytes -> IO (),MonadIO m) => IO () -> m ()
+liftIOWarn ma = liftIO $ (`catch`ma) $ \e -> case fromException e of
+  Just pe@(CurlyParserException s ws) -> do
+    runAtomic ?sessionState $ do warnings =- (s,ws)
+    ?serve (stringBytes $ pretty pe+"\n")
+  Nothing -> ?serve (stringBytes $ show e+"\n")
+
+toTerminal :: String -> String
+toTerminal | envVar "xterm" "TERM" == "screen" = toASCII
+           | otherwise = id
+  where toASCII = foldMap tr
+        tr '⇒' = "=>"
+        tr '→' = "->"
+        tr c = [c]
+serveString :: (?sessionState :: IORef SessionState,?serve :: Bytes -> IO (),MonadIO m) => String -> m ()
+serveString s = liftIOWarn (?serve $!! stringBytes $ toTerminal s)
+serveStrLn :: (?sessionState :: IORef SessionState,?serve :: Bytes -> IO (),MonadIO m) => String -> m ()
+serveStrLn s = liftIOWarn (?serve $!! stringBytes $ toTerminal (s+"\n"))
+
+editSource f (l,c) m = readBytes f >>= ?edit ".cy" (l,c) >>= maybe unit (\b -> writeBytes f b >> m)
+
+data SessionState = SessionState {
+  _wd :: [String],
+  _style :: Style,
+  _this :: Library,
+  _warnings :: (Maybe String,[Warning])
+  }
+wd :: Lens' SessionState [String]
+wd = lens _wd (\x y -> x { _wd = y })
+this :: Lens' SessionState Library
+this = lens _this (\x y -> x { _this = y })
+style :: Lens' SessionState Style
+style = lens _style (\x y -> x { _style = y })
+warnings :: Lens' SessionState (Maybe String,[Warning])
+warnings = lens _warnings (\x y -> x { _warnings = y })
+
+withSessionState :: (?curlyPlex :: CurlyPlex, MonadIO m) => ((?sessionState :: IORef SessionState) => m a) -> m a
+withSessionState io = do
+  istate <- liftIO $ newIORef (SessionState [] defaultStyle zero zero)
+  let reloadContext m = runAtomic istate $ do
+        is <- getl (this.imports)
+        let cxt = context m
+            is' = zipWith (flip const) is cxt
+        this =~ set imports is' . compose [warp symbols (insert n v) | (GlobalID n _,v) <- toList is']
+  liftIO $ runAtomic (?curlyPlex^.mountainCache) (l'2 =~ (reloadContext:))
+  let ?sessionState = istate in io
+
+withSessionLib :: (MonadIO m,?sessionState :: IORef SessionState) => OpParser m a -> OpParser m a
+withSessionLib ma = do
+  l <- by this <$> liftIO (readIORef ?sessionState)
+  lift (l'library =- l)
+  ma <* (lift (getl l'library) >>= liftIO . modifyIORef ?sessionState . set this)
+ 
+withStyle :: (?sessionState :: IORef SessionState,MonadIO m) => ((?style :: Style) => m a) -> m a
+withStyle m = getSession style >>= \s -> let ?style = s in m
+getSession :: (?sessionState :: IORef SessionState,MonadIO m) => Lens' SessionState a -> m a
+getSession l = liftIO (readIORef ?sessionState <&> by l)
+
+data KeyOps = KeyOps {
+  opsGetKey :: String -> IO (Maybe PublicKey),
+  opsKeyGen :: Bool -> String -> IO (),
+  opsListKeys :: IO [(String,KeyFingerprint,Bool)]
+  }
+clientKey ::(?clientOps :: KeyOps) => String -> IO (Maybe PublicKey)
+clientKey = opsGetKey ?clientOps
+clientKeyGen ::(?clientOps :: KeyOps) => Bool -> String -> IO ()
+clientKeyGen = opsKeyGen ?clientOps
+clientKeyList ::(?clientOps :: KeyOps) => IO [(String,KeyFingerprint,Bool)]
+clientKeyList = opsListKeys ?clientOps
+
+type Interactive t = (?sessionState :: IORef SessionState
+                     ,?targetParams :: TargetParams
+                     ,?curlyPlex :: CurlyPlex
+                     ,?curlyConfig :: CurlyConfig
+                     ,?serve :: Bytes -> IO ()
+                     ,?edit :: String -> (Int,Int) -> Bytes -> IO (Maybe Bytes)
+                     ,?killServer :: IO ()
+                     ,?quitSession :: IO ()
+                     ,?access :: Access
+                     ,?subSession :: CurlyConfig -> OpParser IO ()
+                     ,?clientOps :: KeyOps)
+                     => t
+type Command = (Documentation,OpParser IO Bool)
+
+withDoc d m = (mkDoc d,m)
+
+dirArg = many1' $ noneOf " \t\n(){}"
+dirArgs = sepBy1' dirArg nbhsp
