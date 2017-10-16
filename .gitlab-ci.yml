@@ -3,7 +3,7 @@ stages:
 
 before_script:
   - apt-get update
-  - apt-get install -y stack
+  - apt-get install -y haskell-stack
 
 stack_build:
   stage: build
