@@ -7,4 +7,9 @@ before_script:
 
 stack_build:
   stage: build
-  script: curl -sSL https://www.stackage.org/stack/linux-x86_64-static > /usr/local/bin/stack; stack build --install-ghc
+  script:
+    >
+      mkdir -p /opt/stack &&
+      curl -sSL https://www.stackage.org/stack/linux-x86_64-static | tar -xz -C /opt/stack &&
+      ln -s /opt/stack/stack /usr/local/bin/stack &&
+      stack build --install-ghc
