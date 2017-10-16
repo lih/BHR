@@ -1,0 +1,10 @@
+stages:
+  - build
+
+before_script:
+  - apt-get install -y g++ gcc libc6-dev libffi-dev libgmp-dev make xz-utils zlib1g-dev git gnupg curl
+  - 
+
+stack_build:
+  stage: build
+  script: curl -sSL https://www.stackage.org/stack/linux-x86_64-static > /usr/local/bin/stack; stack build --install-ghc
