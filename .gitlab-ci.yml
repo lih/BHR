@@ -2,6 +2,7 @@ stages:
   - build
 
 before_script:
+  - apt-get update
   - apt-get install -y g++ gcc libc6-dev libffi-dev libgmp-dev make xz-utils zlib1g-dev git gnupg curl
 
 stack_build:
