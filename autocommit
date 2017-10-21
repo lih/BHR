@@ -1,3 +1,3 @@
 #!/bin/bash
 git add -A
-git commit -m "Autocommit on $(date)"
+git commit -m "Autocommit on $(LANG= date)"
