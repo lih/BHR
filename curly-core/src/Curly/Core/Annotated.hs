@@ -56,15 +56,21 @@ instance NFData (Symbol s) where
   rnf (Argument n) = rnf n
   rnf (Builtin _ b) = rnf b
 
-data Strictness = Delayed Strictness [Strictness]
-                | WHNF (Builtin:+:Int) [Strictness]
+type ExprStrictness = ([Strictness],Strictness)
+data Strictness = Delayed ExprStrictness
+                | WHNF (Builtin:+:Int) [ExprStrictness]
                 deriving (Eq,Ord,Show,Generic)
 instance Serializable Strictness
 instance Format Strictness
-type ExprStrictness = ([Strictness],Strictness)
-strictnessArg :: Traversal' Strictness Int
-strictnessArg k (WHNF (Right n) sts) = k n <&> \n' -> WHNF (Right n') sts
-strictnessArg k x = pure x
+
+strictnessArg :: Traversal (Int,Int) Int Strictness Strictness
+strictnessArg k = descend 0
+  where descend n (WHNF (Right n') ests) =
+          WHNF . Right <$> k (n,n') <*> traverse (descendE n) ests
+        descend n (WHNF s ests) = WHNF s <$> traverse (descendE n) ests
+        descend n (Delayed est) = Delayed <$> descendE (n+1) est
+        descendE n (sts,st) = (,) <$> traverse (descend n) sts
+                                  <*> descend n st
 
 {- | An annotated node
 
@@ -396,7 +402,17 @@ instance Identifier s => Annotated (AnnExpr s) s where
   exprType (Pure (Builtin t _)) = (t,zero)
   exprStrictness (Join ann) = _strictness ann
   exprStrictness (Pure (Argument n)) = pure (WHNF (Right n) [])
-  exprStrictness (Pure (Builtin _ b)) = pure (WHNF (Left b) [])
+  exprStrictness (Pure (Builtin _ b)) = pure $ case b of
+    B_AddInt -> binOp B_AddInt
+    B_MulInt -> binOp B_MulInt
+    B_DivInt -> binOp B_DivInt
+    B_SubInt -> binOp B_SubInt
+    B_AddString -> binOp B_AddString
+    b -> WHNF (Left b) []
+    where binOp b = Delayed $ pure $ Delayed $ do
+            let arg n = WHNF (Right n) []
+            tell [arg 0, arg 1]
+            pure (WHNF (Left b) [pure (arg 1), pure (arg 0)])
 
 nameProp :: (forall b. AnnNode s b -> a) -> (AnnExpr s -> a) -> NameExpr s -> a
 nameProp np anp = fix $ \nnp a -> case a^..i'NameNode of
@@ -418,11 +434,10 @@ t'exprType = fix $ \node -> from i'NameNode.(t'Join.annType
         argType _ (Argument n) = pure (Argument n)
 
 lambdaAnns :: forall e s. Annotated e s => e -> (Int,Int,Map (Symbol s) Int,ExprType s,ExprStrictness)
-lambdaAnns e = (i,m,r,lambdaType (exprType e),pure (Delayed st sts))
+lambdaAnns e = (i,m,r,lambdaType (exprType e),pure (Delayed (exprStrictness e)))
   where i = Right (Lambda () (exprId e))^..shape
         m = exprMass e + 1
         r = delete (Argument 0) (exprRefs e) & ascList.each.l'1.argument %~ subtract 1
-        (sts,st) = exprStrictness e
         
 lambdaType :: forall s. Identifier s => ExprType s -> ExprType s
 lambdaType (te,isC) = (te',isC || isComplexType te')
@@ -433,15 +448,16 @@ applyAnns a b = (i,m,r,applyType (exprType a) (exprType b),st)
   where i = Right (Apply (exprId a) (exprId b))^..shape
         m = exprMass a + exprMass b + 1
         r = exprRefs a *+ exprRefs b
-        applyStrictness sa sb = case sa of
-          Delayed st sts -> traverse_ liftArg sts >> liftArg st
-          WHNF x l -> pure (WHNF x (l+[sb]))
+        applyStrictness esb sa = case sa of
+          Delayed (sts,st) -> do tell =<< traverse liftArg sts
+                                 liftArg st
+          WHNF x l -> pure (WHNF x (l+[esb]))
           where liftArg = liftArg' 0
-                liftArg' n (Delayed st sts) = Delayed<$>liftArg' (n+1) st<*>traverse (liftArg' (n+1)) sts
-                liftArg' n (WHNF (Right arg) sts) | arg==n = foldl' (\x st -> x >>= \y -> applyStrictness y =<< liftArg' n st)
-                                                             (pure sb) sts
-                liftArg' n (WHNF s sts) = WHNF s<$>traverse (liftArg' n) sts
-        st = join (liftA2 applyStrictness (exprStrictness a) (exprStrictness b))
+                liftArg' n (Delayed (sts,st)) = curry Delayed<$>traverse (liftArg' (n+1)) sts<*>liftArg' (n+1) st
+                liftArg' n (WHNF (Right arg) ests) | arg==n = foldl' (\esf esx -> applyStrictness (liftArg' n =<< esx) =<< esf)
+                                                              esb ests
+                liftArg' n (WHNF s ests) = pure (WHNF s (map  (liftArg' n =<<) ests))
+        st = applyStrictness (exprStrictness b) =<< exprStrictness a
 applyType :: forall s. Identifier s => ExprType s -> ExprType s -> ExprType s
 applyType (ta,aIsC) (tb,bIsC) = (tret,aIsC || bIsC || isComplexType tret)
   where tret = force ta`par`force tb`par`mapTypePathsMonotonic dropTop tsum

@@ -59,6 +59,7 @@ commands = [
       ("why",whyCmd),
       ("how",howCmd),
       ("what",whatCmd),
+      ("whence",whenceCmd),
       ("compareTypes",compareTypesCmd),
       ("showInstances",showInstancesCmd),
       ("where",whereCmd)]),
