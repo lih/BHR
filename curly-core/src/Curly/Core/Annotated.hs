@@ -408,13 +408,15 @@ instance Identifier s => Annotated (AnnExpr s) s where
     B_DivInt -> binOp B_DivInt
     B_SubInt -> binOp B_SubInt
     B_AddString -> binOp B_AddString
-    B_StringLength -> Delayed $ do
-      tell [arg 0]
-      pure (WHNF (Left b) [pure (arg 0)])
+    B_StringLength -> monOp B_StringLength
+    B_ShowInt -> monOp B_ShowInt
     b -> WHNF (Left b) []
     where binOp b = Delayed $ pure $ Delayed $ do
             tell [arg 0, arg 1]
             pure (WHNF (Left b) [pure (arg 1), pure (arg 0)])
+          monOp b = Delayed $ do 
+            tell [arg 0]
+            pure (WHNF (Left b) [pure (arg 0)])
           arg n = WHNF (Right n) []
 
 nameProp :: (forall b. AnnNode s b -> a) -> (AnnExpr s -> a) -> NameExpr s -> a
