@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                curly
-version:             0.52.6
+version:             0.53.3
 -- synopsis:            
 -- description:         
 license:             MIT
@@ -15,10 +15,9 @@ build-type:          Simple
 extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
-executable curly
-  main-is: Curly.hs
-  other-modules:     Curly.Style, Curly.UI, Curly.Session, Curly.UI.Options, Curly.Session.Commands, Curly.Session.Commands.Repository, Curly.Session.Commands.Context, Curly.Session.Commands.Common, Curly.Session.Commands.Query, Curly.Session.Commands.Style, Curly.Session.Commands.Navigation, Curly.Session.Commands.VCS, Curly.Session.Commands.Run, Curly.Session.Commands.Key, Language.Syntax.CmdArgs
-  -- other-modules:
+library
+  default-language:    Haskell2010
+  exposed-modules:     Curly.Style, Curly.UI, Curly.Session, Curly.UI.Options, Curly.Session.Commands, Curly.Session.Commands.Repository, Curly.Session.Commands.Context, Curly.Session.Commands.Common, Curly.Session.Commands.Query, Curly.Session.Commands.Style, Curly.Session.Commands.Navigation, Curly.Session.Commands.VCS, Curly.Session.Commands.Run, Curly.Session.Commands.Key, Language.Syntax.CmdArgs
   default-extensions:  RebindableSyntax
                        FlexibleInstances
                        MultiParamTypeClasses
@@ -33,5 +32,21 @@ executable curly
   other-extensions:    CPP, ExistentialQuantification, ViewPatterns, TypeFamilies, ScopedTypeVariables, RecursiveDo, DeriveGeneric, NoMonomorphismRestriction
   build-depends: base >=4.10 && <4.11,cryptohash >=0.11 && <0.12,curly-core >=0.2 && <0.3,curly-system >=0.2 && <0.3,curly-terminfo >=0.4 && <0.5,deepseq >=1.4 && <1.5,definitive-base >=2.6 && <2.7,definitive-filesystem >=2.1 && <2.2,definitive-network >=1.4 && <1.5,definitive-parser >=2.4 && <2.5,directory >=1.3 && <1.4,filepath >=1.4 && <1.5,process >=1.6 && <1.7,readline >=1.0 && <1.1,unix >=2.7 && <2.8
   hs-source-dirs:      src
+  
+executable curly
   default-language:    Haskell2010
-
+  main-is: Curly.hs
+  hs-source-dirs:      exe
+  other-extensions:    CPP, ExistentialQuantification, ViewPatterns, TypeFamilies, ScopedTypeVariables, RecursiveDo, DeriveGeneric, NoMonomorphismRestriction
+  default-extensions:  RebindableSyntax
+                       FlexibleInstances
+                       MultiParamTypeClasses
+                       FlexibleContexts
+                       FunctionalDependencies
+                       TypeOperators
+                       TupleSections
+                       ImplicitParams
+                       GeneralizedNewtypeDeriving
+                       RankNTypes
+                       TypeFamilies
+  build-depends: base >=4.10 && <4.11,cryptohash >=0.11 && <0.12,curly >=0.53 && <0.54,curly-core >=0.2 && <0.3,curly-system >=0.2 && <0.3,curly-terminfo >=0.4 && <0.5,deepseq >=1.4 && <1.5,definitive-base >=2.6 && <2.7,definitive-filesystem >=2.1 && <2.2,definitive-network >=1.4 && <1.5,definitive-parser >=2.4 && <2.5,directory >=1.3 && <1.4,filepath >=1.4 && <1.5,process >=1.6 && <1.7,readline >=1.0 && <1.1,unix >=2.7 && <2.8

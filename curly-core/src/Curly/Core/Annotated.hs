@@ -56,6 +56,22 @@ instance NFData (Symbol s) where
   rnf (Argument n) = rnf n
   rnf (Builtin _ b) = rnf b
 
+type ExprStrictness = ([Strictness],Strictness)
+data Strictness = Delayed ExprStrictness
+                | WHNF (Builtin:+:Int) [ExprStrictness]
+                deriving (Eq,Ord,Show,Generic)
+instance Serializable Strictness
+instance Format Strictness
+
+strictnessArg :: Traversal (Int,Int) Int Strictness Strictness
+strictnessArg k = descend 0
+  where descend n (WHNF (Right n') ests) =
+          WHNF . Right <$> k (n,n') <*> traverse (descendE n) ests
+        descend n (WHNF s ests) = WHNF s <$> traverse (descendE n) ests
+        descend n (Delayed est) = Delayed <$> descendE (n+1) est
+        descendE n (sts,st) = (,) <$> traverse (descend n) sts
+                                  <*> descend n st
+
 {- | An annotated node
 
 This type is used as a base for all fully-resolved expressions. It
@@ -67,24 +83,27 @@ data AnnNode s a = AnnNode {
   _ident,_mass :: Int, 
   _refs :: Map (Symbol s) Int,
   _type :: ExprType s,
+  _strictness :: ExprStrictness,
   _shape :: ExprNode s a
   }
+annShape :: Lens (ExprNode s a) (ExprNode s b) (AnnNode s a) (AnnNode s b)
+annShape = lens _shape (\x y -> x { _shape = y })
 annType :: Lens' (AnnNode s a) (ExprType s)
 annType = lens _type (\x y -> x { _type = y })
 instance Ord (AnnNode s a) where
   compare a b = compare (_mass a,_ident a) (_mass b,_ident b)
 instance Eq (AnnNode s a) where a == b = compare a b == EQ
 instance Functor (AnnNode s) where
-  map f (AnnNode i m r t s) = AnnNode i m r t (map f s)
+  map = warp annShape . map
 instance Foldable (AnnNode s) where
-  fold (AnnNode _ _ _ _ x) = fold x
+  fold = fold . _shape
 instance Traversable (AnnNode s) where
-  sequence (AnnNode x y z t w) = AnnNode x y z t<$>sequence w
+  sequence = annShape sequence 
 instance (Identifier s,Identifier s') => HasIdents s s' (AnnNode s a) (AnnNode s' a) where
-  ff'idents k (AnnNode i m r (t,isN) s) = liftA3 (\t' r' s' -> AnnNode i m r' (t',isN) s')
-                                          (forl ff'idents t k)
-                                          (fromAList <$> forl (each.l'1.ff'idents) (ascList$^r) k)
-                                          (forl ff'idents s k)
+  ff'idents k (AnnNode i m r (t,isN) st s) = liftA3 (\t' r' s' -> AnnNode i m r' (t',isN) st s')
+                                             (forl ff'idents t k)
+                                             (fromAList <$> forl (each.l'1.ff'idents) (ascList$^r) k)
+                                             (forl ff'idents s k)
 
 -- | A partially-resolved expression node
 newtype NameNode s a = NameNode ((Free (AnnNode s):.:(,) s) a)
@@ -103,10 +122,10 @@ instance Identifier s => Semantic (AnnExpr s) s (Symbol s) where
     where f (Pure s) = SemSymbol s
           f (Join (AnnNode { _shape = Lambda s e })) = SemAbstract s e
           f (Join (AnnNode { _shape = Apply f x })) = SemApply f x
-          g (SemApply f x) = Join (AnnNode i m r t (Apply f x))
-            where (i,m,r,t) = applyAnns f x
-          g (SemAbstract s e) = Join (AnnNode i m r t (Lambda s e))
-            where (i,m,r,t) = lambdaAnns e
+          g (SemApply f x) = Join (AnnNode i m r t st (Apply f x))
+            where (i,m,r,t,st) = applyAnns f x
+          g (SemAbstract s e) = Join (AnnNode i m r t st (Lambda s e))
+            where (i,m,r,t,st) = lambdaAnns e
           g (SemSymbol s) = Pure s
 
 type NameTail s = Free (NameNode s) (Symbol s)
@@ -183,10 +202,10 @@ instance Identifier s => Semantic (RawNameExpr s) s (s,NameTail s) where
             SemApply (RawNameExpr a) (RawNameExpr b) -> nnApply a b
             SemAbstract s (RawNameExpr e) -> nnAbstract s e
 
-nnApply a b = Join (AnnNode i m r zero (Apply (a^..i'NameNode) (b^..i'NameNode)))^.i'NameNode
-  where (i,m,r,_) = applyAnns a b
-nnAbstract s e = Join (AnnNode i m r zero (Lambda s (e^..i'NameNode)))^.i'NameNode
-  where (i,m,r,_) = lambdaAnns e 
+nnApply a b = Join (AnnNode i m r zero st (Apply (a^..i'NameNode) (b^..i'NameNode)))^.i'NameNode
+  where (i,m,r,_,st) = applyAnns a b
+nnAbstract s e = Join (AnnNode i m r zero st (Lambda s (e^..i'NameNode)))^.i'NameNode
+  where (i,m,r,_,st) = lambdaAnns e 
 
 expr_identity :: Identifier s => RawNameExpr s
 expr_identity = mkAbstract (pureIdent "#0") (mkSymbol (pureIdent "#0",Pure (Argument 0)))
@@ -369,6 +388,7 @@ class Identifier s => Annotated e s | e -> s where
   exprMass :: e -> Int
   exprRefs :: e -> Map (Symbol s) Int
   exprType :: e -> ExprType s
+  exprStrictness :: e -> ExprStrictness
 instance Identifier s => Annotated (AnnExpr s) s where
   exprId (Join ann) = _ident ann
   exprId (Pure s) = Left s^..shape
@@ -380,6 +400,24 @@ instance Identifier s => Annotated (AnnExpr s) s where
   exprType (Join ann) = _type ann
   exprType (Pure (Argument n)) = (argumentType n,zero)
   exprType (Pure (Builtin t _)) = (t,zero)
+  exprStrictness (Join ann) = _strictness ann
+  exprStrictness (Pure (Argument n)) = pure (WHNF (Right n) [])
+  exprStrictness (Pure (Builtin _ b)) = pure $ case b of
+    B_AddInt -> binOp B_AddInt
+    B_MulInt -> binOp B_MulInt
+    B_DivInt -> binOp B_DivInt
+    B_SubInt -> binOp B_SubInt
+    B_AddString -> binOp B_AddString
+    B_StringLength -> monOp B_StringLength
+    B_ShowInt -> monOp B_ShowInt
+    b -> WHNF (Left b) []
+    where binOp b = Delayed $ pure $ Delayed $ do
+            tell [arg 0, arg 1]
+            pure (WHNF (Left b) [pure (arg 1), pure (arg 0)])
+          monOp b = Delayed $ do 
+            tell [arg 0]
+            pure (WHNF (Left b) [pure (arg 0)])
+          arg n = WHNF (Right n) []
 
 nameProp :: (forall b. AnnNode s b -> a) -> (AnnExpr s -> a) -> NameExpr s -> a
 nameProp np anp = fix $ \nnp a -> case a^..i'NameNode of
@@ -392,6 +430,7 @@ instance Identifier s => Annotated (NameExpr s) s where
   exprMass = nameProp _mass exprMass
   exprRefs = nameProp _refs exprRefs
   exprType = nameProp _type exprType
+  exprStrictness = nameProp _strictness exprStrictness
 
 t'exprType :: Fold' (NameExpr s) (ExprType s)
 t'exprType = fix $ \node -> from i'NameNode.(t'Join.annType
@@ -399,20 +438,31 @@ t'exprType = fix $ \node -> from i'NameNode.(t'Join.annType
   where argType k (Builtin t b) = k (t,zero) <&> \(t',_) -> Builtin t' b
         argType _ (Argument n) = pure (Argument n)
 
-lambdaAnns :: forall e s. Annotated e s => e -> (Int,Int,Map (Symbol s) Int,ExprType s)
-lambdaAnns e = (i,m,r,lambdaType (exprType e))
+lambdaAnns :: forall e s. Annotated e s => e -> (Int,Int,Map (Symbol s) Int,ExprType s,ExprStrictness)
+lambdaAnns e = (i,m,r,lambdaType (exprType e),pure (Delayed (exprStrictness e)))
   where i = Right (Lambda () (exprId e))^..shape
         m = exprMass e + 1
         r = delete (Argument 0) (exprRefs e) & ascList.each.l'1.argument %~ subtract 1
+        
 lambdaType :: forall s. Identifier s => ExprType s -> ExprType s
 lambdaType (te,isC) = (te',isC || isComplexType te')
   where te' = extractFirstArgument te
 
-applyAnns :: forall e s. Annotated e s => e -> e -> (Int,Int,Map (Symbol s) Int,ExprType s)
-applyAnns a b = (i,m,r,applyType (exprType a) (exprType b))
+applyAnns :: forall e s. Annotated e s => e -> e -> (Int,Int,Map (Symbol s) Int,ExprType s,ExprStrictness)
+applyAnns a b = (i,m,r,applyType (exprType a) (exprType b),st)
   where i = Right (Apply (exprId a) (exprId b))^..shape
         m = exprMass a + exprMass b + 1
         r = exprRefs a *+ exprRefs b
+        applyStrictness esb sa = case sa of
+          Delayed (sts,st) -> do tell =<< traverse liftArg sts
+                                 liftArg st
+          WHNF x l -> pure (WHNF x (l+[esb]))
+          where liftArg = liftArg' 0
+                liftArg' n (Delayed (sts,st)) = curry Delayed<$>traverse (liftArg' (n+1)) sts<*>liftArg' (n+1) st
+                liftArg' n (WHNF (Right arg) ests) | arg==n = foldl' (\esf esx -> applyStrictness (liftArg' n =<< esx) =<< esf)
+                                                              esb ests
+                liftArg' n (WHNF s ests) = pure (WHNF s (map  (liftArg' n =<<) ests))
+        st = applyStrictness (exprStrictness b) =<< exprStrictness a
 applyType :: forall s. Identifier s => ExprType s -> ExprType s -> ExprType s
 applyType (ta,aIsC) (tb,bIsC) = (tret,aIsC || bIsC || isComplexType tret)
   where tret = force ta`par`force tb`par`mapTypePathsMonotonic dropTop tsum

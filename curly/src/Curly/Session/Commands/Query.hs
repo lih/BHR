@@ -10,7 +10,7 @@ import Curly.Style
 import Language.Format hiding (space)
 import Curly.Session.Commands.Common
 
-whereCmd,whyCmd,whatCmd,howCmd :: Interactive Command
+whereCmd,whyCmd,whenceCmd,whatCmd,howCmd :: Interactive Command
 
 viewCmd doc onExpr onPath showV = withDoc doc . fill False $ (several "'s" >> viewSym) <+? viewPath
   where viewPath = nbsp >> do
@@ -34,6 +34,14 @@ whyDoc = unlines [
   ]
 whyCmd = viewCmd whyDoc zero (const zero) $ \_ (by leafDoc -> d) ->
   setupTermFromEnv >>= \t -> withStyle (serveStrLn $ docString t d)
+
+whenceDoc = unlines [
+  "{section {title Show Function Strictness}"
+  ,"{p {em Usage:} whence PATH {em OR} whence's NAME}"
+  ,"{p Show the strictness for the function at PATH, or of the symbol NAME.}}"
+  ]
+whenceCmd = viewCmd whenceDoc zero (const zero) $ \_ (by leafVal -> v) ->
+  serveStrLn (show (exprStrictness v))
 
 howDoc = unlines [
   "{section {title Show Function Implementation}"
