@@ -146,7 +146,7 @@ mallocAddr = BA (fromIntegral (ptrToIntPtr (castFunPtrToPtr mallocPtr)))
           putStrLn $ "Malloc: "+show n
           mallocBytes n
 debug_addr :: IO () -> BinAddress
-debug_addr m = BA $ fromIntegral $ ptrToIntPtr $ castFunPtrToPtr $ get_debug_fptr m^.thunk
+debug_addr m = BA $ fromIntegral $ ptrToIntPtr $ debug $ castFunPtrToPtr $ get_debug_fptr m^.thunk
 
 jit_memextend_pool sz = defBuiltinGet TextSection ("memextend-pool-"+show sz) $ do
   ccall (Just poolReg) mallocAddr [return (Constant pageSize)]
