@@ -139,7 +139,10 @@ foreign import ccall "wrapper" get_malloc_fptr :: (Int -> IO (Ptr a)) -> IO (Fun
 foreign import ccall "dynamic" runIOFunPtr :: FunPtr (IO ()) -> IO ()
 mallocAddr :: BinAddress
 mallocAddr = BA (fromIntegral (ptrToIntPtr (castFunPtrToPtr mallocPtr)))
-  where mallocPtr = get_malloc_fptr mallocBytes^.thunk
+  where mallocPtr = get_malloc_fptr malloc'^.thunk
+        malloc' n = do
+          putStrLn $ "Malloc: "+show n
+          mallocBytes n
 
 jit_memextend_pool sz = defBuiltinGet TextSection ("memextend-pool-"+show sz) $ do
   ccall (Just poolReg) mallocAddr [return (Constant pageSize)]
