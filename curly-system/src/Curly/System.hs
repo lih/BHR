@@ -109,6 +109,7 @@ runJIT (JITContext cxt) asm = let allocSections = [InitSection,TextSection,DataS
             liftA2 (,) (getCounter <* reserve thunkSize 0) (getCounter <* reserve thunkSize 0)
           start <- inSection TextSection m
           inSection InitSection $ do
+            call (debug_addr (putStrLn "Entered Curly assembly"))
             pushing [destReg,thisReg,tmpReg,poolReg] $ do
               destReg <-- dest
               thisReg <-- this
