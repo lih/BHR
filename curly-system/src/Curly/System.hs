@@ -132,7 +132,7 @@ runJIT (JITContext cxt) asm = let allocSections = [InitSection,TextSection,DataS
           protLength = fromIntegral $ bc^.bcEstimate + p`minusPtr`pageStart
       logLine Debug $ format "Marking JIT buffer (%s,+%s) as executable" (show pageStart) (show protLength)
       mprotect pageStart protLength (pROT_READ + pROT_WRITE + pROT_EXEC)
-  let runIt = runIOFunPtr $ castPtrToFunPtr $ intPtrToPtr $ fromIntegral $ mlookup InitSection start
+  let runIt = runIOFunPtr $ castPtrToFunPtr $ intPtrToPtr $ fromIntegral $ debug $ mlookup InitSection start
   return runIt
 
 foreign import ccall "wrapper" get_malloc_fptr :: (Int -> IO (Ptr a)) -> IO (FunPtr (Int -> IO (Ptr a)))
