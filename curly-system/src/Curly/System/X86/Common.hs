@@ -319,6 +319,7 @@ x86_ccall mret f args = let ?sys = x86_machine_common in do
       doCall = if32 (call f) $ do
         traverse_ popV (zipWith const [R_edi_bh,R_esi_dh,R_edx,R_ecx,R_r8,R_r9] args)
         call f
+  trace ("ccall: "+show mret) (return ())
   when hasEax $ do pushV saveReg
   pushing [R_eax] $ do
     pushing saved $ do

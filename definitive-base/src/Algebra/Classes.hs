@@ -1,5 +1,5 @@
 {-# LANGUAGE DefaultSignatures, ScopedTypeVariables, CPP #-}
-#if MIN_VERSION_base(4,10,0)
+#if MIN_VERSION_base(4,9,0)
 {-# LANGUAGE TypeFamilies #-}
 #endif
 module Algebra.Classes where

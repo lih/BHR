@@ -109,6 +109,7 @@ runJIT (JITContext cxt) asm = let allocSections = [InitSection,TextSection,DataS
             liftA2 (,) (getCounter <* reserve thunkSize 0) (getCounter <* reserve thunkSize 0)
           start <- inSection TextSection m
           inSection InitSection $ do
+            call (debug_addr (putStrLn "Entered Curly assembly"))
             pushing [destReg,thisReg,tmpReg,poolReg] $ do
               destReg <-- dest
               thisReg <-- this
@@ -132,14 +133,23 @@ runJIT (JITContext cxt) asm = let allocSections = [InitSection,TextSection,DataS
           protLength = fromIntegral $ bc^.bcEstimate + p`minusPtr`pageStart
       logLine Debug $ format "Marking JIT buffer (%s,+%s) as executable" (show pageStart) (show protLength)
       mprotect pageStart protLength (pROT_READ + pROT_WRITE + pROT_EXEC)
-  let runIt = runIOFunPtr $ castPtrToFunPtr $ intPtrToPtr $ fromIntegral $ mlookup InitSection start
+  let runIt = do
+        let fp = castPtrToFunPtr $ intPtrToPtr $ fromIntegral $ mlookup InitSection start
+        print fp
+        runIOFunPtr fp
   return runIt
 
 foreign import ccall "wrapper" get_malloc_fptr :: (Int -> IO (Ptr a)) -> IO (FunPtr (Int -> IO (Ptr a)))
+foreign import ccall "wrapper" get_debug_fptr :: IO () -> IO (FunPtr (IO ()))
 foreign import ccall "dynamic" runIOFunPtr :: FunPtr (IO ()) -> IO ()
 mallocAddr :: BinAddress
 mallocAddr = BA (fromIntegral (ptrToIntPtr (castFunPtrToPtr mallocPtr)))
-  where mallocPtr = get_malloc_fptr mallocBytes^.thunk
+  where mallocPtr = get_malloc_fptr malloc'^.thunk
+        malloc' n = do
+          putStrLn $ "Malloc: "+show n
+          mallocBytes n
+debug_addr :: IO () -> BinAddress
+debug_addr m = BA $ fromIntegral $ ptrToIntPtr $ debug $ castFunPtrToPtr $ get_debug_fptr m^.thunk
 
 jit_memextend_pool sz = defBuiltinGet TextSection ("memextend-pool-"+show sz) $ do
   ccall (Just poolReg) mallocAddr [return (Constant pageSize)]
