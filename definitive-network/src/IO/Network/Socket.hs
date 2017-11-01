@@ -8,6 +8,7 @@ import Definitive
 import Network.Socket (Socket,AddrInfo,PortNumber,SockAddr(..),NameInfoFlag(..))
 import qualified Network.Socket as Net
 import System.IO (IOMode(..))
+import GHC.IO.Handle
 
 instance Semigroup PortNumber; instance Monoid PortNumber
 
@@ -24,4 +25,5 @@ connect :: AddrInfo -> IO Handle
 connect addr = do
   s <- Net.socket (Net.addrFamily addr) Net.Stream (Net.addrProtocol addr)
   Net.connect s (Net.addrAddress addr)
-  Net.socketToHandle s ReadWriteMode
+  Net.socketToHandle s ReadWriteMode <*= \h -> hSetBuffering h NoBuffering
+  
