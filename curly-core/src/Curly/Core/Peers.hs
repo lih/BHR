@@ -26,7 +26,7 @@ instance Serializable PeerPacket
 instance Format PeerPacket where
   datum = defaultDatum
           <+? ListLibraries WithResponse <$ sequence_ [datum >>= guard . (==c) | c <- "libraries"]
-          <+? (\x -> AskLibrary x WithResponse) <$> ((fromMaybe zero . matches Just (many' datum)<$>runStreamState (id <~ swap . splitAt 64)) >*> readable)
+          <+? (\x -> AskLibrary x WithResponse) <$> ((fromMaybe zero . matches Just (many' datum)<$>runStreamState (id <~ swap . splitAt 43)) >*> readable)
 
 data LocalSupply = LocalSupply (IO [(LibraryID,Metadata)]) (LibraryID -> IO (Maybe Bytes))
 data SupplyAnswer = SupplyLibraries [(LibraryID,Metadata)]
