@@ -64,7 +64,8 @@ class (GenAlt f,GenSerializable f) => GenSerAlt f where
   altEncode fa n = encode n + genEncode fa
 class (GenSerAlt f,GenFormat f) => GenFormatAlt f where
   altDatum :: Int -> Parser Bytes (f a)
-  altDatum _ = genDatum
+  altDatum 0 = genDatum
+  altDatum _ = zero
 
 instance GenSerializable Gen.V1 where genEncode = undefined
 instance GenFormat Gen.V1 where genDatum = undefined
