@@ -234,7 +234,10 @@ x86_pop (Right (AtOffset l i))            = do x86_cp (Register rdst) (Variable 
                                                x86_pop (Right (rdst!i))
                                     
 x86_call (Constant i) = mdo
-  tellBC [Instruction zero (OpCode [0xe8] Nothing) (Imm32 (fi (fi i-b))) NoModRM]
+  if32
+    (tellBC [Instruction zero (OpCode [0xe8] Nothing) (Imm32 (fi (fi i-b))) NoModRM])
+    (do x86_cp (Register rsrc) (Constant i)
+        tellBC [Instruction zero (OpCode [0xff] Nothing) Imm0 (Value (toEnum 2) (toR rsrc))])
   BA b <- getCounter
   return ()
 x86_call (Variable (Register r)) = tellBC [Instruction x86_prefix (OpCode [0xff] Nothing) Imm0 (Value (toEnum 2) (toR r))]
