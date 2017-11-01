@@ -134,7 +134,6 @@ runJIT (JITContext cxt) asm = let allocSections = [InitSection,TextSection,DataS
       mprotect pageStart protLength (pROT_READ + pROT_WRITE + pROT_EXEC)
   let runIt = do
         let fp = castPtrToFunPtr $ intPtrToPtr $ fromIntegral $ mlookup InitSection start
-        print fp
         runIOFunPtr fp
   return runIt
 
