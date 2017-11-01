@@ -633,7 +633,7 @@ getRepoLib l r = do
           Just a -> do
             logLine Verbose $ format "Requesting library %s from curly://%s:%s" (show l) h (show p)
             conn <- connect a
-            writeHString conn (show l)
+            writeHString conn (debug $ show l)
             readHBytes conn 
         findL (CustomRepo b a) = do
           (_,out,_,_) <- runInteractiveProcess ("/usr/lib/curly/backend"</>b) ([a,show l]) Nothing Nothing
