@@ -109,7 +109,6 @@ runJIT (JITContext cxt) asm = let allocSections = [InitSection,TextSection,DataS
             liftA2 (,) (getCounter <* reserve thunkSize 0) (getCounter <* reserve thunkSize 0)
           start <- inSection TextSection m
           inSection InitSection $ do
-            call (debug_addr (putStrLn "Entered Curly assembly"))
             pushing [destReg,thisReg,tmpReg,poolReg] $ do
               destReg <-- dest
               thisReg <-- this
@@ -144,10 +143,7 @@ foreign import ccall "wrapper" get_debug_fptr :: IO () -> IO (FunPtr (IO ()))
 foreign import ccall "dynamic" runIOFunPtr :: FunPtr (IO ()) -> IO ()
 mallocAddr :: BinAddress
 mallocAddr = BA (fromIntegral (ptrToIntPtr (castFunPtrToPtr mallocPtr)))
-  where mallocPtr = get_malloc_fptr malloc'^.thunk
-        malloc' n = do
-          putStrLn $ "Malloc: "+show n
-          mallocBytes n
+  where mallocPtr = get_malloc_fptr mallocBytes^.thunk
 debug_addr :: IO () -> BinAddress
 debug_addr m = BA $ fromIntegral $ ptrToIntPtr $ debug $ castFunPtrToPtr $ get_debug_fptr m^.thunk
 
