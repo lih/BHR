@@ -1,5 +1,8 @@
 #!/bin/bash
 git add -A
 git commit -m "Autocommit on $(LANG= date)"
-notify-send "Build successful"
+if [ "$NOTIFY_ON_SUCCESS" == true ]; then
+    notify-send "Build successful"
+fi
+
 
