@@ -55,7 +55,7 @@ peerServer = do
   void $ forkIO $ forever $ do
     (h,addr) <- accept sock
     forkIO $ do
-      runConnection_ True h $ fix $ \again -> receive >>= \x -> case x of
+      runConnection_ False h $ fix $ \again -> receive >>= \x -> case x of
         DeclareInstance s t -> do
           port <- liftIO $ runAtomic srvState $ get >>= \m -> case lookup s m of
             Just _ -> return $ Left ("Error: The instance '"+s+"' is already declared")
