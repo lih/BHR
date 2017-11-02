@@ -4,4 +4,4 @@ stages:
 
 stack_build:
   stage: build
-  script: stack build --copy-bins --haddock --install-ghc
+  script: stack build --copy-bins --haddock --system-ghc
