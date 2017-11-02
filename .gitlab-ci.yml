@@ -11,4 +11,4 @@ before_script:
 
 stack_build:
   stage: build
-  script: stack build
+  script: ./.gitlab-ci.build.sh
