@@ -4,4 +4,4 @@ stages:
 
 stack_build:
   stage: build
-  script: ./.gitlab-ci.build.sh
+  script: stack build --copy-bins --haddock --install-ghc
