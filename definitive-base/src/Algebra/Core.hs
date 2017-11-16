@@ -64,6 +64,7 @@ module Algebra.Core(
   -- ** Parallel short-circuit evaluation
   amb,unamb,
 
+
   -- * The rest is imported from the Prelude
   module Prelude,IsString(..)
   ) where

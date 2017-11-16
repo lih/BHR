@@ -50,6 +50,7 @@ instance Read VCSBackend where
             liftA2 VCSB_Curly
               (many1' (noneOf ":") <&> \x -> if x=="_" then "127.0.0.1" else x)
               (option' 5402 (single ':' >> number))
+              
 curlyVCSBackend :: VCSBackend
 curlyVCSBackend = fromMaybe (getDefaultVCS^.thunk) (matches Just readable (envVar "" "CURLY_VCS"))
   where getDefaultVCS = do
