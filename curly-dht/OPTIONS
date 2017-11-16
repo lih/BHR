@@ -1,0 +1,12 @@
+-XRebindableSyntax
+-XFlexibleInstances
+-XMultiParamTypeClasses
+-XFlexibleContexts
+-XFunctionalDependencies
+-XTypeOperators
+-XTupleSections
+-XImplicitParams
+-XGeneralizedNewtypeDeriving
+-XRankNTypes
+-W
+-O4
