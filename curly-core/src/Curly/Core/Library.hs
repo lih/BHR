@@ -636,7 +636,7 @@ getRepoLib l r = do
             writeHString conn (show l)
             readHBytes conn
         findL (CustomRepo b a) = do
-          (_,out,_,_) <- runInteractiveProcess ("/usr/lib/curly/backend"</>b) ([a,show l]) Nothing Nothing
+          (_,out,_,_) <- runInteractiveProcess (curlyBackendDir</>b) ([a,show l]) Nothing Nothing
           readHBytes out
         checkHash b | isLibData l b = (,b) <$> matches Just datum b
                     | otherwise = Nothing
