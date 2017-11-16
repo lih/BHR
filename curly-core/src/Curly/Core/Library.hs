@@ -660,7 +660,7 @@ listRepository r = do
           map (fromMaybe zero) $ runConnection Just True conn $
             liftIO (?write (foldMap encode "libraries"^..bytesBuilder)) >> receive
         list (CustomRepo b a) = do
-          (_,out,_,_) <- runInteractiveProcess ("/usr/lib/curly/backend"</>b) [a] Nothing Nothing
+          (_,out,_,_) <- runInteractiveProcess (curlyBackendDir</>b) [a] Nothing Nothing
           foldMap (matches pure lib) . lines <$> readHString out
 
 availableLibs :: IO [(LibraryID,Metadata)]
