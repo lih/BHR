@@ -6,7 +6,7 @@ module Curly.Core.Security(
   -- * Encryption/Decryption
   decrypt,encrypt,
   -- * Environment
-  curlyKeysFile,getKeyStore,modifyKeyStore,
+  KeyStore,curlyKeysFile,getKeyStore,modifyKeyStore,
   -- * Showing and reading formats
   Zesty(..)
   ) where

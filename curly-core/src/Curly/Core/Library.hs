@@ -542,21 +542,36 @@ builtinsLib = let blib = zero & set exports builtinsMod . set metadata meta
                     ]
                   showIntDoc = "{section {title Show Number} Produces a string representation of its argument}"
                                
-data Repository = CustomRepo String String
+data Repository = CustomRepo String (IO [(LibraryID,Metadata)]) (LibraryID -> IO Bytes)
                 | CurlyRepo String PortNumber
-                deriving (Eq,Ord)
+
+instance Eq Repository where a == b = compare a b == EQ
+instance Ord Repository where
+  compare (CustomRepo a _ _) (CustomRepo b _ _) = compare a b
+  compare (CustomRepo _ _ _) _ = LT
+  compare (CurlyRepo s p) (CurlyRepo s' p') = compare (s,p) (s',p')
+  compare (CurlyRepo _ _) _ = GT
 instance Show Repository where
-  show (CustomRepo b a) = b+":"+a
+  show (CustomRepo b _ _) = b
   show (CurlyRepo h p) = "curly://"+h+":"+show p
 instance Read Repository where
   readsPrec _ = map2 swap (repository^..parser)
     where repository =
             liftA2 (CurlyRepo . mkHost) ((single '@' <+? several "curly://") *> many1' (noneOf ": \t\n\n"))
             (option 25465 (single ':' *> map fromInteger readable))
-            <+? liftA2 CustomRepo (customArg ":") (many1' (oneOf ": ") >> customArg "")
+            <+? liftA2 mkRepo (customArg ":") (many1' (oneOf ": ") >> customArg "")
             where customArg x = many1' (noneOf (x+", \t\n\\") <+? (single '\\' *> token))
                   mkHost "_" = "127.0.0.1"
                   mkHost h = h
+                  mkRepo proto path = CustomRepo (proto+":"+path) getLs getL
+                    where getL l = do
+                            (_,out,_,_) <- runInteractiveProcess (curlyBackendDir</>proto) ([path,show l]) Nothing Nothing
+                            readHBytes out
+                          lib = liftA2 (,) readable (many' space >> readable <&> \(Pretty a) -> a)
+                          getLs = do
+                            (_,out,_,_) <- runInteractiveProcess (curlyBackendDir</>proto) [path] Nothing Nothing
+                            foldMap (matches pure lib) . lines <$> readHString out
+                    
 
 repositories :: IORef (Set Repository)
 repositories = newIORef (fromKList envRepositories)^.thunk
@@ -635,9 +650,7 @@ getRepoLib l r = do
             conn <- connect a
             writeHString conn (show l)
             readHBytes conn
-        findL (CustomRepo b a) = do
-          (_,out,_,_) <- runInteractiveProcess (curlyBackendDir</>b) ([a,show l]) Nothing Nothing
-          readHBytes out
+        findL (CustomRepo _ _ getL) = getL l
         checkHash b | isLibData l b = (,b) <$> matches Just datum b
                     | otherwise = Nothing
         a </> b = a+"/"+b
@@ -654,14 +667,11 @@ listRepository r = do
         Nothing -> (readCachedLibrary l^.thunk)+(getRepoLib l r^.thunk)
         Just Nothing -> getRepoLib l r^.thunk
       return ret
-  where lib = liftA2 (,) readable (many' space >> readable <&> \(Pretty a) -> a)
-        list (CurlyRepo h p) = do
+  where list (CurlyRepo h p) = do
           conn <- connectTo h p
           map (fromMaybe zero) $ runConnection Just True conn $
             liftIO (?write (foldMap encode "libraries"^..bytesBuilder)) >> receive
-        list (CustomRepo b a) = do
-          (_,out,_,_) <- runInteractiveProcess (curlyBackendDir</>b) [a] Nothing Nothing
-          foldMap (matches pure lib) . lines <$> readHString out
+        list (CustomRepo _ getLs _) = getLs
 
 availableLibs :: IO [(LibraryID,Metadata)]
 availableLibs = do

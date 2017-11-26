@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, TypeFamilies, ScopedTypeVariables, PatternSynonyms, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, TypeFamilies, ScopedTypeVariables, PatternSynonyms, ViewPatterns, ExistentialQuantification, TypeOperators #-}
 module Main(
   main
   ) where
@@ -10,33 +10,29 @@ import Curly.DHT.Kademlia
 import Curly.Core.Security
 import Curly.Core.Library
 import Curly.Core.VCS
+import Curly.Core (pretty)
 import IO.Network.Socket
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
+import System.Console.GetOpt (OptDescr(..),ArgDescr(..),usageInfo,getOpt,ArgOrder(..))
+import qualified Prelude as P
+
+instance Functor OptDescr where map = P.fmap
 
 class Monad m => MonadVC m s | m -> s where
-  handleVCRequest :: s -> VCCommand -> m ()
+  handleVCRequest :: (Bytes -> IO ()) -> s -> VCCommand -> m ()
 
-newtype Command m a = Command { runCommand :: m (IO a) }
-instance Functor m => Functor (Command m) where
-  map f (Command ma) = Command (map2 f ma)
-instance Unit m => Unit (Command m) where
-  pure a = Command (pure (pure a))
-instance SemiApplicative m => SemiApplicative (Command m) where
-  Command mf <*> Command mx = Command (liftA2 (<*>) mf mx)
-instance Applicative m => Applicative (Command m)
-instance MonadIO m => Monad (Command m) where
-  join (Command ma) = Command $ join (join (map (liftIO . map runCommand) ma))
-instance MonadIO m => MonadIO (Command m) where
-  liftIO ma = Command (pure ma)
+newtype Command m a = Command { runCommand :: (IO :.: m) a }
+                      deriving (Functor,Unit,SemiApplicative,Applicative)
+instance (Monad m,Traversable m) => Monad (Command m) where join = coerceJoin Command
 dhtAction :: Unit m => IO a -> Command m a
-dhtAction = Command . pure
+dhtAction = Command . Compose . map pure
 
 newtype DHT_VC m a = DHT_VC { runDHT_VC :: Command m a }
                      deriving (Functor,Unit,SemiApplicative,Applicative)
-instance MonadIO m => Monad (DHT_VC m) where join = coerceJoin DHT_VC
-instance MonadIO m => MonadVC (DHT_VC m) (Bytes -> IO (), DHTInstance Key Val) where
-  handleVCRequest (wr,dht) x = DHT_VC . dhtAction $ let ?write = wr in case x of
+instance (Monad m,Traversable m) => Monad (DHT_VC m) where join = coerceJoin DHT_VC
+instance (Monad m,Traversable m) => MonadVC (DHT_VC m) (DHTInstance Key Val) where
+  handleVCRequest wr dht x = DHT_VC . dhtAction $ let ?write = wr in case x of
     PublishLibrary lid l -> do
       insertMP dht (LibraryKey lid) l
     PublishSource lid s -> do
@@ -55,6 +51,34 @@ instance MonadIO m => MonadVC (DHT_VC m) (Bytes -> IO (), DHTInstance Key Val) w
       sending t =<< lookupMP dht (CommitKey h)
     ListBranches pub t -> do
       sending t =<< lookupMP dht (BranchesKey pub)
+
+newtype File_VC m a = File_VC { runFile_VC :: Command m a }
+                    deriving (Functor,Unit,SemiApplicative,Applicative)
+instance (Monad m,Traversable m) => Monad (File_VC m) where join = coerceJoin File_VC
+storeFile :: Serializable a => String -> (WithResponse a -> Key) -> a -> IO ()
+storeFile base k v = do
+  let keyName = pretty (serialize (k WithResponse)^.chunk)
+  writeSerial (base+"/"+keyName) v
+loadFile :: Format a => String -> (WithResponse a -> Key) -> IO (Maybe a)
+loadFile base k = do
+  let keyName = pretty (serialize (k WithResponse)^.chunk)
+  try (return Nothing) (Just <$> readFormat (base+"/"+keyName))
+instance (Monad m,Traversable m) => MonadVC (File_VC m) String where
+  handleVCRequest wr path x = File_VC . dhtAction $ let ?write = wr in case x of
+    PublishLibrary lid l  -> storeFile path (LibraryKey lid) l
+    PublishSource lid s   -> storeFile path (SourceKey lid)  s
+    GetLibrary l t        -> sending t =<< loadFile path (LibraryKey l)
+    GetSource lid t       -> sending t =<< loadFile path (SourceKey lid)
+    SetBranches pub bs    -> storeFile path (BranchesKey pub) bs
+    CreateCommit c t      -> do
+      let h = hashData (serialize c)
+      storeFile path (CommitKey h) c
+      sending t h
+    GetCommit h t         -> sending t =<< loadFile path (CommitKey h)
+    ListBranches pub t    -> sending t =<< loadFile path (BranchesKey pub)
+
+data VCBackend = forall m s. MonadVC m s => VCBackend s (m () -> IO ())
+vcRequest wr (VCBackend s cast) cmd = cast (handleVCRequest wr s cmd)
 
 data Key = NodeKey String
          | DataKey ValID
@@ -114,43 +138,47 @@ insertMP dht fk a = liftIO $ insertMPBytes dht (serialize a) >>= \cid -> insertD
 isValidAssoc (DataKey h) v = valID v == h
 isValidAssoc _ _ = True
 
+data DHTAction = DHTBackend PortNumber String PortNumber
+               | DHTRoot PortNumber
+               | FileBackend String
+data DHTOpt = Action DHTAction | Help
+
+dhtOpts = [
+  Option "h" ["help"] (NoArg Help) "Shows the help menu",
+  Option "" ["dht-root"] (OptArg (Action . maybe (DHTRoot 25464) (DHTRoot . read)) "PORT") "Start a root DHT server",
+  Option "" ["dht-client"] (ReqArg (Action . parseClient) "PORT:SERVER:SERVER-PORT") "Start a DHT client",
+  Option "" ["filesystem"] (ReqArg (Action . FileBackend) "DIRECTORY") "Start a local filesystem VC"
+  ]
+  where parseClient c = fromMaybe (error $ "Could not parse DHT client: "+c)
+                        $ matches Just (liftA3 DHTBackend
+                                        number
+                                        (single ':' >> many1' (satisfy (/=':')))
+                                        (single ':' >> number)) c
+
 main = do
-  args <- getArgs
-  case args of
-    (Readable (fromInteger -> serverport):args') -> do
-      let isRoot = empty args'
-          dhtport = if isRoot then 25464 else fromMaybe (error "No parse for DHT port (expected number)")
-                                              (matches Just readable (head args'))
-      dht <- newDHTInstance dhtport (NodeKey ("me "+show dhtport)) isValidAssoc
-      unless isRoot $ do
-        res <- joinDHT dht (DHTNode "127.0.0.1" 25464 (NodeKey ("me "+show 25464)))
-        case res of
-          JoinSucces -> putStrLn "Successfully joined network node 127.0.0.1:25464"
-          _ -> error "Couldnt't reach root node"
-      sock <- listenOn serverport
+  (args,_,_) <- getOpt (ReturnInOrder (const [])) (map2 pure dhtOpts) <$> getArgs
+  case concat args of
+    Help:_ -> putStrLn (usageInfo "curly-vc" dhtOpts)
+    Action a:_ -> do
+      let dhtInstance dhtport = newDHTInstance (fromIntegral dhtport) (NodeKey ("curly-vc "+show dhtport)) isValidAssoc
+      backend <- case a of
+        DHTRoot port -> do
+          dht <- dhtInstance port
+          return (VCBackend dht (\(DHT_VC (Command (Compose m))) -> getId<$>m))
+        DHTBackend port srv srv_port -> do
+          dht <- dhtInstance port
+          res <- joinDHT dht (DHTNode srv srv_port (NodeKey ("curly-vc "+show srv_port)))
+          case res of
+            JoinSucces -> putStrLn $ "Successfully joined network node "+srv+":"+show srv_port
+            _ -> error "Couldnt't reach root node"
+          return (VCBackend dht (\(DHT_VC (Command (Compose m))) -> getId<$>m))
+        FileBackend base -> do
+          return (VCBackend base (\(File_VC (Command (Compose m))) -> getId<$>m))
+
+      sock <- listenOn 5402
       forever $ do
         (h,_) <- accept sock
         void $ forkIO $ runConnection_ True h $ forever $ do
           x <- receive
-          case x of
-            PublishLibrary lid l -> do
-              insertMP dht (LibraryKey lid) l
-            PublishSource lid s -> do
-              insertMP dht (SourceKey lid) s
-            GetLibrary l t -> do
-              sending t =<< lookupMP dht (LibraryKey l)
-            GetSource lid t -> do
-              sending t =<< lookupMP dht (SourceKey lid)
-            SetBranches pub bs -> do
-              insertMP dht (BranchesKey pub) bs
-            CreateCommit c t -> do
-              let h = hashData (serialize c)
-              insertMP dht (CommitKey h) c
-              sending t h
-            GetCommit h t -> do
-              sending t =<< lookupMP dht (CommitKey h)
-            ListBranches pub t -> do
-              sending t =<< lookupMP dht (BranchesKey pub)
-    _ -> putStrLn "Usage: curly-dht <server-port> [<dht-port>]"
+          liftIO (vcRequest ?write backend x)
 
-pattern Readable a <- (matches Just readable -> Just a)

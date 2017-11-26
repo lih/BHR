@@ -18,6 +18,8 @@ import Algebra.Lens
 import Data.Tree
 import Unsafe.Coerce
 
+instance Traversable Id where
+  sequence (Id m) = Id<$>m
 instance Traversable ((,) c) where
   sequence ~(c,m) = (,) c<$>m
 instance Traversable (Either a) where
