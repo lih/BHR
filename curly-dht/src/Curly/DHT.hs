@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveGeneric, TypeFamilies, ScopedTypeVariables, PatternSynonyms, ViewPatterns #-}
-module Curly.DHT(
+module Main(
   main
   ) where
 
@@ -13,6 +13,48 @@ import Curly.Core.VCS
 import IO.Network.Socket
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
+
+class Monad m => MonadVC m s | m -> s where
+  handleVCRequest :: s -> VCCommand -> m ()
+
+newtype Command m a = Command { runCommand :: m (IO a) }
+instance Functor m => Functor (Command m) where
+  map f (Command ma) = Command (map2 f ma)
+instance Unit m => Unit (Command m) where
+  pure a = Command (pure (pure a))
+instance SemiApplicative m => SemiApplicative (Command m) where
+  Command mf <*> Command mx = Command (liftA2 (<*>) mf mx)
+instance Applicative m => Applicative (Command m)
+instance MonadIO m => Monad (Command m) where
+  join (Command ma) = Command $ join (join (map (liftIO . map runCommand) ma))
+instance MonadIO m => MonadIO (Command m) where
+  liftIO ma = Command (pure ma)
+dhtAction :: Unit m => IO a -> Command m a
+dhtAction = Command . pure
+
+newtype DHT_VC m a = DHT_VC { runDHT_VC :: Command m a }
+                     deriving (Functor,Unit,SemiApplicative,Applicative)
+instance MonadIO m => Monad (DHT_VC m) where join = coerceJoin DHT_VC
+instance MonadIO m => MonadVC (DHT_VC m) (Bytes -> IO (), DHTInstance Key Val) where
+  handleVCRequest (wr,dht) x = DHT_VC . dhtAction $ let ?write = wr in case x of
+    PublishLibrary lid l -> do
+      insertMP dht (LibraryKey lid) l
+    PublishSource lid s -> do
+      insertMP dht (SourceKey lid) s
+    GetLibrary l t -> do
+      sending t =<< lookupMP dht (LibraryKey l)
+    GetSource lid t -> do
+      sending t =<< lookupMP dht (SourceKey lid)
+    SetBranches pub bs -> do
+      insertMP dht (BranchesKey pub) bs
+    CreateCommit c t -> do
+      let h = hashData (serialize c)
+      insertMP dht (CommitKey h) c
+      sending t h
+    GetCommit h t -> do
+      sending t =<< lookupMP dht (CommitKey h)
+    ListBranches pub t -> do
+      sending t =<< lookupMP dht (BranchesKey pub)
 
 data Key = NodeKey String
          | DataKey ValID

@@ -40,14 +40,16 @@ packages:
 - definitive-parser
 - definitive-network
 - definitive-filesystem
+- curly-kademlia
 - curly-core
 - curly-system
 - curly-terminfo
 - curly
+- curly-dht
 - grow
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-extra-deps: [AES-0.2.9]
+extra-deps: [AES-0.2.9,kademlia-1.1.0.0]
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

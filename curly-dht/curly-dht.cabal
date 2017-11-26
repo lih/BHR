@@ -17,8 +17,18 @@ cabal-version:       >=1.10
 
 executable curly-dht
   main-is:             Curly/DHT.hs
-  -- other-modules:       
+  other-modules:       Curly.DHT.Kademlia
+  default-extensions:  RebindableSyntax
+                       FlexibleInstances
+                       MultiParamTypeClasses
+                       FlexibleContexts
+                       FunctionalDependencies
+                       TypeOperators
+                       TupleSections
+                       ImplicitParams
+                       GeneralizedNewtypeDeriving
+                       RankNTypes
   other-extensions:    DeriveGeneric, TypeFamilies, ScopedTypeVariables, PatternSynonyms, ViewPatterns
-  build-depends:       base, definitive-base, kademlia
+  build-depends:       base, definitive-base, definitive-parser, definitive-network, curly-kademlia, curly-core
   hs-source-dirs:      src
   default-language:    Haskell2010
