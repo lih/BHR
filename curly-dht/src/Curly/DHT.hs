@@ -19,78 +19,13 @@ import qualified Prelude as P
 
 instance Functor OptDescr where map = P.fmap
 
-class Monad m => MonadVC m s | m -> s where
-  handleVCRequest :: (Bytes -> IO ()) -> s -> VCCommand -> m ()
+instance DHTIndex (VCKey DHTKey)
 
-newtype Command m a = Command { runCommand :: (IO :.: m) a }
-                      deriving (Functor,Unit,SemiApplicative,Applicative)
-instance (Monad m,Traversable m) => Monad (Command m) where join = coerceJoin Command
-dhtAction :: Unit m => IO a -> Command m a
-dhtAction = Command . Compose . map pure
-
-newtype DHT_VC m a = DHT_VC { runDHT_VC :: Command m a }
-                     deriving (Functor,Unit,SemiApplicative,Applicative)
-instance (Monad m,Traversable m) => Monad (DHT_VC m) where join = coerceJoin DHT_VC
-instance (Monad m,Traversable m) => MonadVC (DHT_VC m) (DHTInstance Key Val) where
-  handleVCRequest wr dht x = DHT_VC . dhtAction $ let ?write = wr in case x of
-    PublishLibrary lid l -> do
-      insertMP dht (LibraryKey lid) l
-    PublishSource lid s -> do
-      insertMP dht (SourceKey lid) s
-    GetLibrary l t -> do
-      sending t =<< lookupMP dht (LibraryKey l)
-    GetSource lid t -> do
-      sending t =<< lookupMP dht (SourceKey lid)
-    SetBranches pub bs -> do
-      insertMP dht (BranchesKey pub) bs
-    CreateCommit c t -> do
-      let h = hashData (serialize c)
-      insertMP dht (CommitKey h) c
-      sending t h
-    GetCommit h t -> do
-      sending t =<< lookupMP dht (CommitKey h)
-    ListBranches pub t -> do
-      sending t =<< lookupMP dht (BranchesKey pub)
-
-newtype File_VC m a = File_VC { runFile_VC :: Command m a }
-                    deriving (Functor,Unit,SemiApplicative,Applicative)
-instance (Monad m,Traversable m) => Monad (File_VC m) where join = coerceJoin File_VC
-storeFile :: Serializable a => String -> (WithResponse a -> Key) -> a -> IO ()
-storeFile base k v = do
-  let keyName = pretty (serialize (k WithResponse)^.chunk)
-  writeSerial (base+"/"+keyName) v
-loadFile :: Format a => String -> (WithResponse a -> Key) -> IO (Maybe a)
-loadFile base k = do
-  let keyName = pretty (serialize (k WithResponse)^.chunk)
-  try (return Nothing) (Just <$> readFormat (base+"/"+keyName))
-instance (Monad m,Traversable m) => MonadVC (File_VC m) String where
-  handleVCRequest wr path x = File_VC . dhtAction $ let ?write = wr in case x of
-    PublishLibrary lid l  -> storeFile path (LibraryKey lid) l
-    PublishSource lid s   -> storeFile path (SourceKey lid)  s
-    GetLibrary l t        -> sending t =<< loadFile path (LibraryKey l)
-    GetSource lid t       -> sending t =<< loadFile path (SourceKey lid)
-    SetBranches pub bs    -> storeFile path (BranchesKey pub) bs
-    CreateCommit c t      -> do
-      let h = hashData (serialize c)
-      storeFile path (CommitKey h) c
-      sending t h
-    GetCommit h t         -> sending t =<< loadFile path (CommitKey h)
-    ListBranches pub t    -> sending t =<< loadFile path (BranchesKey pub)
-
-data VCBackend = forall m s. MonadVC m s => VCBackend s (m () -> IO ())
-vcRequest wr (VCBackend s cast) cmd = cast (handleVCRequest wr s cmd)
-
-data Key = NodeKey String
-         | DataKey ValID
-         | LibraryKey LibraryID (WithResponse Bytes)
-         | SourceKey LibraryID (WithResponse (Signed String))
-         | BranchesKey PublicKey (WithResponse (Signed Branches))
-         | CommitKey Hash (WithResponse Commit)
-         deriving (Show,Generic)
-instance Serializable Key ; instance Format Key
-instance Eq Key where a==b = compare a b==EQ
-instance Ord Key where compare = comparing serialize
-instance DHTIndex Key
+data DHTKey = DataKey ValID
+            | NodeKey String
+            deriving (Eq,Ord,Generic)
+instance Serializable DHTKey ; instance Format DHTKey
+type Key = VCKey DHTKey
 
 newtype ValID = ValID Hash
               deriving (Eq,Ord,Show,Generic)
@@ -104,6 +39,15 @@ instance Eq Val where a==b = compare a b==EQ
 instance Ord Val where compare = comparing serialize
 instance DHTValue Val
 
+newtype DHT_VC a = DHT_VC { runDHT_VC :: IO a }
+                 deriving (Functor,Unit,SemiApplicative,Applicative)
+instance Monad DHT_VC where join = coerceJoin DHT_VC
+instance MonadIO DHT_VC where liftIO = DHT_VC
+instance MonadVC DHT_VC (DHTInstance Key Val) where
+  vcStore st k = insertMP st (map2 (const undefined) k)
+  vcLoad st k = lookupMP st (map2 (const undefined) k)
+  runVC (DHT_VC a) = a
+
 valID :: Val -> ValID
 valID = ValID . hashData . serialize
 
@@ -115,10 +59,10 @@ parMap k ta = for ta $ \a -> do
 
 insertMPBytes :: DHTInstance Key Val -> Bytes -> IO ValID
 insertMPBytes dht b
-  | bytesSize b<=256 = let v = DataVal b ; cid = valID v in insertDHT dht (DataKey cid) v >> return cid
+  | bytesSize b<=256 = let v = DataVal b ; cid = valID v in insertDHT dht (OtherKey (DataKey cid)) v >> return cid
   | otherwise = let parts = mapAccum_ (\n b -> swap $ splitAt n b) (take 8 $ repeat ((bytesSize b + 7) `div` 8)) b 
                 in parMap (insertMPBytes dht) parts >>= \ps -> let v = PartialVal ps ; cid = valID v
-                                                               in cid `seq` insertDHT dht (DataKey cid) v >> return cid
+                                                               in cid `seq` insertDHT dht (OtherKey (DataKey cid)) v >> return cid
 
 lookupMPBytes :: DHTInstance Key Val -> Key -> IO (Maybe Bytes)
 lookupMPBytes dht k = do
@@ -126,7 +70,7 @@ lookupMPBytes dht k = do
   case x of
     Just (DataVal b,_) -> return (Just b)
     Just (PartialVal ks,_) -> do
-      parts <- parMap (lookupMPBytes dht . DataKey) ks
+      parts <- parMap (lookupMPBytes dht . OtherKey . DataKey) ks
       return (fold <$> sequence parts)
     Nothing -> return Nothing
 
@@ -135,7 +79,7 @@ lookupMP dht fk = liftIO $ lookupMPBytes dht (fk WithResponse) <&> (>>= matches 
 insertMP :: (Serializable a,MonadIO m) => DHTInstance Key Val -> (WithResponse a -> Key) -> a -> m ()
 insertMP dht fk a = liftIO $ insertMPBytes dht (serialize a) >>= \cid -> insertDHT dht (fk WithResponse) (PartialVal [cid])
 
-isValidAssoc (DataKey h) v = valID v == h
+isValidAssoc (OtherKey (DataKey h)) v = valID v == h
 isValidAssoc _ _ = True
 
 data DHTAction = DHTBackend PortNumber String PortNumber
@@ -160,25 +104,23 @@ main = do
   case concat args of
     Help:_ -> putStrLn (usageInfo "curly-vc" dhtOpts)
     Action a:_ -> do
-      let dhtInstance dhtport = newDHTInstance (fromIntegral dhtport) (NodeKey ("curly-vc "+show dhtport)) isValidAssoc
+      let dhtInstance dhtport = newDHTInstance (fromIntegral dhtport) (OtherKey (NodeKey ("curly-vc "+show dhtport))) isValidAssoc
       backend <- case a of
         DHTRoot port -> do
           dht <- dhtInstance port
-          return (VCBackend dht (\(DHT_VC (Command (Compose m))) -> getId<$>m))
+          return (VCSB_Native "dht://" dht (\(DHT_VC m) -> m))
         DHTBackend port srv srv_port -> do
           dht <- dhtInstance port
-          res <- joinDHT dht (DHTNode srv srv_port (NodeKey ("curly-vc "+show srv_port)))
+          res <- joinDHT dht (DHTNode srv srv_port (OtherKey (NodeKey ("curly-vc "+show srv_port))))
           case res of
             JoinSucces -> putStrLn $ "Successfully joined network node "+srv+":"+show srv_port
             _ -> error "Couldnt't reach root node"
-          return (VCBackend dht (\(DHT_VC (Command (Compose m))) -> getId<$>m))
+          return (VCSB_Native "dht://" dht (\(DHT_VC m) -> m))
         FileBackend base -> do
-          return (VCBackend base (\(File_VC (Command (Compose m))) -> getId<$>m))
+          return (VCSB_Native base base (\(File_VC m) -> m))
 
       sock <- listenOn 5402
       forever $ do
         (h,_) <- accept sock
-        void $ forkIO $ runConnection_ True h $ forever $ do
-          x <- receive
-          liftIO (vcRequest ?write backend x)
+        void $ forkIO $ runConnection_ True h $ forever $ vcServer backend
 

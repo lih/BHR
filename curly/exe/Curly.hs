@@ -53,11 +53,9 @@ t'IOTgt _ x = return x
 
 initCurly = do
   setLocaleEncoding utf8
-  case curlyVCSBackend of
-    VCSB_Curly srv port -> do
-      conn <- connectTo srv port
-      let
-        getBranches pub = maybe zero unsafeExtractSigned <$> exchange (ListBranches pub)
+  trylogLevel Verbose (return ()) $ do
+    let conn = curlyVCSBackend
+        getBranches pub = maybe zero unsafeExtractSigned <$> vcbLoad conn (BranchesKey pub)
         deepBranch' Nothing = return Nothing
         deepBranch' (Just (Right h)) = return (Just h)
         deepBranch' (Just (Left (pub,b))) = deepBranch b pub
@@ -65,27 +63,24 @@ initCurly = do
           bs <- getBranches pub
           deepBranch' (lookup b bs)
         getAll (Just c) = cachedCommit c $ do
-          comm <- exchange (GetCommit c)
+          comm <- vcbLoad conn (CommitKey c)
           case comm of
             Just (Compressed (p,mh)) -> patch p <$> getAll mh
-            Nothing -> do zero
+            Nothing -> do error "Could not reconstruct the commit chain for commit"
         getAll Nothing = return zero
         cachedCommit c def = do
           let commitFile = curlyCommitDir </> show (Zesty c)+".index"
           x <- liftIO $ try (return Nothing) (map (Just . unCompressed) $ readFormat commitFile)
           maybe (def <*= liftIO . writeSerial commitFile . Compressed) return x
         
-        getLs = map (maybe [] id) $ runConnection Just False conn $ do
+        getLs = do
           ks <- getKeyStore
           branches <- map fold $ for (ks^.ascList) $ \(l,(_,pub,_,_,_)) -> do
             map (first (pub,)) . by ascList <$> getBranches pub
           map (by ascList . concat) $ for branches $ \((pub,b),h) -> getAll =<< deepBranch' (Just h)
-        getL lid = map (maybe zero id) $ runConnection Just False conn $ do
-          fromMaybe zero <$> exchange (GetLibrary lid)
-      runAtomic repositories (modify (touch (CustomRepo "curly-vc://" getLs getL)))
-    _ -> return ()
-               
-
+        getL lid = fromMaybe zero <$> vcbLoad conn (LibraryKey lid)
+    runAtomic repositories (modify (touch (CustomRepo "curly-vc://" getLs getL)))
+    
 ioTgt = return . IOTgt
 forkTgt m = do
   v <- newEmptyMVar

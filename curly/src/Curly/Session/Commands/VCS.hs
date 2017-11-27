@@ -40,20 +40,17 @@ vcsDoc = unlines [
         ul l = format "{ul %s}" (intercalate " " l)
 vcsCmd = withDoc vcsDoc $ False <$ do
   cmd <- expected "keyword, either 'commit', 'list' or 'get-source'" (nbhsp >> dirArg)
-  conn <- case curlyVCSBackend of
-    VCSB_Curly h p -> liftIO $ connectTo h p
-    _ -> guardWarn "no VCS backend" False >> zero
   u <- lookup curlyPublisher <$> getKeyStore
   let withKeys k = case u of
         Just (_,pub,Just priv,_,_) -> k pub priv
         _ -> serveStrLn (format "Error: the publisher %s doesn't have a private key" curlyPublisher) >> zero
-      modifyBranches :: (?write :: Bytes -> IO ()) => (Branches -> ParserT Bytes (OpParser IO) Branches) -> ParserT Bytes (OpParser IO) () 
+      modifyBranches :: (Branches -> OpParser IO Branches) -> OpParser IO () 
       modifyBranches k = withKeys $ \pub priv -> do
         bs <- getBranches pub
         x <- k bs
         bs' <- signValue priv x
-        send (SetBranches pub bs')
-      getBranches pub = maybe zero unsafeExtractSigned <$> exchange (ListBranches pub)
+        vcbStore conn (BranchesKey pub) bs'
+      getBranches pub = maybe zero unsafeExtractSigned <$> vcbLoad conn (BranchesKey pub)
       deepBranch' Nothing = return Nothing
       deepBranch' (Just (Right h)) = return (Just h)
       deepBranch' (Just (Left (pub,b))) = deepBranch b pub
@@ -68,21 +65,24 @@ vcsCmd = withDoc vcsDoc $ False <$ do
       pathtail <- many' (nbhsp >> dirArg) <* hspc <* lookingAt (eol+eoi)
       path <- getSession wd <&> (`subPath`pathtail)
       let libs = ?mountain ^?? atMs path.traverse
-      runConnection_ True conn $ do
-        for_ libs $ \lib -> do 
-          serveStrLn $ format "Committing library %s" (show (lib^.flID))
-          send (PublishLibrary (lib^.flID) (lib^.flBytes))
-          for_ (lib^.flSource) $ \s -> do
-            serveStrLn $ format "Committing source for library %s" (show (lib^.flID))
-            withKeys $ \_ priv -> do
-              s' <- signValue priv s
-              send (PublishSource (lib^.flID) s')
-        serveStrLn $ format "Committing new libraries to the '%s' branch" branch
-        modifyBranches $ \bs -> do
-          mh <- deepBranch' (lookup branch bs)
-          commid <- exchange (CreateCommit (Compressed (Patch [] [(fl^.flID,fl^.flLibrary.metadata) | fl <- libs]
-                                                       ,mh)))
-          return (insert branch (Right commid) bs)
+
+      for_ libs $ \lib -> do 
+        serveStrLn $ format "Committing library %s" (show (lib^.flID))
+        vcbStore conn (LibraryKey (lib^.flID)) (lib^.flBytes)
+        for_ (lib^.flSource) $ \s -> do
+          serveStrLn $ format "Committing source for library %s" (show (lib^.flID))
+          withKeys $ \_ priv -> do
+            s' <- signValue priv s
+            vcbStore conn (SourceKey (lib^.flID)) s'
+
+      serveStrLn $ format "Committing new libraries to the '%s' branch" branch
+      modifyBranches $ \bs -> do
+        mh <- deepBranch' (lookup branch bs)
+        let c = Compressed (Patch [] [(fl^.flID,fl^.flLibrary.metadata) | fl <- libs]
+                           ,mh)
+            commid = commitHash c
+        vcbStore conn (CommitKey commid) c
+        return (insert branch (Right commid) bs)
         
     "list" -> do
       keyid <- expected "key name" (nbhsp >> dirArg)
@@ -90,22 +90,17 @@ vcsCmd = withDoc vcsDoc $ False <$ do
       template <- option' Nothing (Just <$> docLine "template" [])
       lookingAt (hspc >> (eol+eoi))
       key <- lookup keyid <$> getKeyStore
-      case (map (by l'2) key,curlyVCSBackend) of
-        (Nothing,_) -> serveStrLn $ format "Error: Unknown key %s" keyid
-        (Just pub,VCSB_Curly h p) -> withMountain $ liftIO $ do
-          conn <- connectTo h p
-          case branch of
-            Nothing -> do
-              m <- map (maybe zero unsafeExtractSigned) $ runConnection id True conn $ do
-                exchange (ListBranches pub)
-              serveStrLn $ intercalate " " (keys m)
-            Just b -> do
-              bs <- runConnection id True conn $ do
-                getAll b =<< deepBranch b pub
-              forl_ (ascList.each) bs $ \(lid,m) -> do
-                for_ (maybe (Just $ pretty m) (showTemplate m) template) $ \s -> 
-                  serveStrLn $ format "%s %s" (show lid) s
-        (Just _,_) -> unit
+      case map (by l'2) key of
+        Nothing -> serveStrLn $ format "Error: Unknown key %s" keyid
+        Just pub -> withMountain $ case branch of
+          Nothing -> do
+            m <- map (maybe zero unsafeExtractSigned) $ vcbLoad conn (BranchesKey pub)
+            serveStrLn $ intercalate " " (keys m)
+          Just b -> do
+            bs <- getAll b =<< deepBranch b pub
+            forl_ (ascList.each) bs $ \(lid,m) -> do
+              for_ (maybe (Just $ pretty m) (showTemplate m) template) $ \s -> 
+                serveStrLn $ format "%s %s" (show lid) s
 
     "get" -> do
       guardWarn "You must have almighty access to retrieve arbitrary files" (?access >= Almighty)
@@ -113,15 +108,14 @@ vcsCmd = withDoc vcsDoc $ False <$ do
                                                             <+? fill False (several "source")))
       file <- expected "file name" (nbhsp >> dirArg)
       lid <- expected "library ID" (nbhsp >> libID)
-      runConnection_ True conn $ 
-        (if getLib then getLibrary else getSource) file lid
+      (if getLib then getLibrary else getSource) file lid
                   
     "checkout" -> do
       guardWarn "Checkouts can only be performed with almighty access" (?access >= Almighty)
       (root,name) <- splitFileName <$> expected "file prefix" (nbhsp >> dirArg)
       let pref = root+name
       lid <- expected "library ID" (nbhsp >> libID)
-      ls <- maybe zero return =<< runConnection Just True conn (checkout pref lid)
+      ls <- checkout pref lid
       liftIO $ do
         writeString (root+name+".cyx") $ unlines [
           "#!/usr/bin/curly",
@@ -157,12 +151,14 @@ vcsCmd = withDoc vcsDoc $ False <$ do
                                                                    | (Just _,l) <- groups^.ascList]
             pred <- expected "filter predicate" (nbhsp >> (libPred <+? singlePred <+? groupPred))
             lookingAt (hspc >> (eol+eoi))
-            runConnection_ True conn $ modifyBranches $ \bs -> do
+            modifyBranches $ \bs -> do
               mh <- deepBranch' (lookup branch bs)
               index <- getAll branch mh
               let index' = warp ascList pred index
                   dff = diff index index'
-              commid <- exchange (CreateCommit (Compressed (dff,mh)))
+                  c = Compressed (dff,mh)
+                  commid = commitHash c
+              vcbStore conn (CommitKey commid) c
               return (insert branch (Right commid) bs)
           branchFork = do
             isLink <- nbhsp >> (fill False (several "fork") <+? fill True (several "link"))
@@ -171,27 +167,27 @@ vcsCmd = withDoc vcsDoc $ False <$ do
             map (lookup user) getKeyStore >>= \x -> case x of
               Nothing -> do serveStrLn $ format "Error: unknown user %s" user
                             zero
-              Just (_,pub,_,_,_) -> do
-                runConnection_ True conn $ modifyBranches $ \bs -> do
-                  if isLink then return (insert branch (Left (pub,srcBranch)) bs)
-                    else do
-                    bs' <- getBranches pub
-                    return (bs & set (at branch) (bs'^.at srcBranch))
+              Just (_,pub,_,_,_) -> modifyBranches $ \bs -> do
+                if isLink then return (insert branch (Left (pub,srcBranch)) bs)
+                  else do
+                  bs' <- getBranches pub
+                  return (bs & set (at branch) (bs'^.at srcBranch))
             
       branchFork <+? branchFilter
         
     _ -> guardWarn "Expected 'commit', 'list', 'get-library' or 'get-source'" False
-  where libID = searchID <+? (dirArg >*> readable)
+  where conn = curlyVCSBackend
+        libID = searchID <+? (dirArg >*> readable)
         createFileDir f = createDirectoryIfMissing True (dropFileName f)
         getSource file lid = do
-          x <- exchange (GetSource lid)
+          x <- vcbLoad conn (SourceKey lid)
           case x of
             Just s -> liftIO $ do
               createFileDir file
               writeString file (unsafeExtractSigned s)
             Nothing -> serveStrLn $ format "Error: the source for library %s doesn't seem to exist" (show lid)
         getLibrary file lid = do
-          x <- exchange (GetLibrary lid)
+          x <- vcbLoad conn (LibraryKey lid)
           case x of
             Just s -> when (isLibData lid s) $ liftIO $ do
               createFileDir file
@@ -210,7 +206,7 @@ vcsCmd = withDoc vcsDoc $ False <$ do
           checkoutMod [] ctx
   
         getAll b (Just c) = cachedCommit c $ do
-          comm <- exchange (GetCommit c)
+          comm <- vcbLoad conn (CommitKey c)
           case comm of
             Just (Compressed (p,mh)) -> patch p <$> getAll b mh
             Nothing -> do serveStrLn (format "Couldn't reconstruct the commit history for branch %s" b)
