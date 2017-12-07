@@ -1,11 +1,7 @@
+image: fpco/stack-build:lts-9.10
 stages:
-  - test_gitlab
   - build
 
 stack_build:
   stage: build
   script: stack build --copy-bins --haddock --system-ghc
-
-stack_test_gitlab:
-  stage: test_gitlab
-  script: mkdir a && touch a/x && touch a/y && rm -r a
