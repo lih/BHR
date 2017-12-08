@@ -10,7 +10,7 @@ stack_build:
 pages:
   stage: deploy
   script:
-  - make doc && mkdir public && cp -r .stack-work/install/*/*/*/doc/* public
+  - make STACK_FLAGS=--system-ghc doc && mkdir public && cp -r .stack-work/install/*/*/*/doc/* public
   artifacts:
     paths:
     - public
