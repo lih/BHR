@@ -12,7 +12,7 @@ stack_build:
 pages:
   stage: deploy
   script:
-  - apt-get install -y xz
+  - apt-get install -y xz-utils
   - STACK_FLAGS=--system-ghc ci/pages
   artifacts:
     paths:
