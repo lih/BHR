@@ -1,5 +1,3 @@
-STACK_FLAGS := 
-
 ifeq ($(WATCH),true)
 STACK_FLAGS += --file-watch
 endif

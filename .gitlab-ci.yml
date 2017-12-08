@@ -5,12 +5,12 @@ stages:
 
 stack_build:
   stage: build
-  script: stack build --system-ghc
+  script: STACK_FLAGS=--system-ghc make
 
 pages:
   stage: deploy
   script:
-  - make STACK_FLAGS=--system-ghc doc && mkdir public && cp -r .stack-work/install/*/*/*/doc/* public
+  - STACK_FLAGS=--system-ghc make doc && mkdir public && cp -r .stack-work/install/*/*/*/doc/* public
   artifacts:
     paths:
     - public
