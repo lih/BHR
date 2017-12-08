@@ -1,5 +1,5 @@
 #!/bin/bash
-make doc || exit
+# make doc || exit
 mkdir -p public && {
     packages=( )
     ispackage=
@@ -12,15 +12,25 @@ mkdir -p public && {
             *) ispackage=;;
         esac
     done < stack.yaml
-
+    
+    cp .stack-work/install/*/*/*/doc/ocean.css public
     {
         cat <<EOF
 <!DOCTYPE html>
 <html>
-  <head></head>
+  <head>
+    <link rel="stylesheet" href="ocean.css" type="text/css" />
+  </head>
   <body>
-    <h1>Curly packages</h1>
-    <ul>
+    <div id="package-header">
+      <ul class="links">
+        <li><a href="https://gricad-gitlab.univ-grenoble-alpes.fr/coiffiem/curly">Source repository</a></li>
+      </ul>
+      <div class="caption">Curly packages</div></div>
+    <div id="content">
+      <h1>Curly packages</h1>
+      <p>Here is a list of all local packages in the Curly repositories</p>
+      <ul>
 EOF
         for pkg in "${packages[@]}"; do
             fullpkg=( .stack-work/install/*/*/*/doc/$pkg-[0-9]* )
@@ -33,7 +43,8 @@ EOF
         done
         find public -name src | xargs rm -r
         cat <<EOF
-    </ul>
+      </ul>
+    </div>
   </body>
 </html>
 EOF
