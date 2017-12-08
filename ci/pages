@@ -1,5 +1,5 @@
 #!/bin/bash
-make doc || exit
+# make doc || exit
 mkdir -p public && {
     packages=( )
     ispackage=
@@ -12,6 +12,11 @@ mkdir -p public && {
             *) ispackage=;;
         esac
     done < stack.yaml
+
+    executables=( )
+    for pkg in "${packages[@]}"; do
+        executables+=( $(sed -rn 's/^executable\s+(\S+).*$/\1/p' "$pkg/$pkg.cabal") )
+    done
     
     cp .stack-work/install/*/*/*/doc/ocean.css public
     {
@@ -42,6 +47,16 @@ EOF
             fi
         done
         find public -name src | xargs rm -r
+        cat <<EOF
+      </ul>
+      <h2>Executables</h2>
+      <ul>
+EOF
+        mkdir public/bin
+        for exe in "${executables[@]}"; do
+            xz < .stack-work/install/*/*/*/bin/$exe > public/bin/$exe.xz
+            printf '<li><a href="bin/%s.xz">%s.xz</a></li>\n' "$exe" "$exe"
+        done
         cat <<EOF
       </ul>
     </div>
