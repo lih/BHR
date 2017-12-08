@@ -6,6 +6,8 @@ stages:
 stack_build:
   stage: build
   script: STACK_FLAGS=--system-ghc make
+  except:
+  - master
 
 pages:
   stage: deploy
