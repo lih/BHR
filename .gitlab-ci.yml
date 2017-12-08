@@ -1,7 +1,18 @@
 image: fpco/stack-build:lts-9.10
 stages:
   - build
+  - deploy
 
 stack_build:
   stage: build
-  script: stack build --copy-bins --haddock --system-ghc
+  script: stack build --system-ghc
+
+pages:
+  stage: deploy
+  script:
+  - make doc && mkdir public && cp -r .stack-work/install/*/*/*/doc/* public
+  artifacts:
+    paths:
+    - public
+  only:
+  - master
