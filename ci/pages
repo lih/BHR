@@ -1,0 +1,39 @@
+#!/bin/bash
+make doc || exit
+mkdir -p public && {
+    packages=( )
+    ispackage=
+    while read line; do
+        case "$line" in
+            packages:*) ispackage=true;;
+            -*) if [ "$ispackage" = true ]; then
+                    packages+=( ${line#-} )
+                fi;;
+            *) ispackage=;;
+        esac
+    done < stack.yaml
+
+    {
+        cat <<EOF
+<!DOCTYPE html>
+<html>
+  <head></head>
+  <body>
+    <h1>Curly packages</h1>
+    <ul>
+EOF
+        for pkg in "${packages[@]}"; do
+            fullpkg=( .stack-work/install/*/*/*/doc/$pkg-[0-9]* )
+            fullpkg=( ${fullpkg[@]: -1:1} )
+            fullpkg="${fullpkg##*/}"
+            cp -r .stack-work/install/*/*/*/doc/$fullpkg public
+            printf '<li><a href="%s/index.html">%s</a></li>\n' "$fullpkg" "$pkg"
+        done
+        find public -name src | xargs rm -r
+        cat <<EOF
+    </ul>
+  </body>
+</html>
+EOF
+    } > public/index.html
+}
