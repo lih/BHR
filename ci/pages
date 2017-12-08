@@ -27,7 +27,9 @@ EOF
             fullpkg=( ${fullpkg[@]: -1:1} )
             fullpkg="${fullpkg##*/}"
             cp -r .stack-work/install/*/*/*/doc/$fullpkg public
-            printf '<li><a href="%s/index.html">%s</a></li>\n' "$fullpkg" "$pkg"
+            if [ -e public/$fullpkg/index.html ]; then
+                printf '<li><a href="%s/index.html">%s</a></li>\n' "$fullpkg" "$pkg"
+            fi
         done
         find public -name src | xargs rm -r
         cat <<EOF
