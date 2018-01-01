@@ -124,6 +124,10 @@ coerceLiftF _ = unsafeCoerce (liftF :: m a -> f a)
 data Cofree w a = Step a (Coforest w a)
 type Coforest w a = w (Cofree w a)
 
+deriving instance (Eq a,Eq (Coforest f a)) => Eq (Cofree f a)
+deriving instance (Ord a,Ord (Coforest f a)) => Ord (Cofree f a)
+deriving instance (Show a,Show (Coforest f a)) => Show (Cofree f a)
+
 type Infinite a = Cofree Id a
 type Colist a = Cofree Maybe a
 

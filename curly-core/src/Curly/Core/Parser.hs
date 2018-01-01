@@ -69,9 +69,23 @@ mkStream = OpStream . mk ('\0',0,0,0)
           Just (c,s') -> (c,(p,n,ln,cl)):mk (c,n+1,ln,cl+1) s'
           Nothing -> []
 
-type OpMap = Free (Map Char) ((Int,Bool),String)
+type OpMap_Val = ((Int,Bool),String)
+type OpMap = Cofree (Map Char) (Maybe OpMap_Val)
 type OpParser m = ParserT OpStream (RWST Void [Warning] (Int,OpMap,(Map String (NameExpr GlobalID),Library)) m)
 type Spaces = forall s m. (Monad m,ParseStream Char s) => ParserT s m ()
+
+instance Lens1 a a (Cofree f a) (Cofree f a) where
+  l'1 k (Step x f) = k x <&> \x' -> Step x' f
+instance Lens2 (f (Cofree f a)) (f (Cofree f a)) (Cofree f a) (Cofree f a) where
+  l'2 k (Step x f) = k f <&> Step x
+
+instance Semigroup OpMap where
+  Step x y + Step x' y' = Step (x+x') (y*+y')
+instance Monoid OpMap where
+  zero = Step zero zero
+instance DataMap OpMap String OpMap_Val where
+  at [] = l'1
+  at (c:cs) = l'2.mat c.at cs
 
 data Warning = Warning (Int,Int) String
              deriving (Show,Typeable)
@@ -154,7 +168,7 @@ expr sp = foldl1' mkApply<$>sepBy1' (tom sp) (skipMany1' sp)
 accessorExpr sp = expr sp <*= \e -> defAccessors (map fst (toList e))
 
 tom sp = do
-  Join opmap <- lift (getl l'2)
+  Step _ opmap <- lift (getl l'2)
   typeMap <- lift (getl l'typeMap)
   let param m c = case m^.at c of Just tl -> return tl ; _ -> zero
       tokParam m = multi <+? (param m =<< (token <*= guard . (/='_')))
@@ -174,17 +188,26 @@ tom sp = do
                        <+? (maxBound,mkSymbol Nothing)<$"_"
 
       mkOp n = foldl' mkApply (mkSymbol (Just (mkSymIn typeMap n)))
-      suffix p mod = suffix'
-        where suffix' (Join m) = (tokParam m >>= suffix') + do
-                tl <- param m '_'
-                guard (any (p . fst . fst) tl)
-                case tl :: OpMap of
-                  Pure ((d,isR),n) -> spc >> operation sp (if isR then (>=d) else (>d))
-                                <&> \(d',e) -> (min d d',mkOp n (mod [e]))
-                  _ -> between spc spc (operation space (>=0))
-                       >>= \(_,e) -> suffix p (mod . (e:)) tl
-              suffix' (Pure ((d,_),n)) | p d = return (maxBound,mkOp n (mod []))
-                                       | otherwise = zero
+      suffix p mod = suff
+        where
+          filterM cmp = map (\x -> x <*= guard . cmp . fst . fst)
+          suff (Step (Just x@((d,_),_)) m) =
+            suffM (map (filterM (>= d)) m) + suffO x + suffM (map (filterM (< d)) m)
+          suff (Step Nothing m) = suffM m
+          suffM m = (tokParam m >>= suff) + do
+            tl <- param m '_'
+            guard (any (maybe False (p . fst . fst)) tl)
+            let exprSuf tl = between spc spc (operation space (>=0))
+                             >>= \(_,e) -> suffix p (mod . (e:)) tl
+            case tl :: OpMap of
+              Step (Just ((d,isR),n)) m' | p d ->
+                foldr1 (<+?) [ exprSuf (filterM (> d) tl)
+                             , spc >> operation sp (if isR then (>=d) else (>d))
+                               <&> \(d',e) -> (min d d',mkOp n (mod [e]))
+                             , exprSuf (filterM (< d) tl) ]
+              _ -> exprSuf tl
+          suffO ((d,_),n) | p d = return (d,mkOp n (mod []))
+          suffO _ = zero
 
       trim x = case sem x of
         SemAbstract s e | matches (\(_ :: Int) -> True) (single '#' >> number) s ->
@@ -425,7 +448,7 @@ typeDecl = "type" >> nbsp >> do
 l1 <##> l2 = lens (liftA2 (,) (by l1) (by l2)) (\a (t,t') -> set l2 t' (set l1 t a))
 
 register :: Monad m => String -> OpParser m ()
-register n = when (elem '_' n && n/="_") $ lift (l'1<##>l'2 =~ \(d,m) -> (d+1,insert nk (Pure ((d,isR),n)) m))
+register n = when (elem '_' n && n/="_") $ lift (l'1<##>l'2 =~ \(d,m) -> (d+1,insert nk ((d,isR),n) m))
   where isR = drop (length n-2) n == "__"
         nk = if isR then init n else n
 resolve :: (Monad m, ?mountain :: Mountain) => Module (String, Maybe String) -> OpParser m Context
