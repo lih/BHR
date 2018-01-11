@@ -190,21 +190,29 @@ tom sp = do
       mkOp n = foldl' mkApply (mkSymbol (Just (mkSymIn typeMap n)))
       suffix p mod = suff
         where
-          filterM cmp = map (\x -> x <*= guard . cmp . fst . fst)
+          filterM cmp = snd . go
+            where go (Step x xs) = let x' = x <*= guard . cmp . fst . fst
+                                       xs' = map go xs
+                                       isEmpty = not (any fst xs')
+                                   in (maybe False (const True) x' || not isEmpty,
+                                       Step x' (if isEmpty then zero else map snd xs'))
           suff (Step (Just x@((d,_),_)) m) =
-            suffM (map (filterM (>= d)) m) + suffO x + suffM (map (filterM (< d)) m)
+            suff (filterM (>= d) (Step Nothing m))
+            + suffO x
+            + suff (filterM (< d) (Step Nothing m))
           suff (Step Nothing m) = suffM m
           suffM m = (tokParam m >>= suff) + do
             tl <- param m '_'
             guard (any (maybe False (p . fst . fst)) tl)
-            let exprSuf tl = between spc spc (operation space (>=0))
-                             >>= \(_,e) -> suffix p (mod . (e:)) tl
+            let exprSuf tl@(Step _ tlm) | empty tlm = zero
+                                        | otherwise = between spc spc (operation space (>=0))
+                                                      >>= \(_,e) -> suffix p (mod . (e:)) tl
             case tl :: OpMap of
-              Step (Just ((d,isR),n)) m' | p d ->
+              Step (Just ((d,isR),n)) m' | p d -> do
                 foldr1 (<+?) [ exprSuf (filterM (> d) tl)
                              , spc >> operation sp (if isR then (>=d) else (>d))
                                <&> \(d',e) -> (min d d',mkOp n (mod [e]))
-                             , exprSuf (filterM (< d) tl) ]
+                             , exprSuf (filterM (> d) tl)]
               _ -> exprSuf tl
           suffO ((d,_),n) | p d = return (d,mkOp n (mod []))
           suffO _ = zero
