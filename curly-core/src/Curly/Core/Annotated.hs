@@ -57,18 +57,45 @@ instance NFData (Symbol s) where
   rnf (Builtin _ b) = rnf b
 
 type ExprStrictness = ([Strictness],Strictness)
-data Strictness = Delayed ExprStrictness
-                | WHNF (Builtin:+:Int) [ExprStrictness]
-                deriving (Eq,Ord,Show,Generic)
+
+data StrictnessHead = StH_B Builtin
+                    | StH_V Int
+                    | StH_Fix String ExprStrictness
+                    deriving (Eq,Ord,Show,Generic)
+instance Serializable StrictnessHead
+instance Format StrictnessHead
+
+data Strictness = Delayed String ExprStrictness
+                | HNF StrictnessHead [ExprStrictness]
+                deriving (Eq,Ord,Generic)
 instance Serializable Strictness
 instance Format Strictness
+instance Show Strictness where
+  showsPrec n st t = sh n [] st + t
+    where sh n env (Delayed s e) = let env' = newVar s env
+                                   in par 0 n $ format "\\%s. %s" (head env') (shS 0 env' e)
+          sh _ env (HNF h []) = shH env h
+          sh n env (HNF h xs) = par 1 n $ intercalate " " (shH env h : map (shS 2 env) xs)
+          shS n env ([],e) = sh n env e
+          shS n env (es,e) = format "[%s] %s" (intercalate "," (map (sh n env) es)) (sh n env e)
+          shH env (StH_V n) = env!!n
+          shH _   (StH_B b) = show b
+          shH env (StH_Fix s e) = let env' = newVar s env
+                                  in format "(fix %s = %s)" (head env') (shS 0 env' e)
+          newVar s env | elem s env = newVar (s+"'") env
+                       | otherwise = s:env
+          par n m x | n>=m = x
+                    | otherwise = format "(%s)" x
 
 strictnessArg :: Traversal (Int,Int) Int Strictness Strictness
 strictnessArg k = descend 0
-  where descend n (WHNF (Right n') ests) =
-          WHNF . Right <$> k (n,n') <*> traverse (descendE n) ests
-        descend n (WHNF s ests) = WHNF s <$> traverse (descendE n) ests
-        descend n (Delayed est) = Delayed <$> descendE (n+1) est
+  where descend n (HNF (StH_V n') ests) =
+          HNF . StH_V <$> k (n,n') <*> traverse (descendE n) ests
+        descend n (HNF (StH_B b) ests) = HNF (StH_B b) <$> traverse (descendE n) ests
+        descend n (HNF (StH_Fix s est) ests) = liftA2 (\e' -> HNF (StH_Fix s e'))
+                                               (descendE (n+1) est)
+                                               (traverse (descendE n) ests)
+        descend n (Delayed s est) = Delayed s <$> descendE (n+1) est
         descendE n (sts,st) = (,) <$> traverse (descend n) sts
                                   <*> descend n st
 
@@ -125,7 +152,7 @@ instance Identifier s => Semantic (AnnExpr s) s (Symbol s) where
           g (SemApply f x) = Join (AnnNode i m r t st (Apply f x))
             where (i,m,r,t,st) = applyAnns f x
           g (SemAbstract s e) = Join (AnnNode i m r t st (Lambda s e))
-            where (i,m,r,t,st) = lambdaAnns e
+            where (i,m,r,t,st) = lambdaAnns s e
           g (SemSymbol s) = Pure s
 
 type NameTail s = Free (NameNode s) (Symbol s)
@@ -205,7 +232,7 @@ instance Identifier s => Semantic (RawNameExpr s) s (s,NameTail s) where
 nnApply a b = Join (AnnNode i m r zero st (Apply (a^..i'NameNode) (b^..i'NameNode)))^.i'NameNode
   where (i,m,r,_,st) = applyAnns a b
 nnAbstract s e = Join (AnnNode i m r zero st (Lambda s (e^..i'NameNode)))^.i'NameNode
-  where (i,m,r,_,st) = lambdaAnns e 
+  where (i,m,r,_,st) = lambdaAnns s e 
 
 expr_identity :: Identifier s => RawNameExpr s
 expr_identity = mkAbstract (pureIdent "#0") (mkSymbol (pureIdent "#0",Pure (Argument 0)))
@@ -401,7 +428,7 @@ instance Identifier s => Annotated (AnnExpr s) s where
   exprType (Pure (Argument n)) = (argumentType n,zero)
   exprType (Pure (Builtin t _)) = (t,zero)
   exprStrictness (Join ann) = _strictness ann
-  exprStrictness (Pure (Argument n)) = pure (WHNF (Right n) [])
+  exprStrictness (Pure (Argument n)) = pure (HNF (StH_V n) [])
   exprStrictness (Pure (Builtin _ b)) = pure $ case b of
     B_AddInt -> binOp B_AddInt
     B_MulInt -> binOp B_MulInt
@@ -410,14 +437,14 @@ instance Identifier s => Annotated (AnnExpr s) s where
     B_AddString -> binOp B_AddString
     B_StringLength -> monOp B_StringLength
     B_ShowInt -> monOp B_ShowInt
-    b -> WHNF (Left b) []
-    where binOp b = Delayed $ pure $ Delayed $ do
+    b -> HNF (StH_B b) []
+    where binOp b = Delayed "x" $ pure $ Delayed "y" $ do
             tell [arg 0, arg 1]
-            pure (WHNF (Left b) [pure (arg 1), pure (arg 0)])
-          monOp b = Delayed $ do 
+            pure (HNF (StH_B b) [pure (arg 1), pure (arg 0)])
+          monOp b = Delayed "x" $ do 
             tell [arg 0]
-            pure (WHNF (Left b) [pure (arg 0)])
-          arg n = WHNF (Right n) []
+            pure (HNF (StH_B b) [pure (arg 0)])
+          arg n = HNF (StH_V n) []
 
 nameProp :: (forall b. AnnNode s b -> a) -> (AnnExpr s -> a) -> NameExpr s -> a
 nameProp np anp = fix $ \nnp a -> case a^..i'NameNode of
@@ -438,8 +465,8 @@ t'exprType = fix $ \node -> from i'NameNode.(t'Join.annType
   where argType k (Builtin t b) = k (t,zero) <&> \(t',_) -> Builtin t' b
         argType _ (Argument n) = pure (Argument n)
 
-lambdaAnns :: forall e s. Annotated e s => e -> (Int,Int,Map (Symbol s) Int,ExprType s,ExprStrictness)
-lambdaAnns e = (i,m,r,lambdaType (exprType e),pure (Delayed (exprStrictness e)))
+lambdaAnns :: forall e s. Annotated e s => s -> e -> (Int,Int,Map (Symbol s) Int,ExprType s,ExprStrictness)
+lambdaAnns s e = (i,m,r,lambdaType (exprType e),pure (Delayed (identName s) (exprStrictness e)))
   where i = Right (Lambda () (exprId e))^..shape
         m = exprMass e + 1
         r = delete (Argument 0) (exprRefs e) & ascList.each.l'1.argument %~ subtract 1
@@ -454,14 +481,25 @@ applyAnns a b = (i,m,r,applyType (exprType a) (exprType b),st)
         m = exprMass a + exprMass b + 1
         r = exprRefs a *+ exprRefs b
         applyStrictness esb sa = case sa of
-          Delayed (sts,st) -> do tell =<< traverse liftArg sts
-                                 liftArg st
-          WHNF x l -> pure (WHNF x (l+[esb]))
-          where liftArg = liftArg' 0
-                liftArg' n (Delayed (sts,st)) = curry Delayed<$>traverse (liftArg' (n+1)) sts<*>liftArg' (n+1) st
-                liftArg' n (WHNF (Right arg) ests) | arg==n = foldl' (\esf esx -> applyStrictness (liftArg' n =<< esx) =<< esf)
-                                                              esb ests
-                liftArg' n (WHNF s ests) = pure (WHNF s (map  (liftArg' n =<<) ests))
+          Delayed _ est -> traverseSt (substD 0) est
+          HNF x l -> pure (HNF x (l+[esb]))
+          where subst = substD 0
+                traverseSt :: (Strictness -> ExprStrictness) -> ExprStrictness -> ExprStrictness
+                traverseSt k (es,e) = (tell =<< traverse k es) >> k e
+                
+                substD n (Delayed s est) = pure (Delayed s (traverseSt (substD (n+1)) est))
+                substD n (HNF (StH_V arg) ests) = case compare arg n of
+                  EQ -> foldl' (\esf esx -> do
+                                   sf <- esf
+                                   applyStrictness (traverseSt (substD n . filterArg arg) esx) sf)
+                        (esb & (l'1.each .+ l'2).strictnessArg %~ \(d,v) -> if v >= d then v+n else v)
+                        ests
+                  cmpn -> pure $ HNF (StH_V (if cmpn==LT then arg else arg-1))
+                          (map (traverseSt (substD n)) ests)
+                substD n (HNF s ests) = pure (HNF s (map (traverseSt (substD n)) ests))
+                
+                filterArg arg (HNF (StH_V arg') args) | arg == arg' = HNF (StH_B B_Undefined) []
+                filterArg _ x = x
         st = applyStrictness (exprStrictness b) =<< exprStrictness a
 applyType :: forall s. Identifier s => ExprType s -> ExprType s -> ExprType s
 applyType (ta,aIsC) (tb,bIsC) = (tret,aIsC || bIsC || isComplexType tret)

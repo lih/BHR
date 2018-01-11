@@ -144,9 +144,9 @@ instance (Show (Pretty s),Show (Pretty a)) => Show (Pretty (Expression s a)) whe
   show (Pretty expr) = show' "" expr
     where
       show' :: forall a' s'. (Show (Pretty a'),Show (Pretty s')) => String -> Expression s' a' -> String
-      show' h (Pure s) = h+"->  "+pretty s
-      show' h (Join (Lambda s e@(Join (Lambda _ _)))) = h+"<-  "+pretty s+" "+drop (length h+4) (show' h e)
-      show' h (Join (Lambda s e)) = h+"<-  "+pretty s+"\n"+show' (h+"| ") e
+      show' h (Pure s) = h+"-> "+pretty s
+      show' h (Join (Lambda s e@(Join (Lambda _ _)))) = h+"<- "+pretty s+" "+drop (length h+3) (show' h e)
+      show' h (Join (Lambda s e)) = h+"<- "+pretty s+"\n"+show' (h+"| ") e
       show' h (Join (Apply (Join (Apply f (Pure x1))) (Pure x2)))
         = show' h (Join (Apply (map pretty f) (Pure (pretty x1+" "+pretty x2))))
       show' h (Join (Apply (Pure f) (Pure x))) = h+"-> "+pretty f+"("+pretty x+")"
