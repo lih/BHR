@@ -66,8 +66,7 @@ whatDoc = unlines [
   ,"{p Show the type of the function at PATH, or an expression EXPR in the local context.}}"
   ]
 whatCmd = viewCmd whatDoc onExpr (const zero) $ \_ (by leafVal -> v) -> serveWhat v
-  where serveWhat v = let (t,isC) = exprType v
-                      in serveStrLn ((if isC then "Complex\n" else "") + show t)
+  where serveWhat v = serveStrLn (show (exprType v))
         onExpr = do
           e <- optimized =<< accessorExpr hspace
           serveWhat e

@@ -286,7 +286,7 @@ lambdaArg = letBinding + funPrefix + do
         funPrefix = wrapRound $ pure . Right<$>sepBy1' (tom space) nbsp
 
 typeExpr :: Type GlobalID -> NameExpr GlobalID
-typeExpr t = mkAbstract (pureIdent "#0") (mkSymbol (pureIdent "#0",Pure (Argument 0))) & from i'NameNode.t'Join.annType.l'1 %- t
+typeExpr t = mkAbstract (pureIdent "#0") (mkSymbol (pureIdent "#0",Pure (Argument 0))) & from i'NameNode.t'Join.annType %- t
 
 curlyFile :: (Monad m, ?mountain :: Mountain) => OpParser m Library
 curlyFile = do
@@ -368,7 +368,7 @@ curlyLine = swaying (foldr1 (<+?) [defLine,descLine,typeLine,classLine,comment,i
             Just lf | lf^.leafIsMethod ->
                       let e' = optExprIn l (foldr mkLet e args)
                           t' = lf^.leafType
-                               + mapTypePathsMonotonic (Just . warp (l'1.t'ImplicitRoot) (+1)) (exprType e'^.l'1)
+                               + mapTypePathsMonotonic (Just . warp (l'1.t'ImplicitRoot) (+1)) (exprType e')
                           ((cn,is):_,_) = typeConstraints t'
                           lf' = lf & set leafType t' . set leafVal e'
                       in l & compose [implicits %~ insert (cn,i,t') (Nothing,lf') | i <- is]
@@ -414,11 +414,11 @@ defAccessors syms = do
                     ! (sym "a"!sym "x"))
     in do
       mod <- defClass ac ["a","b"] [["a"]] NoRange $ \l ->
-        l'1 $^ exprType $ exprIn l (e :: SourceExpr)
+        exprType $ exprIn l (e :: SourceExpr)
       lift (l'library =~ mod)
 
 defTypeSym n isM rng tp e = symbols.at n.l'Just undefLeaf %~
-                            set leafVal (set (t'exprType.l'1) tp (_rawNameExpr e))
+                            set leafVal (set t'exprType tp (_rawNameExpr e))
                             . set leafPos rng
                             . set leafType tp . set leafIsMethod isM
 defRigidSymbols args = compose [defTypeSym a False NoRange (rigidTypeFun a) expr_identity
@@ -431,7 +431,7 @@ typeSum = do
   pre <- currentPos
   exprs <- sepBy1' (foldl1' mkApply <$> sepBy1' typeNode nbhsp) delim
   post <- currentPos
-  return (pre,(\l -> foldl1' (+) [exprType (exprIn l e)^.l'1 | e <- exprs]),post)
+  return (pre,(\l -> foldl1' (+) [exprType (exprIn l e) | e <- exprs]),post)
 typeDecl = "type" >> nbsp >> do
   mctor <- option' Nothing $ map Just $ do
     varName <* nbsp <* opKeyword ":" <* nbsp

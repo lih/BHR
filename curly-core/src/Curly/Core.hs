@@ -138,7 +138,10 @@ indent p s = p+indent' s
         indent' [] = []
         indent' (c:t) = c:indent' t
 
-instance Show (Pretty String) where show (Pretty s) = s
+instance (Show (Pretty a), Show (Pretty b)) => Show (Pretty (a,b)) where
+  show (Pretty (a,b)) = show (Pretty a,Pretty b)
+instance Show (Pretty String) where
+  show (Pretty s) = s
 instance Show (Pretty Int) where show (Pretty n) = show n
 instance (Show (Pretty s),Show (Pretty a)) => Show (Pretty (Expression s a)) where
   show (Pretty expr) = show' "" expr

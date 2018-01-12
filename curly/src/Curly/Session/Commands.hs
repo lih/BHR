@@ -87,7 +87,7 @@ quitCmd,helpCmd,configCmd,killCmd,compareTypesCmd,showInstancesCmd :: Interactiv
 
 compareTypesDoc = "{section {title Compare Types} Compares the types of two expressions}"
 compareTypesCmd = withDoc compareTypesDoc $ False <$ do
-  let exprT = map (by l'1 . exprType) . optimized
+  let exprT = map exprType . optimized
   nbsp
   shapeCmp <- (True <$ several "shape") <+? (False <$ several "constraints")
   nbsp

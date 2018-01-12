@@ -6,7 +6,7 @@ module Curly.Core.Library(
   atM,atMs,fromPList,
   -- ** Leaves
   ModLeaf,SourcePos,SourceRange(..),
-  undefLeaf,leafVal,leafDoc,leafPos,leafType,leafIsMethod,leafIsComplex,
+  undefLeaf,leafVal,leafDoc,leafPos,leafType,leafIsMethod,
   -- * Libraries
   GlobalID(..),
   LibraryID(..),isLibData,
@@ -174,7 +174,6 @@ data ModLeaf s a = ModLeaf {
   _leafDoc :: Documentation,
   _leafPos :: SourceRange,
   _leafType :: Type s,
-  _leafIsComplex :: Bool,
   _leafIsMethod :: Bool,
   _leafVal :: a
   }
@@ -184,10 +183,10 @@ instance Functor (ModLeaf s) where
 instance Foldable (ModLeaf s) where fold l = l^.leafVal
 instance Traversable (ModLeaf s) where sequence l = leafVal id l
 instance (Identifier s,Serializable s,Serializable a) => Serializable (ModLeaf s a) where
-  encode (ModLeaf a b c d e f) = encode (Chunked a)+encode b+encode (Chunked c)+encode d+encode e+encode (Chunked f)
+  encode (ModLeaf a b c d e) = encode (Chunked a)+encode b+encode (Chunked c)+encode d+encode (Chunked e)
 instance (Identifier s,Format s,Format a) => Format (ModLeaf s a) where
-  datum = (\(Chunked a) b (Chunked c) d e (Chunked f) -> ModLeaf a b c d e f)
-          <$>datum<*>datum<*>datum<*>datum<*>datum<*>datum
+  datum = (\(Chunked a) b (Chunked c) d (Chunked e) -> ModLeaf a b c d e)
+          <$>datum<*>datum<*>datum<*>datum<*>datum
 instance (Identifier s,Identifier s') => HasIdents s s' (ModLeaf s a) (ModLeaf s' a) where
   ff'idents = leafType.ff'idents
 
@@ -211,8 +210,6 @@ leafPos :: Lens' (ModLeaf s a) SourceRange
 leafPos = lens _leafPos (\x y -> x { _leafPos = y })
 leafIsMethod :: Lens' (ModLeaf s a) Bool
 leafIsMethod = lens _leafIsMethod (\x y -> x { _leafIsMethod = y })
-leafIsComplex :: Lens' (ModLeaf s a) Bool
-leafIsComplex = lens _leafIsComplex (\x y -> x { _leafIsComplex = y })
 leafType :: Lens (Type s) (Type s') (ModLeaf s a) (ModLeaf s' a)
 leafType = lens _leafType (\x y -> x { _leafType = y })
 leafVal :: Lens a b (ModLeaf s a) (ModLeaf s b)
@@ -328,7 +325,7 @@ scoped = iso f g
                 fromSym (s,Just sym) = (s,Pure sym)
                 fromSym (s,Nothing) = (s,Join (symVal s^.leafVal))
                 fromExpr = withType . map (_rawNameExpr . semantic . c'Expression . map fromSym)
-                withType s = s & warp (leafVal.t'exprType) (set l'1 (s^.leafType) . set l'2 (s^.leafIsComplex))
+                withType s = s & set (leafVal.t'exprType) (s^.leafType)
                 i = map (\s -> (s,symVal s)) i'
                 e = map (\s -> (s,symVal s)) e'
                 s = map fromExpr s'
@@ -392,7 +389,7 @@ type Mountain = Module FileLibrary
 mapIdents :: (String -> GlobalID -> GlobalID) -> (GlobalID -> GlobalID) -> Context -> Context
 mapIdents sw f = mapC "" 
   where mapDE = warp (leafType.ff'idents) f . warp leafVal mapE
-        mapE = warp (from i'NameNode) (map (first f)) . warp (t'exprType.l'1.ff'idents) f
+        mapE = warp (from i'NameNode) (map (first f)) . warp (t'exprType.ff'idents) f
         mapC _ (Join (ModDir m)) = Join . ModDir $ warp each (\(s,e) -> (s,mapC s e)) m
         mapC s (Pure (i,e)) = Pure (sw s (f i),mapDE e)
 context :: Mountain -> Context
@@ -405,7 +402,7 @@ localContext = context ?mountain
 undefSym :: NameExpr GlobalID
 undefSym = mkSymbol (pureIdent "undefined",Pure (Builtin (builtinType B_Undefined) B_Undefined))
 undefLeaf :: LeafExpr GlobalID
-undefLeaf = ModLeaf nodoc NoRange zero False False undefSym
+undefLeaf = ModLeaf nodoc NoRange zero False undefSym
 
 addImport :: Context -> Library -> Library
 addImport i = warp imports (+i) . warp symbols (fromAList (map f (toList i))+)
@@ -418,11 +415,10 @@ addExport :: Module String -> Library -> Library
 addExport e l = l & exports %~ (+resolve l e)
 setExports :: Module String -> Library -> Library
 setExports e l = l & exports %- resolve l e
-defSymbol :: Semantic e String (String,Maybe (NameExpr GlobalID)) => String -> SourceRange -> Maybe (Type GlobalID,Bool) -> Bool -> e -> Library -> Library
-defSymbol s r t isM e l = l & symbols.at s.l'Just undefLeaf %~ set leafType tp . set leafVal e' . set leafPos r . set leafIsMethod isM . set leafIsComplex isC
-  where e' = optExprIn l e ; et = exprType e'
-        tp = maybe (et^.l'1) fst t
-        isC = maybe (et^.l'2) snd t
+defSymbol :: Semantic e String (String,Maybe (NameExpr GlobalID)) => String -> SourceRange -> Maybe (Type GlobalID) -> Bool -> e -> Library -> Library
+defSymbol s r t isM e l = l & symbols.at s.l'Just undefLeaf %~ set leafType tp . set leafVal e' . set leafPos r . set leafIsMethod isM
+  where e' = optExprIn l e 
+        tp = fromMaybe (exprType e') t
 
 exprIn :: Semantic e String (String,Maybe (NameExpr GlobalID)) => Library -> e -> NameExpr GlobalID
 exprIn l e = syntax merge val (pureIdent . fst) (\n -> Pure (Argument n)) (c'Expression $ mapParams pureIdent e)
