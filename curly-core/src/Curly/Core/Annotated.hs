@@ -296,7 +296,7 @@ optimize showB e = if envVar "optimize" "CURLY_OPTIMIZE"=="optimize"
   where prettyNE e = pretty (mapParams identName (map (identName . fst) (semantic e) :: Expression s String) :: Expression String String)
         prettyM m = format "[%s]" (intercalate "," (map (maybe "?" prettyNE) m)) :: String
         prettyV v = format "[%s]" (intercalate "," (map (\(b,x) -> show b+":"+prettyNE x) v)) :: String
-        opt (m,v) e = trace (format "opt %s %s %s" (prettyM m) (prettyV v) (prettyNE e)) $ case sem e of
+        opt (m,v) e = case sem e of
           SemSymbol (s,Pure (Argument n)) ->
             let transNode d x = case sem x of
                   SemSymbol (s,Pure (Argument n'')) | n''>=d -> mkSymbol (s,Pure (Argument (n'+n''))) 
@@ -322,8 +322,7 @@ optimize showB e = if envVar "optimize" "CURLY_OPTIMIZE"=="optimize"
                   vh = case sem x' of SemSymbol _ -> True ; _ -> False
           where transTail n = n-length [() | Just _ <- take n m]
                 isInline b n e' = b || mlookup (Argument n) (exprRefs e') <= 1
-                                  || tracing (format "complex %s %s %s" (prettyNE e) (show (snd (exprStrictness e))) . show)
-                                  (isComplexStrictness (snd (exprStrictness e)))
+                                  || (not (isComplexStrictness (snd (exprStrictness e))))
                 etaReduce v s e = let e' = opt (Nothing:m,v) (e :: NameExpr s) in
                   case sem e' of
                     SemApply f (sem -> SemSymbol (_,Pure (Argument 0)))
