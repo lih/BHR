@@ -113,21 +113,25 @@ nativeBackend :: MonadIO m => String -> PortNumber -> m VCSBackend
 nativeBackend h p = do
   conn <- liftIO (connectTo h p)
   return (VCSB_Native ("curly-vc://"+h+":"+show p) conn (\(Client_VC io) -> io))
+fileBackend p = VCSB_Native ("file://"+p) p (\(File_VC io) -> io)
 instance Show VCSBackend where
   show (VCSB_Native s _ _) = s
   show VCSB_None = "none"
 instance Read VCSBackend where
   readsPrec _ = readsParser $ backend
-    where backend = curlyBackend <+? fill VCSB_None (several "none")
-          curlyBackend = do
+    where backend = proto_native <+? proto_file <+? fill VCSB_None (several "none")
+          proto_native = do
             several "curly-vc://" <+? single '@'
             map (by thunk) $ liftA2 nativeBackend
               (many1' (noneOf ":") <&> \x -> if x=="_" then "127.0.0.1" else x)
               (option' 5402 (single ':' >> number))
+          proto_file = do
+            several "file://" <+? lookingAt (single '/')
+            fileBackend <$> remaining
               
 curlyVCSBackend :: VCSBackend
 curlyVCSBackend = fromMaybe (getDefaultVCS^.thunk) (matches Just readable (envVar "" "CURLY_VCS"))
-  where getDefaultVCS = do
+  where getDefaultVCS = try (return VCSB_None) $ do
           lns <- map words . lines <$> readProcess "/usr/lib/curly/default-vcs" [] ""
           case lns of
             ([h,p]:_) -> nativeBackend h (fromInteger $ read p)

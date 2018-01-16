@@ -26,6 +26,7 @@ import Data.IORef
 import GHC.Conc (threadDelay)
 import GHC.IO.Encoding (utf8,setLocaleEncoding)
 import IO.Filesystem
+import IO.Time (currentTime)
 import IO.Network.Socket
 import Language.Format
 import System.Environment (getArgs)
@@ -53,34 +54,36 @@ t'IOTgt _ x = return x
 
 initCurly = do
   setLocaleEncoding utf8
-  trylogLevel Verbose (return ()) $ do
-    let conn = curlyVCSBackend
-        getBranches pub = maybe zero unsafeExtractSigned <$> vcbLoad conn (BranchesKey pub)
-        deepBranch' Nothing = return Nothing
-        deepBranch' (Just (Right h)) = return (Just h)
-        deepBranch' (Just (Left (pub,b))) = deepBranch b pub
-        deepBranch b pub = do
-          bs <- getBranches pub
-          deepBranch' (lookup b bs)
-        getAll (Just c) = cachedCommit c $ do
-          comm <- vcbLoad conn (CommitKey c)
-          case comm of
-            Just (Compressed (p,mh)) -> patch p <$> getAll mh
-            Nothing -> do error "Could not reconstruct the commit chain for commit"
-        getAll Nothing = return zero
-        cachedCommit c def = do
-          let commitFile = curlyCommitDir </> show (Zesty c)+".index"
-          x <- liftIO $ try (return Nothing) (map (Just . unCompressed) $ readFormat commitFile)
-          maybe (def <*= liftIO . writeSerial commitFile . Compressed) return x
-        
-        getLs = do
-          ks <- getKeyStore
-          branches <- map fold $ for (ks^.ascList) $ \(l,(_,pub,_,_,_)) -> do
-            map (first (pub,)) . by ascList <$> getBranches pub
-          map (by ascList . concat) $ for branches $ \((pub,b),h) -> getAll =<< deepBranch' (Just h)
-        getL lid = fromMaybe zero <$> vcbLoad conn (LibraryKey lid)
-    runAtomic repositories (modify (touch (CustomRepo "curly-vc://" getLs getL)))
-    
+  when (case curlyVCSBackend of VCSB_None -> False ; _ -> True) $ do
+    trylogLevel Verbose (return ()) $ do
+      let conn = curlyVCSBackend
+          getBranches pub = maybe zero unsafeExtractSigned <$> vcbLoad conn (BranchesKey pub)
+          deepBranch' Nothing = return Nothing
+          deepBranch' (Just (Right h)) = return (Just h)
+          deepBranch' (Just (Left (pub,b))) = deepBranch b pub
+          deepBranch b pub = do
+            bs <- getBranches pub
+            deepBranch' (lookup b bs)
+          getAll (Just c) = cachedCommit c $ do
+            comm <- vcbLoad conn (CommitKey c)
+            case comm of
+              Just (Compressed (p,mh)) -> patch p <$> getAll mh
+              Nothing -> do error "Could not reconstruct the commit chain for commit"
+          getAll Nothing = return zero
+          cachedCommit c def = do
+            let commitFile = curlyCommitDir </> show (Zesty c)+".index"
+            x <- liftIO $ try (return Nothing) (map (Just . unCompressed) $ readFormat commitFile)
+            maybe (def <*= liftIO . writeSerial commitFile . Compressed) return x
+          
+          getLs = do
+            ks <- getKeyStore
+            now <- currentTime
+            branches <- map fold $ for (ks^.ascList) $ \(l,(_,pub,_,_,_)) -> do
+              map (first (pub,)) . by ascList <$> getBranches pub
+            map ((now+15,) . by ascList . concat) $ for branches $ \((pub,b),h) -> getAll =<< deepBranch' (Just h)
+          getL lid = fromMaybe zero <$> vcbLoad conn (LibraryKey lid)
+      runAtomic repositories (modify (touch (CustomRepo "curly-vc://" getLs getL)))
+
 ioTgt = return . IOTgt
 forkTgt m = do
   v <- newEmptyMVar
@@ -197,9 +200,8 @@ runTarget (Server LibServer) = forkTgt $ \_ -> do
       forever $ receive >>= liftIO . \x -> withMountain $ do
         let localLibs = c'map (fromAList [(fl^.flID,(p,fl^.flLibrary,fl^.flBytes)) | (p,fl) <- sourceLibs])
         ls <- case x of
-          Nothing -> availableLibs <&> \al -> SupplyLibraries [(i,l^.metadata)
-                                                              | (i,Just l) <- (localLibs^.ascList <&> \(i,(_,l,_)) -> (i,Just l))
-                                                                              + (al <&> \(i,_) -> (i,map (by flLibrary) $ findLib i))]
+          Nothing -> availableLibs <&> \al -> SupplyLibraries ((localLibs^.ascList <&> \(i,(_,l,_)) -> (i,l^.metadata))
+                                                               + al)
           Just l -> return (SupplyLibrary $ fromMaybe zero (map (by l'3) (localLibs^.at l) + map (by flBytes) (findLib l)))
         send ls
 runTarget (ListServer LibServer t) = ioTgt $ showLibs =<< availableLibs 

@@ -35,6 +35,7 @@ import Network.Socket(AddrInfo)
 import System.Process (runInteractiveProcess)
 import Control.Concurrent (forkIO)
 import IO.Filesystem
+import IO.Time (Seconds, currentTime)
 import Codec.Compression.Zlib (compress,decompress)
 import GHC.Conc (par)
 import Control.DeepSeq
@@ -539,7 +540,7 @@ builtinsLib = let blib = zero & set exports builtinsMod . set metadata meta
                     ]
                   showIntDoc = "{section {title Show Number} Produces a string representation of its argument}"
                                
-data Repository = CustomRepo String (IO [(LibraryID,Metadata)]) (LibraryID -> IO Bytes)
+data Repository = CustomRepo String (IO (Expires [(LibraryID,Metadata)])) (LibraryID -> IO Bytes)
                 | CurlyRepo String PortNumber
 
 instance Eq Repository where a == b = compare a b == EQ
@@ -567,7 +568,7 @@ instance Read Repository where
                           lib = liftA2 (,) readable (many' space >> readable <&> \(Pretty a) -> a)
                           getLs = do
                             (_,out,_,_) <- runInteractiveProcess (curlyBackendDir</>proto) [path] Nothing Nothing
-                            foldMap (matches pure lib) . lines <$> readHString out
+                            (0,) . foldMap (matches pure lib) . lines <$> readHString out
                     
 
 repositories :: IORef (Set Repository)
@@ -579,7 +580,8 @@ repositories = newIORef (fromKList envRepositories)^.thunk
                 sp = oneOf " \t\n,"
                 fileRepos = liftA2 (\x y -> x+" "+y) (fr (curlyUserDir+"/repositories")) (fr "/etc/curly/repositories")^.thunk
                 fr n = trylog (return "") (readString n)
-listCache :: IORef (Map Repository [(LibraryID,Metadata)])
+type Expires t = (Seconds,t)
+listCache :: IORef (Map Repository (Expires [(LibraryID,Metadata)]))
 listCache = newIORef zero^.thunk
 libraryCache :: IORef (Map LibraryID (Maybe FileLibrary))
 libraryCache = newIORef zero^.thunk
@@ -654,19 +656,21 @@ getRepoLib l r = do
 
 listRepository :: Repository -> IO [(LibraryID,Metadata)]
 listRepository r = do
+  now <- currentTime
   (lookup r<$>readIORef listCache) >>= \x -> case x of
-    Just ls -> return ls
+    Just (exp,ls) | exp >= now -> return ls
     _ -> do
-      ret <- trylog (return []) (list r)
+      ret <- trylog (return zero) (list r)
       runAtomic listCache (at r =- Just ret)
-      runAtomic libraryCache $ for_ ret $ \(l,_) -> at l =~ \p -> Just $ case p of
+      runAtomic libraryCache $ for_ (snd ret) $ \(l,_) -> at l =~ \p -> Just $ case p of
         Just x@(Just _) -> x
         Nothing -> (readCachedLibrary l^.thunk)+(getRepoLib l r^.thunk)
         Just Nothing -> getRepoLib l r^.thunk
-      return ret
+      return (snd ret)
   where list (CurlyRepo h p) = do
           conn <- connectTo h p
-          map (fromMaybe zero) $ runConnection Just True conn $
+          now <- currentTime
+          map ((now+15,) . fromMaybe zero) $ runConnection Just True conn $
             liftIO (?write (foldMap encode "libraries"^..bytesBuilder)) >> receive
         list (CustomRepo _ getLs _) = getLs
 
