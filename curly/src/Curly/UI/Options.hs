@@ -156,8 +156,8 @@ curlyOpts = [
   sepOpt "Inputs",
   Option ['M'] ["mount"] (ReqArg mkMount "PATH=MOUNT") "Mounts an input source to a path in the default context",
   sepOpt "Target configuration ",
-  Option [] ["prelude"] (ReqArg (target . SetPrelude) "COMMAND") "Sets the prelude for the next targets",
-  Option [] ["prelude+"] (ReqArg (target . AddPrelude) "COMMAND") "Appends the given command to the prelude",
+  Option ['P'] ["prelude"] (ReqArg (target . SetPrelude) "COMMAND") "Sets the prelude for the next targets",
+  Option ['p'] ["prelude+"] (ReqArg (target . AddPrelude) "COMMAND") "Appends the given command to the prelude",
   Option [] ["banner"]  (ReqArg (target . SetBanner) "BANNER") "Sets the banner for the next targets",
   Option [] ["banner+"]  (ReqArg (target . AddBanner) "BANNER") "Adds a line to the banner file for the next targets",
   Option [] ["instance"] (ReqArg (target . SetInstance) "INSTANCE") "Sets the instance name for the next targets",
@@ -171,7 +171,7 @@ curlyOpts = [
   Option ['l'] ["list"] (ReqArg (target . readListServer) "SERVER_TYPE") "Lists all available libraries in the CURLY_PATH or instances on the current server",
   sepOpt "Files",
   Option ['d'] ["dump"] (ReqArg (target . ShowLib) "FILE") "Shows the contents of the given source or library file",
-  Option ['t'] ["translate"] (ReqArg (target . mkTranslate) "FILE[@SYS]=PATH") "Translates a Curly function for a system"
+  Option ['t'] ["translate"] (ReqArg (target . mkTranslate) "FILE[@SYS][=PATH]") "Translates a Curly function for a system"
   ]
   where tryParse err p s = fromMaybe (error (err s)) (matches Just p s)
         mkMount = tryParse (format "Couldn't parse mount option '%s'") (inputSource "." <&> pure . uncurry Mount)
@@ -186,10 +186,15 @@ curlyOpts = [
           
         translate = do
           n <- visible "@=" <* spc
-          s <- option hostSystem (single '@' >> spc >> visible "="
+          s <- option' hostSystem (single '@' >> spc >> visible "="
                                   >>= \s -> maybe zero return (knownSystems^.at s))
-          between spc spc $ single '=' 
-          p <- sepBy1' (visible "") nbsp
+          let splitPath ('.':t) = "":splitPath t
+              splitPath ('-':t) = "":splitPath t
+              splitPath (c:t)   = let ~(h:t') = splitPath t in (c:h):t'
+              splitPath [] = [""]
+          p <- option' (splitPath n) $ do
+            between spc spc $ single '=' 
+            sepBy1' (visible "") nbsp
           return (Translate n s p)
 
 grid :: String -> [[String]] -> String
@@ -238,7 +243,7 @@ inputSource base = do
           return (Source sub (base</>n) (base</>m))
         search = like "package" >> nbsp >> do
           let tag x l = Join (DocTag x [] l)
-          tpl <- docAtom
+          tpl <- (docAtom <*= guard . has t'Join)
                  <+? (visible "" <&> \x -> tag "=" [tag "$" [Pure "name"],Pure x])
           let sid = availableLibs
                     <&> \ls -> fromMaybe (error $ format "Could not find package matching %s" (pretty tpl))

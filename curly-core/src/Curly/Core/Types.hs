@@ -68,7 +68,7 @@ instance NFData s => NFData (TypeIndex s)
 pattern In = TypeIndex Function 0
 pattern Out = TypeIndex Function 1
 
-{- | The path of a node inside a type.
+{- | The path of a node inRange a type.
 
 A path is comprised of two parts : a canonical path, which uniquely identifies the node within
 its type graph; and a set of equivalent paths that are shared between all types.

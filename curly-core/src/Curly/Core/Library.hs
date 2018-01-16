@@ -138,9 +138,9 @@ l'subs = lens (\(DocTag _ _ x) -> x) (\(DocTag t as _) x -> DocTag t as x)
 type Documentation = Free DocNode String
 nodoc = Join (DocTag "nodoc" [] [])
 mkDoc d = Join . DocTag "doc" [] $ fromMaybe [] $ matches Just (between spc spc (sepBy' docAtom spc)) d
-spc :: (ParseStream Char s,Monad m) => ParserT s m ()
+spc :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => ParserT s m ()
 spc = skipMany' (oneOf " \t\n")
-docAtom :: (ParseStream Char s,Monad m) => ParserT s m Documentation
+docAtom :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => ParserT s m Documentation
 docAtom = tag <+? txt
   where letter p = token >>= \c -> case c of
           '\\' -> token
@@ -167,7 +167,8 @@ docAtom = tag <+? txt
                     l -> Join $ DocTag "splice" [] (map (Pure <|> id) l)
                 strChar = satisfy (\x -> not (x`elem`"\"{\\"))
                           <+? single '\\' >> token
-docLine :: (ParseStream Char s, Monad m) => String -> [(String,String)] -> ParserT s m Documentation
+docLine :: (ParseToken c, ParseStream c s, TokenPayload c ~ Char, Monad m)
+           => String -> [(String,String)] -> ParserT s m Documentation
 docLine n as = Join . DocTag n as <$> many1' (skipMany' (oneOf " \t") >> docAtom)
 
 data ModLeaf s a = ModLeaf {
@@ -604,7 +605,7 @@ showTemplate m (Join (DocTag "or" [] vs)) = foldMap (showTemplate m) vs
 showTemplate m (Join (DocTag cmd [] [a,b]))
   | cmd`elem`["<",">","<=",">="] = do
       [a',b'] <- traverse (showTemplate m) [a,b]
-      let valList = many' (map Left number <+? map Right (many1' (satisfy (not . inside '0' '9'))))
+      let valList = many' (map Left number <+? map Right (many1' (satisfy (not . inRange '0' '9'))))
           toOp "<" = (<)
           toOp ">" = (>)
           toOp "<=" = (<=)

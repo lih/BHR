@@ -20,7 +20,7 @@ c'prob :: Constraint t -> Constraint (Prob t a)
 c'prob _ = c'_
 
 instance (Monad m,Invertible t) => MonadList (ProbT t m) where
-  fork l = pure [(x,a) | a <- l]^.probT
+  choose l = pure [(x,a) | a <- l]^.probT
     where x = recip (size l)
 
 sample :: Monoid t => (a -> Bool) -> Prob t a -> (t,t)

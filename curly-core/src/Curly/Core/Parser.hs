@@ -4,7 +4,7 @@
 #endif
 module Curly.Core.Parser (
   -- * Expressions and operators
-  OpMap,OpParser,Warning(..),CurlyParserException(..),showWarning,l'library,
+  OpMap,OpChar(..),OpParser,Warning(..),CurlyParserException(..),showWarning,l'library,
   Spaces,parseCurly,currentPos,hspace,space,spc,hspc,nbsp,nbhsp,
   expr,accessorExpr,tom,atom,
 
@@ -55,24 +55,39 @@ instance Semantic (ParseExpr s a) s a where
           g (SemAbstract s (PE e@(r,_)))           = PELam r s e
           g (SemAbstract _ _)                      = impossible
 
-newtype OpStream = OpStream [(Char,(Char,Int,Int,Int))]
-                   deriving (Semigroup,Monoid)
-instance Stream Char OpStream where
-  cons c (OpStream l) = OpStream ((c,('\0',0,0,0)):(l & t'head.l'2.l'1 %- c))
-  uncons (OpStream []) = Nothing
-  uncons (OpStream ((c,_):l)) = Just (c,OpStream l)
-instance ParseStream Char OpStream
-mkStream :: Stream Char s => s -> OpStream
-mkStream = OpStream . mk ('\0',0,0,0)
+data OpChar = OC_Char Char
+            | OC_CompleteChar Char
+data OpStream = OpStream [Char] [(OpChar,(Char,Int,Int,Int))]
+instance Semigroup OpStream where
+  OpStream h t + OpStream h' t' = OpStream (h+h') (t+t')
+instance Monoid OpStream where
+  zero = OpStream zero zero 
+instance Stream OpChar OpStream where
+  cons c (OpStream h l) = OpStream h ((c,('\0',0,0,0)):(l & set (t'head.l'2.l'1)
+                                                        (case c of OC_Char c -> c ; _ -> '\0')))
+  uncons (OpStream _ []) = Nothing
+  uncons (OpStream h ((c,_):l)) = Just (c,OpStream (case c of OC_Char c' -> c':h ; _ -> h) l)
+instance ParseToken OpChar where
+  type TokenPayload OpChar = Char
+  completeBefore (OC_CompleteChar _) = True
+  completeBefore _ = False
+  tokenPayload (OC_Char c) = c
+  tokenPayload (OC_CompleteChar c) = c
+instance ParseStream OpChar OpStream where
+  acceptToken c (OpStream h t) = OpStream (c:h) t
+
+mkStream :: (ParseToken c, Stream c s, TokenPayload c ~ Char) => s -> OpStream
+mkStream = OpStream "" . mk ('\0',0,0,0)
   where mk (p,n,ln,cl) s = case uncons s of
-          Just ('\n',s') -> ('\n',(p,n,ln,cl)):mk ('\n',n+1,ln+1,0) s'
-          Just (c,s') -> (c,(p,n,ln,cl)):mk (c,n+1,ln,cl+1) s'
+          Just (c,s') -> nextChar (tokenPayload c) s'
           Nothing -> []
+          where nextChar '\n' s' = (OC_Char '\n',(p,n,ln,cl)):mk ('\n',n+1,ln+1,0) s'
+                nextChar c    s' = (OC_Char c,(p,n,ln,cl)):mk (c,n+1,ln,cl+1) s'
 
 type OpMap_Val = ((Int,Bool),String)
 type OpMap = Cofree (Map Char) (Maybe OpMap_Val)
 type OpParser m = ParserT OpStream (RWST Void [Warning] (Int,OpMap,(Map String (NameExpr GlobalID),Library)) m)
-type Spaces = forall s m. (Monad m,ParseStream Char s) => ParserT s m ()
+type Spaces = forall s m c. (Monad m,ParseStream c s, TokenPayload c ~ Char) => ParserT s m ()
 
 instance Lens1 a a (Cofree f a) (Cofree f a) where
   l'1 k (Step x f) = k x <&> \x' -> Step x' f
@@ -110,7 +125,7 @@ guardWarn msg p = if p then unit else (warn msg >> zero)
 l'library = l'3.l'2
 l'typeMap = l'3.l'1
 
-parseCurly :: (ParseStream Char s,Monad m) => s -> OpParser m a -> m ([Warning]:+:a)
+parseCurly :: (ParseStream c s, TokenPayload c ~ Char,Monad m) => s -> OpParser m a -> m ([Warning]:+:a)
 parseCurly s p = (deduce p^..mapping i'RWST.stateT) (mkStream s) zero <&> \((_,ma),_,ws) -> case ma of
   Just (a,_) -> Right a
   Nothing -> Left ws
@@ -123,7 +138,7 @@ mkLet (Right t) = \e -> foldl1' mkApply (t+[e])
 
 space, spc, hspc, nbsp, nbhsp, hspace :: Spaces
 space = hspace + (eol >> skipMany' ("#" >> skipMany' (satisfy (/='\n')) >> eol))
-hspace = void $ satisfy (\c -> c==' ' || c=='\t')
+hspace = void $ oneOf [' ', '\t']
 spc = skipMany' space
 hspc = skipMany' hspace
 nbsp = skipMany1' space
@@ -134,10 +149,10 @@ swaying = between hspc hspc
 wrapRound = between "(" (expected ")" ")") . floating
 wrapCurly = between "{" (expected "}" "}") . floating
 
-previousChar = remaining <&> \(OpStream s) -> case s of
+previousChar = remaining <&> \(OpStream _ s) -> case s of
   [] -> '\0'
   ((_,(p,_,_,_)):_) -> p
-currentPos = remaining <&> \(OpStream s) -> case s of
+currentPos = remaining <&> \(OpStream _ s) -> case s of
   [] -> (0,0,0)
   ((_,(_,n,l,c)):_) -> (n,l,c)
 
@@ -148,7 +163,7 @@ name = do
   where qChar = single '\\' >> token
           
 isOperator c = not (elem c (c'set "{(_\"')} \t\n\\") || isLetter c)
-isLetter c = isAlpha c || inside '0' '9' c || c=='\''
+isLetter c = isAlpha c || inRange '0' '9' c || c=='\''
 edgeName t = if t then "_" else ""
 mkSymName l s r isR = edgeName l + intercalate "_" s + edgeName r + edgeName isR
 symEdge :: Monad m => OpParser m Bool
@@ -157,7 +172,7 @@ symEdge = option' False (True<$"_")
 varName :: Monad m => OpParser m String
 varName = liftA4 mkSymName symEdge (name`sepBy1'`"_") symEdge symEdge >>= \n ->
   if isKeyIn (last n) (c'set ":=")
-  then init n <$ runStreamState (modify (cons (last n))) <*= guard . nonempty
+  then init n <$ runStreamState (modify (cons (OC_Char (last n)))) <*= guard . nonempty
   else return n
 
 mkSymIn :: Semantic e i (String,Maybe (NameExpr GlobalID)) => Map String (NameExpr GlobalID) -> String -> e
@@ -167,11 +182,18 @@ tom, expr, accessorExpr :: Monad m => Spaces -> OpParser m SourceExpr
 expr sp = foldl1' mkApply<$>sepBy1' (tom sp) (skipMany1' sp) 
 accessorExpr sp = expr sp <*= \e -> defAccessors (map fst (toList e))
 
+completing :: Monad m => OpParser Id a -> OpParser m [(String,a)]
+completing p = do
+  OpStream _ t <- runStreamState get
+  st <- lift get
+  let Id (ret,_,_) = (p^..mapping i'RWST.parserT) (OpStream "" t) (undefined,st)
+  return [(reverse h,x) | (OpStream h _,x) <- ret]
+
 tom sp = do
   Step _ opmap <- lift (getl l'2)
   typeMap <- lift (getl l'typeMap)
   let param m c = case m^.at c of Just tl -> return tl ; _ -> zero
-      tokParam m = multi <+? (param m =<< (token <*= guard . (/='_')))
+      tokParam m = multi <+? (param m =<< (oneOfSet (delete '_' $ keysSet m) <*= guard . (/='_')))
         where multi = case m^.at ' ' of
                 Just tl -> tl <$ nbsp
                 _ -> zero
@@ -315,7 +337,7 @@ curlyFile = do
             defSymbol "value" (mkRange pre post) Nothing False e,
             setExports (Pure "value")]
 
-raw :: (ParseStream Char s,MonadParser s m p) => String -> p ()
+raw :: (ParseStream c s, TokenPayload c ~ Char,MonadParser s m p) => String -> p ()
 raw = several
 
 curlyLine :: (Monad m, ?mountain :: Mountain) => OpParser m ()
@@ -456,9 +478,13 @@ typeDecl = "type" >> nbsp >> do
 l1 <##> l2 = lens (liftA2 (,) (by l1) (by l2)) (\a (t,t') -> set l2 t' (set l1 t a))
 
 register :: Monad m => String -> OpParser m ()
-register n = when (elem '_' n && n/="_") $ lift (l'1<##>l'2 =~ \(d,m) -> (d+1,insert nk ((d,isR),n) m))
+register "_" = unit
+register n = when (elem '_' n) $ lift (l'1<##>l'2 =~ \(d,m) -> if elem '_' n
+                                                               then (d+1,insert nk ((d,isR),n) m)
+                                                               else (d,insert n ((maxBound,False),n) m))
   where isR = drop (length n-2) n == "__"
         nk = if isR then init n else n
+        
 resolve :: (Monad m, ?mountain :: Mountain) => Module (String, Maybe String) -> OpParser m Context
 resolve mod = mod' <$ traverse (register.identName.fst) mod'
   where mod' = zipWith r mod localContext

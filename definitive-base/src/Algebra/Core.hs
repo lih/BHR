@@ -52,7 +52,7 @@ module Algebra.Core(
 
   tailSafe,headDef,fromMaybe,
 
-  rmod,inside,swap,
+  rmod,inRange,swap,
   
   -- ** Lazily ordering values
   comparing,inOrder,insertOrd,invertOrd,
@@ -566,8 +566,8 @@ unless p m = if p then unit else m
 invertOrd :: Ordering -> Ordering
 invertOrd GT = LT ; invertOrd LT = GT ; invertOrd EQ = EQ
 
-inside :: Ord t => t -> t -> (t -> Bool)
-inside x y = \z -> x<=z && z<=y
+inRange :: Ord t => t -> t -> (t -> Bool)
+inRange x y = \z -> x<=z && z<=y
 
 rmod :: (RealFloat m,Invertible m) => m -> m -> m
 a`rmod`b = b * r 

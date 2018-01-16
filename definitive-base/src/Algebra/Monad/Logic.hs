@@ -67,8 +67,8 @@ deduceMany n l = deduce l >>= maybe (pure []) (\(a,t) -> (a:)<$>deduceMany (n-1)
 deduceAll :: MonadLogic m l => l a -> m [a]
 deduceAll l = deduce l >>= maybe (pure []) (\(a,t) -> (a:)<$>deduceAll t)
 
-choose :: MonadLogic m l => [a] -> l a
-choose l = pure l^.listLogic
+logicChoose :: MonadLogic m l => [a] -> l a
+logicChoose l = pure l^.listLogic
 
 cut :: MonadLogic m l => l a -> l a
 cut = deduction %~ map (traverse.l'2.deduction %- pure Nothing)
