@@ -1,13 +1,6 @@
 image: fpco/stack-build:lts-9.10
 stages:
-  - build
   - deploy
-
-stack_build:
-  stage: build
-  script: STACK_FLAGS=--system-ghc make
-  except:
-  - release
 
 pages:
   stage: deploy
