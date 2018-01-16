@@ -26,6 +26,7 @@ import Data.IORef
 import GHC.Conc (threadDelay)
 import GHC.IO.Encoding (utf8,setLocaleEncoding)
 import IO.Filesystem
+import IO.Time (currentTime)
 import IO.Network.Socket
 import Language.Format
 import System.Environment (getArgs)
@@ -76,12 +77,13 @@ initCurly = do
           
           getLs = do
             ks <- getKeyStore
+            now <- currentTime
             branches <- map fold $ for (ks^.ascList) $ \(l,(_,pub,_,_,_)) -> do
               map (first (pub,)) . by ascList <$> getBranches pub
-            map (by ascList . concat) $ for branches $ \((pub,b),h) -> getAll =<< deepBranch' (Just h)
+            map ((now+15,) . by ascList . concat) $ for branches $ \((pub,b),h) -> getAll =<< deepBranch' (Just h)
           getL lid = fromMaybe zero <$> vcbLoad conn (LibraryKey lid)
       runAtomic repositories (modify (touch (CustomRepo "curly-vc://" getLs getL)))
-    
+
 ioTgt = return . IOTgt
 forkTgt m = do
   v <- newEmptyMVar
@@ -198,9 +200,8 @@ runTarget (Server LibServer) = forkTgt $ \_ -> do
       forever $ receive >>= liftIO . \x -> withMountain $ do
         let localLibs = c'map (fromAList [(fl^.flID,(p,fl^.flLibrary,fl^.flBytes)) | (p,fl) <- sourceLibs])
         ls <- case x of
-          Nothing -> availableLibs <&> \al -> SupplyLibraries [(i,l^.metadata)
-                                                              | (i,Just l) <- (localLibs^.ascList <&> \(i,(_,l,_)) -> (i,Just l))
-                                                                              + (al <&> \(i,_) -> (i,map (by flLibrary) $ findLib i))]
+          Nothing -> availableLibs <&> \al -> SupplyLibraries ((localLibs^.ascList <&> \(i,(_,l,_)) -> (i,l^.metadata))
+                                                               + al)
           Just l -> return (SupplyLibrary $ fromMaybe zero (map (by l'3) (localLibs^.at l) + map (by flBytes) (findLib l)))
         send ls
 runTarget (ListServer LibServer t) = ioTgt $ showLibs =<< availableLibs 
