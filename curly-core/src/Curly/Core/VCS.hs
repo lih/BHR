@@ -127,7 +127,7 @@ instance Read VCSBackend where
               
 curlyVCSBackend :: VCSBackend
 curlyVCSBackend = fromMaybe (getDefaultVCS^.thunk) (matches Just readable (envVar "" "CURLY_VCS"))
-  where getDefaultVCS = do
+  where getDefaultVCS = try (return VCSB_None) $ do
           lns <- map words . lines <$> readProcess "/usr/lib/curly/default-vcs" [] ""
           case lns of
             ([h,p]:_) -> nativeBackend h (fromInteger $ read p)
