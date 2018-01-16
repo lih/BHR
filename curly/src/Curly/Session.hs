@@ -228,7 +228,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
         in withCurlyPlex conf $ do
           oldPlex <- liftIO $ runAtomic compPlex (id `swapWith` const ?curlyPlex)
           interactiveSession (serve conn CommandAck)
-          runStreamState (modify (cons '\n'))
+          runStreamState (modify (cons (OC_Char '\n')))
           liftIO $ writeIORef compPlex oldPlex
       
   t <- forkIO $ do

@@ -18,7 +18,7 @@ import Algebra.Monad.Base
 import Algebra.Monad.RWS
 import Data.Tree (Tree(..))
 
-instance MonadList [] where fork = id
+instance MonadList [] where choose = id
 
 newtype ListT m a = ListT (Compose' [] m a)
                     deriving (Semigroup,Monoid,
@@ -28,7 +28,7 @@ instance Traversable m => Traversable (ListT m) where sequence = coerceSequence 
 listT :: Iso (ListT m a) (ListT m' a') (m [a]) (m' [a'])
 listT = i'Compose'.iso ListT (\(ListT l) -> l)
 instance Monad m => MonadList (ListT m) where
-  fork = by listT . return 
+  choose = by listT . return 
 instance MonadFix m => MonadFix (ListT m) where
   mfix f = by listT (mfix (yb listT . f . head))
 instance MonadState s m => MonadState s (ListT m) where

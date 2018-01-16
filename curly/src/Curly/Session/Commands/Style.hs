@@ -22,8 +22,8 @@ styleCmd = withDoc styleDoc $ False <$ do
         return $ ColorNumber $ 16 + 36*((r*6) `div` 256) + 6*((g*6) `div` 256) + ((b*6) `div` 256)
       hex2 = liftA2 mkHex hexDig hexDig
         where mkHex a b = (a*16)+b
-              hexDig = (satisfy (inside '0' '9') <&> \c -> fromEnum c-fromEnum '0')
-                       + (satisfy (inside 'a' 'f') <&> \c -> 10+fromEnum c-fromEnum 'a')
+              hexDig = (satisfy (inRange '0' '9') <&> \c -> fromEnum c-fromEnum '0')
+                       + (satisfy (inRange 'a' 'f') <&> \c -> 10+fromEnum c-fromEnum 'a')
       color = (dirArg >*> hexColor) <+? do
         nm <- dirArg
         case lookup nm colorNames of

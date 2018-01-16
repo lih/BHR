@@ -65,7 +65,7 @@ class Monad m => MonadIO m where
   liftIO = lift . liftIO
 
 class Monad m => MonadList m where
-  fork :: [a] -> m a
+  choose :: [a] -> m a
 class Monad m => MonadCont m where
   callCC :: (forall b. (a -> m b) -> m b) -> m a
 class Monad m => MonadError e m | m -> e where

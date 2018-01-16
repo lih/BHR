@@ -169,7 +169,7 @@ instance Read (Pretty Chunk) where
         pad c = c+take (negate (length c)`mod`4) "===="
     c <- many' (from <$> satisfy p)
     (const zero <|> return . Pretty) (Base64.decode (pad c^..i'elems))
-    where p x = inside 'a' 'z' x || inside 'A' 'Z' x || inside '0' '9' x || x=='_' || x=='-'
+    where p x = inRange 'a' 'z' x || inRange 'A' 'Z' x || inRange '0' '9' x || x=='_' || x=='-'
 -- | `envVar def var` retrieves a `var` from the environment, or returns `def` if the former doesn't exist
 envVar :: String -> String -> String
 envVar d s = fromMaybe d (lookupEnv s^.thunk)

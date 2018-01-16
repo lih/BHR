@@ -81,7 +81,7 @@ instance MonadCounter w a m => MonadCounter w a (Free m) where
 instance MonadIO m => MonadIO (Free m) where
   liftIO = lift . liftIO
 instance MonadList m => MonadList (Free m) where
-  fork l = lift (fork l)
+  choose l = lift (choose l)
 instance MonadFuture m t => MonadFuture m (Free t) where
   future = lift . future
 

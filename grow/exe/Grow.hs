@@ -93,7 +93,7 @@ growExpr = between sp sp expr
           n <- string
           between sp sp (single '=')
           map (n,) $ expr
-        string = quotedString '"' <+? many1' (satisfy (\x -> inside 'a' 'z' x || inside 'A' 'Z' x || inside '0' '9' x))
+        string = quotedString '"' <+? many1' (satisfy (\x -> inRange 'a' 'z' x || inRange 'A' 'Z' x || inRange '0' '9' x))
         spc = satisfy (`elem`" \t\n")
         sp = skipMany' spc
         nbsp = spc >> sp

@@ -55,7 +55,7 @@ instance (Monoid w,MonadError e m) => MonadError e (RWST r w s m) where
   throw = lift.throw
   catch f (RWST m) = RWST (\x -> catch (flip runRWST x.f) (m x))
 instance (Monoid w,MonadList m) => MonadList (RWST r w s m) where
-  fork = lift . fork
+  choose = lift . choose
 instance (Monoid w,MonadLogic l m) => MonadLogic (RWST r w s l) (RWST r w s m) where
   deduce (RWST k) = RWST $ \x@(_,s) -> deduce (k x) <&> \y -> case y of
     Just ((a,_,w),l) -> (Just (a,RWST (const l)),s,w)
