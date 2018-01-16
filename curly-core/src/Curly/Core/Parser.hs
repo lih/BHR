@@ -449,7 +449,7 @@ defRigidSymbols args = compose [defTypeSym a False NoRange (rigidTypeFun a) expr
 typeSum :: Monad m => OpParser m (SourcePos,Library -> Type GlobalID,SourcePos)
 typeSum = do
   let typeNode = (fill Nothing delim <+? map Just (tom hspace)) >>= maybe zero pure
-      delim = between hspc nbsp ("and"<+?"*"<+?"&"<+?"×")
+      delim = between hspc nbsp ("and"<+?oneOf (c'string "&|"))
   pre <- currentPos
   exprs <- sepBy1' (foldl1' mkApply <$> sepBy1' typeNode nbhsp) delim
   post <- currentPos
