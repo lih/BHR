@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                curly
-version:             0.54.1
+version:             0.54.2
 -- synopsis:            
 -- description:         
 license:             MIT
@@ -31,6 +31,8 @@ data-files:
   applications/curly-source.desktop
   applications/curly-library.desktop
   applications/curly-context.desktop
+  proto/vc/http
+  proto/vc/https
 
 library
   default-language:    Haskell2010

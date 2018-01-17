@@ -1,0 +1,4 @@
+#!/bin/bash
+case "$1" in
+    get) curl -s "http://$2/$3";;
+esac

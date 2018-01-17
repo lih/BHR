@@ -55,6 +55,8 @@ t'IOTgt _ x = return x
 
 initCurly = do
   setLocaleEncoding utf8
+  getDataFileName "proto/vc" >>= \p -> modifyIORef vcsProtoRoots (p:)
+  getDataFileName "proto/repo" >>= \p -> modifyIORef repoConfig (\c -> c { repoProtoRoots = p:repoProtoRoots c })
   trylogLevel Debug unit $ when (case curlyVCSBackend of VCSB_None -> False ; _ -> True) $ do
     let conn = curlyVCSBackend
         getBranches pub = maybe zero unsafeExtractSigned <$> vcbLoad conn (BranchesKey pub)
@@ -75,13 +77,13 @@ initCurly = do
           x <- liftIO $ try (return Nothing) (map (Just . unCompressed) $ readFormat commitFile)
           maybe (def <*= liftIO . writeSerial commitFile . Compressed) return x
         
-        getLs = do
+        getLs _ = do
           ks <- getKeyStore
           now <- currentTime
           branches <- map fold $ for (ks^.ascList) $ \(l,(_,pub,_,_,_)) -> do
             map (first (pub,)) . by ascList <$> getBranches pub
           map ((now+15,) . by ascList . concat) $ for branches $ \((pub,b),h) -> getAll =<< deepBranch' (Just h)
-        getL lid = fromMaybe zero <$> vcbLoad conn (LibraryKey lid)
+        getL _ lid = fromMaybe zero <$> vcbLoad conn (LibraryKey lid)
     runAtomic repositories (modify (touch (CustomRepo "curly-vc://" getLs getL)))
 
 ioTgt = return . IOTgt
@@ -262,6 +264,7 @@ nextParams (SetInstance i) = confInstance %- i
 nextParams _ = id
 
 dataFiles = [
+  "proto/vc/http","proto/vc/https",
   "kate/highlight-curly.xml",
   "emacs/curly-mode.el",
   "emacs/curly-conf-mode.el",

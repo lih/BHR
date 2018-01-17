@@ -8,7 +8,9 @@ import Curly.Core.Security
 import Definitive
 import Language.Format
 import qualified Crypto.Hash.SHA256 as SHA256
-import System.Process (readProcess)
+import System.Process (readProcess, withCreateProcess)
+import qualified System.Process as Sys
+import Data.IORef
 
 newtype Hash = Hash Chunk
              deriving (Eq,Ord)
@@ -63,6 +65,30 @@ instance MonadVC File_VC String where
     try (return Nothing) (Just <$> readFormat (base+"/"+keyName))
   runVC (File_VC io) = io
 
+vcsProtoRoots :: IORef [FilePath]
+vcsProtoRoots = newIORef []^.thunk
+newtype Proto_VC a = Proto_VC (IO a)
+                     deriving (Functor,SemiApplicative,Unit,Applicative)
+instance Monad Proto_VC where join = coerceJoin Proto_VC
+instance MonadIO Proto_VC where liftIO = Proto_VC
+instance MonadVC Proto_VC (String,String) where
+  vcStore (proto,path) k v = liftIO $ do
+    let keyName = pretty (serialize (k WithResponse)^.chunk)
+    foldr (\dir tryNext ->
+            try tryNext
+            $ withCreateProcess (Sys.proc "sh" [dir+"/"+proto,"put",path,keyName]) { Sys.std_in = Sys.CreatePipe }
+            $ \(Just i) _ _ _ -> writeHSerial i v)
+      unit =<< readIORef vcsProtoRoots
+    
+  vcLoad (proto,path) k = liftIO $ do
+    let keyName = pretty (serialize (k WithResponse)^.chunk)
+    foldr (\dir tryNext ->
+            try tryNext
+            $ withCreateProcess (Sys.proc "sh" [dir+"/"+proto,"get",path,keyName]) { Sys.std_out = Sys.CreatePipe }
+            $ \_ (Just o) _ _ -> try (return Nothing) (Just <$> readHFormat o))
+      (return Nothing) =<< readIORef vcsProtoRoots
+  runVC (Proto_VC io) = io
+
 newtype Client_VC a = Client_VC (IO a)
                   deriving (Functor,SemiApplicative,Unit,Applicative)
 instance Monad Client_VC where join = coerceJoin Client_VC
@@ -114,12 +140,13 @@ nativeBackend h p = do
   conn <- liftIO (connectTo h p)
   return (VCSB_Native ("curly-vc://"+h+":"+show p) conn (\(Client_VC io) -> io))
 fileBackend p = VCSB_Native ("file://"+p) p (\(File_VC io) -> io)
+protoBackend pr p = VCSB_Native (pr+"://"+p) (pr,p) (\(Proto_VC io) -> io)
 instance Show VCSBackend where
   show (VCSB_Native s _ _) = s
   show VCSB_None = "none"
 instance Read VCSBackend where
   readsPrec _ = readsParser $ backend
-    where backend = proto_native <+? proto_file <+? fill VCSB_None (several "none")
+    where backend = proto_native <+? proto_file <+? proto_arbitrary <+? fill VCSB_None (several "none")
           proto_native = do
             several "curly-vc://" <+? single '@'
             map (by thunk) $ liftA2 nativeBackend
@@ -128,6 +155,10 @@ instance Read VCSBackend where
           proto_file = do
             several "file://" <+? lookingAt (single '/')
             fileBackend <$> remaining
+          proto_arbitrary = do
+            proto <- many1' (satisfy (/=':'))
+            several "://"
+            protoBackend proto <$> remaining
               
 curlyVCSBackend :: VCSBackend
 curlyVCSBackend = fromMaybe (getDefaultVCS^.thunk) (matches Just readable (envVar "" "CURLY_VCS"))
