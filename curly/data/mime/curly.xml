@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="text/curly-context">
+    <comment>Curly Context</comment>
+    <glob pattern="curly"/>
+    <glob pattern="Curly"/>
+  </mime-type>
+  <mime-type type="text/curly">
+    <comment>Curly Source</comment>
+    <glob pattern="*.cy"/>
+    <glob pattern="*.curly"/>
+  </mime-type>
+  <mime-type type="application/curly-library">
+    <comment>Curly Library</comment>
+    <glob pattern="*.cyl"/>
+  </mime-type>
+</mime-info>

@@ -68,6 +68,7 @@ data Target = Help | Version
             | Server ServerType
             | ListServer ServerType (Maybe Template)
             | ShowLib FilePath
+            | DumpDataFile (Maybe FilePath)
             | SetPrelude String
             | AddPrelude String
             | SetBanner String
@@ -95,6 +96,7 @@ instance Show Target where
   show (SetInstance i) = "instance "+i
   show (Echo _ s) = "echo "+s
   show (Translate f s p) = format "translate %s @ %s = %s" f (show s) (intercalate " " p) 
+  show (DumpDataFile f) = "dump-data-file "+fromMaybe "" f
   
 instance FormatArg Target where argClass _ = 'T'
 t'Help :: Traversal' Target ()
@@ -170,8 +172,9 @@ curlyOpts = [
   Option ['s'] ["serve"] (ReqArg (target . Server . readServerType) "SERVER_TYPE") "Launches a new library (type 'libraries') or instance (type 'instances') server",
   Option ['l'] ["list"] (ReqArg (target . readListServer) "SERVER_TYPE") "Lists all available libraries in the CURLY_PATH or instances on the current server",
   sepOpt "Files",
+  Option ['t'] ["translate"] (ReqArg (target . mkTranslate) "FILE[@SYS][=PATH]") "Translates a Curly function for a system",
   Option ['d'] ["dump"] (ReqArg (target . ShowLib) "FILE") "Shows the contents of the given source or library file",
-  Option ['t'] ["translate"] (ReqArg (target . mkTranslate) "FILE[@SYS][=PATH]") "Translates a Curly function for a system"
+  Option [] ["dump-data-file"] (OptArg (target . DumpDataFile) "FILE") "Dumps the contents of an installed data file. Without arguments, lists the files that can be dumped."
   ]
   where tryParse err p s = fromMaybe (error (err s)) (matches Just p s)
         mkMount = tryParse (format "Couldn't parse mount option '%s'") (inputSource "." <&> pure . uncurry Mount)

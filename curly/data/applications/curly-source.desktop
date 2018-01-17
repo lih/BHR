@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Exec=/lib/module\!\# %F
+Name=Curly Source
+Comment=Runs a Curly source file
+Terminal=true
+MimeType=text/curly
