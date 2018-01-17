@@ -20,7 +20,7 @@ module Curly.Core.Library(
   rawLibrary,fileLibrary,  
   -- * Repositories
   Template,defaultTemplate,showTemplate,
-  Repository(..),repositories,findLib,availableLibs,
+  RepoConfig(..),repoConfig,Repository(..),repositories,findLib,availableLibs, 
   -- * Miscellaneous
   Compressed(..),envVar,curlyCacheDir,noCurlySuf
   ) where
@@ -539,8 +539,9 @@ builtinsLib = let blib = zero & set exports builtinsMod . set metadata meta
                     "{p Gets the length of a string.}}"
                     ]
                   showIntDoc = "{section {title Show Number} Produces a string representation of its argument}"
-                               
-data Repository = CustomRepo String (IO (Expires [(LibraryID,Metadata)])) (LibraryID -> IO Bytes)
+
+data RepoConfig = RepoConfig { repoProtoRoots :: [String] }
+data Repository = CustomRepo String (RepoConfig -> IO (Expires [(LibraryID,Metadata)])) (RepoConfig -> LibraryID -> IO Bytes)
                 | CurlyRepo String PortNumber
 
 instance Eq Repository where a == b = compare a b == EQ
@@ -562,15 +563,21 @@ instance Read Repository where
                   mkHost "_" = "127.0.0.1"
                   mkHost h = h
                   mkRepo proto path = CustomRepo (proto+":"+path) getLs getL
-                    where getL l = do
-                            (_,out,_,_) <- runInteractiveProcess (curlyBackendDir</>proto) ([path,show l]) Nothing Nothing
+                    where getL conf l = do
+                            (_,out,_,_) <- flip fix (repoProtoRoots conf) $ \again dirs -> case dirs of
+                              (dir:dirs) -> try (again dirs) $ runInteractiveProcess (dir</>proto) ([path,show l]) Nothing Nothing
+                              [] -> undefined
                             readHBytes out
                           lib = liftA2 (,) readable (many' space >> readable <&> \(Pretty a) -> a)
-                          getLs = do
-                            (_,out,_,_) <- runInteractiveProcess (curlyBackendDir</>proto) [path] Nothing Nothing
+                          getLs conf = do
+                            (_,out,_,_) <- flip fix (repoProtoRoots conf) $ \again dirs -> case dirs of
+                              (dir:dirs) -> try (again dirs) $ runInteractiveProcess (dir</>proto) [path] Nothing Nothing
+                              [] -> undefined
                             (0,) . foldMap (matches pure lib) . lines <$> readHString out
                     
 
+repoConfig :: IORef RepoConfig
+repoConfig = newIORef (RepoConfig [])^.thunk
 repositories :: IORef (Set Repository)
 repositories = newIORef (fromKList envRepositories)^.thunk
   where envRepositories = fromMaybe [] $ matches Just cpath $ case envVar "" "CURLY_PATH" of
@@ -649,7 +656,7 @@ getRepoLib l r = do
             conn <- connect a
             writeHString conn (show l)
             readHBytes conn
-        findL (CustomRepo _ _ getL) = getL l
+        findL (CustomRepo _ _ getL) = readIORef repoConfig >>= \conf -> getL conf l
         checkHash b | isLibData l b = (,b) <$> matches Just datum b
                     | otherwise = Nothing
         a </> b = a+"/"+b
@@ -672,7 +679,7 @@ listRepository r = do
           now <- currentTime
           map ((now+15,) . fromMaybe zero) $ runConnection Just True conn $
             liftIO (?write (foldMap encode "libraries"^..bytesBuilder)) >> receive
-        list (CustomRepo _ getLs _) = getLs
+        list (CustomRepo _ getLs _) = readIORef repoConfig >>= getLs
 
 availableLibs :: IO [(LibraryID,Metadata)]
 availableLibs = do

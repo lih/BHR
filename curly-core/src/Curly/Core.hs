@@ -10,7 +10,7 @@ module Curly.Core(
   -- * Pretty-printing
   Pretty(..),pretty,indent,(</>),FormatArg(..),FormatType(..),format,
   -- * Environment
-  envVar,curlyUserDir,curlyKeysFile,curlyCacheDir,curlyCommitDir,curlyPort,curlyBackendDir,
+  envVar,curlyUserDir,curlyKeysFile,curlyCacheDir,curlyCommitDir,curlyPort,
   -- * Conditional output
   LogLevel(..),envLogLevel,logLine,trylogLevel,trylog,liftIOLog,cyDebug,
   -- * Misc
@@ -195,9 +195,6 @@ curlyCacheDir = curlyDirPath $ envVar (curlyUserDir + "/libraries") "CURLY_LIBCA
 
 curlyCommitDir :: String
 curlyCommitDir = curlyDirPath (curlyUserDir + "/commits")
-
-curlyBackendDir :: String
-curlyBackendDir = envVar "/usr/lib/curly/backend" "CURLY_BACKENDS"
 
 -- | A Curly log level
 data LogLevel = Quiet | Verbose | Debug

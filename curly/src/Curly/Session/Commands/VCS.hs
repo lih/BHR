@@ -118,7 +118,7 @@ vcsCmd = withDoc vcsDoc $ False <$ do
       ls <- checkout pref lid
       liftIO $ do
         writeString (root+name+".cyx") $ unlines [
-          "#!/usr/bin/curly",
+          "#!/usr/bin/env curly",
           intercalate "\n" [format "mount deps %s%s = source[deps %s] %s.cy"
                             (show l) (foldMap (" "+) suf) (show l') (drop (length root) pref+foldMap ("/"+) suf)
                            | (l,l',pref,suf) <- ls],
