@@ -32,6 +32,7 @@ import Language.Format
 import System.Environment (getArgs)
 import System.Process (readProcess)
 import System.IO (withFile,IOMode(..))
+import Paths_curly
 
 main :: IO ()
 main = cli "curly" $ do
@@ -240,6 +241,10 @@ runTarget (Translate f sys path) = ioTgt $ withMountain $ case localContext^?atM
     withFile f WriteMode $ \h -> writeHBytes h prog
     modifyPermissions f (_sysProgPerms sys)
   _ -> putStrLn $ "Error: the path "+show path+" doesn't seem to point to a function in the default context"
+runTarget (DumpDataFile Nothing) = ioTgt $ traverse_ putStrLn dataFiles
+runTarget (DumpDataFile (Just f)) = ioTgt $ do
+  fn <- getDataFileName f
+  readBytes fn >>= writeHBytes stdout
 runTarget (SetServer _) = ioTgt unit
 runTarget (SetPrelude _) = ioTgt unit
 runTarget (AddPrelude _) = ioTgt unit
@@ -255,3 +260,20 @@ nextParams (SetBanner b) = confBanner %- (b+"\n")
 nextParams (AddBanner b) = confBanner %~ (+b+"\n")
 nextParams (SetInstance i) = confInstance %- i
 nextParams _ = id
+
+dataFiles = [
+  "kate/highlight-curly.xml",
+  "emacs/curly-mode.el",
+  "emacs/curly-conf-mode.el",
+  "mime/curly.xml",
+  "bash/completions/curly",
+  "bash/completions/defcomp.curly-script.shf",
+  "bash/completions/curly.script.shf",
+  "bash/completions/curly.arg.shf",
+  "bash/completions/cyfile",
+  "bash/completions/curly.sh",
+  "applications/curly-uri.desktop",
+  "applications/curly-source.desktop",
+  "applications/curly-library.desktop",
+  "applications/curly-context.desktop"
+  ]

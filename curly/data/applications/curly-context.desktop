@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Exec=/usr/lib/curly/context-gui %F
+Name=Curly Context
+Comment=Run a Curly context
+Terminal=false
+MimeType=text/curly-context

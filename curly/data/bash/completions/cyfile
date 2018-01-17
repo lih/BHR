@@ -1,0 +1,13 @@
+#!/bin/bash
+function C.curly-file() {
+    C.alt C.describing "Print file type" C.wordOf 1 type C.normal C.repeat C.fileIn -f .
+    C.alt C.describing "Create a new Curly file" C.wordOf 1 new \
+          C.describing "File type" C.wordOf 2 module symbol \
+          C.normal C.repeat C.fileIn -f .
+    C.alt C.describing "Dump a command's context" C.wordOf 2 context freeze \
+	  C.repeat C.any
+    C.alt C.describing "Bundle a context into a single library" C.wordOf 1 bundle \
+          C.describing "Destination file name" C.any \
+          C.describing "Context file" C.fileIn -f .
+}
+C.curly-file "$@"

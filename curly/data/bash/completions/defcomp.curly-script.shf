@@ -1,0 +1,3 @@
+#!/bin/bash
+function C.defcomp.curly-script() { C.defcomp "C.curly.script \"\$(which $1)\"" "$1"; }
+C.defcomp.curly-script "$@"

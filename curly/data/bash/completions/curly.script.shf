@@ -1,0 +1,7 @@
+#!/bin/bash
+function C.curly.script() {
+    local -a CURLY_COMP_SCRIPTS=( "$1" )
+    shift
+    C.repeat C.curly.arg
+}
+C.curly.script "$@"

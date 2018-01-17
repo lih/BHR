@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?> <!DOCTYPE language SYSTEM "language.dtd" [
+  <!ENTITY spc " &#x9;&#xa;"> ]>
+<language name="Curly" version="1.0" extensions="*.cy;*.curly">
+  <highlighting>
+    <list name="ModuleKeywords">
+      <item>import</item><item>export</item><item>transport</item>
+    </list>
+    <list name="DefineKeywords"><item>define</item></list>
+    <list name="DescribeKeywords"><item>describe</item></list>
+    <list name="TypeKeywords"><item>type</item></list>
+    <list name="Of"><item>of</item></list>
+    <list name="And"><item>and</item></list>
+    <list name="As"><item>as</item></list>
+    <contexts>
+      <context name="Top" lineEndContext="#pop">
+	<keyword String="ModuleKeywords" attribute="Keyword" context="Module" />
+	<keyword String="DefineKeywords" attribute="Keyword" context="TLLet" />
+	<keyword String="DescribeKeywords" attribute="Keyword" context="DescSym" />
+	<keyword String="TypeKeywords" attribute="Keyword" context="TypeSym" />
+        <DetectChar char="{" attribute="Curly" context="Lambda" />
+        <DetectChar char="(" attribute="Curly" context="Expression" />
+        <DetectChar char="#" attribute="Comment" context="Comment" />
+        <DetectChar char="&quot;" context="String" /> 
+        <RegExpr String="\b[0-9]+\b" attribute="Number" />
+      </context>
+
+      <context name="Comment" lineEndContext="#pop" attribute="Comment" />
+
+      <context name="TypeSym">
+        <RegExpr String="[^&spc;]+" attribute="Type" context="TypeOf" />
+      </context>
+      <context name="TypeOf">
+        <keyword String="Of" attribute="Keyword" context="TypeExpr" /> 
+      </context>
+      <context name="TypeExpr" attribute="Normal" lineEndContext="#pop#pop#pop">
+        <keyword String="And" attribute="Keyword" />
+        <DetectChar char="{" attribute="Curly" context="Lambda" />
+      </context>
+      
+      <context name="DescSym" attribute="Decl" lineEndContext="#stay">
+        <keyword String="As" attribute="Keyword" context="Description" />
+      </context>
+      <context name="Description" attribute="Comment" lineEndContext="#pop#pop">
+        <DetectChar char="{" context="DescTag" />
+      </context>
+      <context name="DescTag" attribute="Comment" lineEndContext="#stay">
+        <DetectChar char="{" context="DescTag" />
+        <DetectChar char="}" attribute="Comment" context="#pop" />
+      </context>
+      
+      <context name="Module" attribute="Normal" lineEndContext="#pop">
+	<DetectChar char="{" attribute="Curly" context="Module" />
+        <DetectChar char="}" attribute="Curly" context="#pop" />
+      </context>
+
+      <context name="TLLet">
+        <RegExpr String="[^&spc;]+" attribute="Decl" context="TLArguments" />
+      </context>
+      <context name="TLArguments" attribute="Argument" lineEndContext="#stay" >
+        <RegExpr String="=([&spc;]|$)" attribute="Normal" context="TLExpression" />
+        <DetectChar char="{" attribute="Curly" context="Let" />
+        <DetectChar char="(" attribute="Curly" context="Expression" />
+      </context>
+      <context name="TLExpression" attribute="Normal" lineEndContext="#pop#pop#pop" >
+        <DetectChar char="{" attribute="Curly" context="Lambda" />
+        <DetectChar char="(" attribute="Curly" context="Expression" />
+        <DetectChar char="&quot;" context="String" />
+        <RegExpr String="\b[0-9]+\b" attribute="Number" />
+        <RegExpr String="[^a-zA-Z0-9'_(){}&quot;]+" attribute="Operator" />
+      </context>
+
+      <context name="Let" lineEndContext="#stay" >
+        <RegExpr String="[^&spc;]+" attribute="Decl" context="Arguments" />
+      </context>
+      <context name="Lambda" fallthroughContext="Arguments" fallthrough="true" />
+      <context name="Arguments" attribute="Argument" lineEndContext="#stay" >
+        <RegExpr String="[:=][&spc;]" attribute="Normal" context="Expression" />
+	<DetectChar char="(" attribute="Curly" context="Expression" />
+        <DetectChar char="{" attribute="Curly" context="Let" />
+      </context>
+      <context name="Expression" attribute="Normal" lineEndContext="#stay" >
+        <DetectChar char="{" attribute="Curly" context="Lambda" />
+        <DetectChar char="(" attribute="Curly" context="Expression" />
+        <DetectChar char="}" attribute="Curly" context="#pop#pop#pop" />
+        <DetectChar char=")" attribute="Curly" context="#pop" />
+        <DetectChar char="&quot;" context="String" />
+        <RegExpr String="\b[0-9]+\b" attribute="Number" />
+        <RegExpr String="[^a-zA-Z0-9'_(){}&quot;]+" attribute="Operator" />
+      </context>
+      <context name="String" attribute="String">
+        <DetectChar char="&quot;" attribute="String" context="#pop" />
+      </context>
+    </contexts>
+    <itemDatas>
+      <itemData name="Normal" defStyleNum="dsNormal" />
+      <itemData name="Keyword" defStyleNum="dsKeyword" />
+      <itemData name="Comment" defStyleNum="dsComment" />
+      <itemData name="Decl" defStyleNum="dsFunction" />
+      <itemData name="Argument" defStyleNum="dsVariable" />
+      <itemData name="Curly" defStyleNum="dsControlFlow" />
+      <itemData name="Type" defStyleNum="dsDataType" />
+      <itemData name="String" defStyleNum="dsString" />
+      <itemData name="Number" defStyleNum="dsDecVal" />
+    </itemDatas>
+  </highlighting>
+</language>
