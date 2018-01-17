@@ -600,10 +600,13 @@ type Template = Documentation
 instance Show (Pretty Documentation) where
   show (Pretty (Join tag)) = pretty tag
   show (Pretty (Pure s)) = s
-defaultTemplate = Join $ DocTag "$" [] [Pure "synopsis"] 
+defaultTemplate = Join $ DocTag "$*" [] [] 
 
 showTemplate :: Metadata -> Template -> Maybe String
 showTemplate _ (Pure x) = return x
+showTemplate m (Join (DocTag "$*" [] x)) = do
+  v <- traverse (showTemplate m) x
+  pretty <$> (Join m^?at v.t'Just.t'Join)
 showTemplate m (Join (DocTag "$" [] x)) = do
   (vh:vt) <- traverse (showTemplate m) x
   m^?at vh.t'Just.at vt.t'Just.t'Pure
