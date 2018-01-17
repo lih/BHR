@@ -17,8 +17,9 @@ mkdir -p public && {
     for pkg in "${packages[@]}"; do
         executables+=( $(sed -rn 's/^executable\s+(\S+).*$/\1/p' "$pkg/$pkg.cabal") )
     done
+    stack_path="$(stack path --local-install-root)"
     
-    cp .stack-work/install/*/*/*/doc/ocean.css public
+    cp "$stack_path"/doc/ocean.css public
     {
         cat <<EOF
 <!DOCTYPE html>
@@ -38,10 +39,10 @@ mkdir -p public && {
       <ul>
 EOF
         for pkg in "${packages[@]}"; do
-            fullpkg=( .stack-work/install/*/*/*/doc/$pkg-[0-9]* )
+            fullpkg=( "$stack_path"/doc/$pkg-[0-9]* )
             fullpkg=( ${fullpkg[@]: -1:1} )
             fullpkg="${fullpkg##*/}"
-            cp -r .stack-work/install/*/*/*/doc/$fullpkg public
+            cp -r "$stack_path"/doc/$fullpkg public
             if [ -e public/$fullpkg/index.html ]; then
                 printf '<li><a href="%s/index.html">%s</a></li>\n' "$fullpkg" "$pkg"
             fi
@@ -49,13 +50,14 @@ EOF
         find public -name src | xargs rm -r
         cat <<EOF
       </ul>
-      <h2>Executables</h2>
+      <h2>Packages</h2>
       <ul>
 EOF
-        mkdir public/bin
+        mkdir public/pkg
         for exe in "${executables[@]}"; do
-            xz < .stack-work/install/*/*/*/bin/$exe > public/bin/$exe.xz
-            printf '<li><a href="bin/%s.xz">%s.xz</a></li>\n' "$exe" "$exe"
+	    shopt -s nullglob
+	    ( cd "$stack_path"; tar -c bin/$exe share/*/$exe-* ) | xz > public/pkg/$exe.tar.xz
+            printf '<li><a href="pkg/%s.tar.xz">%s.tar.xz</a></li>\n' "$exe" "$exe"
         done
         cat <<EOF
       </ul>
