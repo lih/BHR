@@ -6,7 +6,8 @@ pages:
   stage: deploy
   script:
   - apt-get install -y xz-utils
-  - STACK_FLAGS=--system-ghc scripts/ci/pages
+  - stack config set system-ghc --global true
+  - scripts/ci/pages
   artifacts:
     paths:
     - public
