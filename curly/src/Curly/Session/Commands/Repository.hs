@@ -24,7 +24,7 @@ repoCmd = withDoc repoDoc $ False <$ (nbsp >>) (repoList <+? repoLibs <+? repoAd
           liftIOWarn $ do
             ls <- availableLibs
             for_ [(l,d) | (l,Just d) <- map (second (`showTemplate`t)) ls] $ \(l,d) -> do
-              serveStrLn $ format "  * %s (%s)" d (show l)
+              serveStrLn $ format "%s %s" (show l) d
         repoAdd = do
           opKeyword "add"
           guardWarn "Error: you must have admin access to add repositories" (?access>=Admin)
