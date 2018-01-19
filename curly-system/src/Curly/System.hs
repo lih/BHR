@@ -23,6 +23,8 @@ import Foreign.ForeignPtr
 import Foreign.C.Types
 import Foreign.Marshal.Array
 import Foreign.Marshal.Alloc (mallocBytes)
+import Foreign.StablePtr
+import Foreign.C.String (castCCharToChar)
 
 knownSystems :: Map String System
 knownSystems = fromAList [(_sysName s,s) | s <- [hostSystem
@@ -80,7 +82,7 @@ specialize expr = inSection TextSection $ getCounter <* specTail (sem expr)
 specializeStandalone :: System -> LeafExpr GlobalID -> Bytes
 specializeStandalone sys e = let ?sys = sys in
   let Id (_,_,bin) = runASMT defaultRuntime $ do
-        _sysStandalone sys $ case _sysImpl sys of
+        standalone (_sysStandalone sys) $ case _sysImpl sys of
           Imperative imp -> let ?sys = imp (_sysStandaloneHooks sys)
                             in specialize (mkRunExpr $ anonymous (e^.leafVal))
           RawSystem r -> inSection TextSection (getCounter <* tell (bytesCode' (r e)))
@@ -137,14 +139,37 @@ runJIT (JITContext cxt) asm = let allocSections = [InitSection,TextSection,DataS
         runIOFunPtr fp
   return runIt
 
-foreign import ccall "wrapper" get_malloc_fptr :: (Int -> IO (Ptr a)) -> IO (FunPtr (Int -> IO (Ptr a)))
-foreign import ccall "wrapper" get_debug_fptr :: IO () -> IO (FunPtr (IO ()))
+type Wrapper t = t -> IO (FunPtr t)
+
+class CCallable f where
+  wrapper :: Wrapper f
+                                               
 foreign import ccall "dynamic" runIOFunPtr :: FunPtr (IO ()) -> IO ()
+
+hsAddr :: CCallable a => a -> BinAddress
+hsAddr fun = BA (fromIntegral (ptrToIntPtr (castFunPtrToPtr p)))
+  where p = wrapper fun^.thunk
 mallocAddr :: BinAddress
-mallocAddr = BA (fromIntegral (ptrToIntPtr (castFunPtrToPtr mallocPtr)))
-  where mallocPtr = get_malloc_fptr mallocBytes^.thunk
-debug_addr :: IO () -> BinAddress
-debug_addr m = BA $ fromIntegral $ ptrToIntPtr $ castFunPtrToPtr $ get_debug_fptr m^.thunk
+mallocAddr = hsAddr mallocBytes
+
+type JIT_Expr = Ptr ()
+jit_mkExprSymbol :: Int -> Ptr CChar -> IO JIT_Expr
+jit_mkExprSymbol n p = do
+  str <- peekArray n p
+  sp <- newStablePtr (mkSymbol (map castCCharToChar str) :: Expression String String)
+  return (castStablePtrToPtr sp)
+jit_mkExprLambda :: Int -> Ptr CChar -> JIT_Expr -> IO JIT_Expr
+jit_mkExprLambda n ps pe = do
+  str <- peekArray n ps
+  e <- deRefStablePtr (castPtrToStablePtr pe)
+  sp <- newStablePtr (mkAbstract (map castCCharToChar str) e :: Expression String String)
+  return (castStablePtrToPtr sp)
+jit_mkExprApply :: JIT_Expr -> JIT_Expr -> IO JIT_Expr
+jit_mkExprApply pf px  = do
+  f <- deRefStablePtr (castPtrToStablePtr pf)
+  x <- deRefStablePtr (castPtrToStablePtr px)
+  sp <- newStablePtr (mkApply f x :: Expression String String)
+  return (castStablePtrToPtr sp)
 
 jit_memextend_pool sz = defBuiltinGet TextSection ("memextend-pool-"+show sz) $ do
   ccall (Just poolReg) mallocAddr [return (Constant pageSize)]
@@ -174,9 +199,17 @@ jit_popThunk dest = ignore $ let ?sys = jit_machine in do
   poolReg <-- dest
   dest <-- dest ! EnvOffset
 
+jit_defBuiltin :: MonadASM m s => Section -> String -> ((?sys :: VonNeumannMachine) => m ()) -> Maybe (m (BinAddress,Value))
+jit_defBuiltin sec b m = Just $ let ?sys = jit_machine in defBuiltinGet sec b m <&> (,Constant 0)
+jit_curlyBuiltin B_ExprSym = jit_defBuiltin TextSection "mkExprSymbol" $ do
+  call $ hsAddr $ putStrLn "Called from Curly !"
+  ret
+jit_curlyBuiltin _ = Nothing
+
 jit_machine :: VonNeumannMachine
 jit_machine = let Imperative imp = _sysImpl hostSystem
-              in imp $ Just $ SystemHooks jit_pushThunk jit_popThunk jit_allocBytes
+              in withNewCurlyBuiltins jit_curlyBuiltin $
+                 imp $ Just $ SystemHooks jit_pushThunk jit_popThunk jit_allocBytes
 newJITContext :: IO (JITContext s)
 newJITContext = map JITContext (newIORef (JITData defaultRuntime zero))
 jitExpr :: (Show (Pretty s),Identifier s) => JITContext s -> AnnExpr s -> IO RunJITExpr
@@ -193,3 +226,94 @@ pROT_READ, pROT_WRITE, pROT_EXEC :: CInt
 pROT_READ = 1
 pROT_WRITE = 2
 pROT_EXEC = 4
+
+foreign import ccall "wrapper" _wrapper__  :: Wrapper (IO ())
+instance CCallable (IO ()) where wrapper = _wrapper__
+foreign import ccall "wrapper" _wrapper__i :: Wrapper (IO Int)
+instance CCallable (IO Int) where wrapper = _wrapper__i
+foreign import ccall "wrapper" _wrapper__p :: Wrapper (IO (Ptr a))
+instance CCallable (IO (Ptr a)) where wrapper = _wrapper__p
+foreign import ccall "wrapper" _wrapper_i_  :: Wrapper (Int -> IO ())
+instance CCallable (Int -> IO ()) where wrapper = _wrapper_i_
+foreign import ccall "wrapper" _wrapper_i_i :: Wrapper (Int -> IO Int)
+instance CCallable (Int -> IO Int) where wrapper = _wrapper_i_i
+foreign import ccall "wrapper" _wrapper_i_p :: Wrapper (Int -> IO (Ptr a))
+instance CCallable (Int -> IO (Ptr a)) where wrapper = _wrapper_i_p
+foreign import ccall "wrapper" _wrapper_p_  :: Wrapper (Ptr b -> IO ())
+instance CCallable (Ptr b -> IO ()) where wrapper = _wrapper_p_
+foreign import ccall "wrapper" _wrapper_p_i :: Wrapper (Ptr b -> IO Int)
+instance CCallable (Ptr b -> IO Int) where wrapper = _wrapper_p_i
+foreign import ccall "wrapper" _wrapper_p_p :: Wrapper (Ptr b -> IO (Ptr a))
+instance CCallable (Ptr b -> IO (Ptr a)) where wrapper = _wrapper_p_p
+foreign import ccall "wrapper" _wrapper_ii_  :: Wrapper (Int -> Int -> IO ())
+instance CCallable (Int -> Int -> IO ()) where wrapper = _wrapper_ii_
+foreign import ccall "wrapper" _wrapper_ii_i :: Wrapper (Int -> Int -> IO Int)
+instance CCallable (Int -> Int -> IO Int) where wrapper = _wrapper_ii_i
+foreign import ccall "wrapper" _wrapper_ii_p :: Wrapper (Int -> Int -> IO (Ptr a))
+instance CCallable (Int -> Int -> IO (Ptr a)) where wrapper = _wrapper_ii_p
+foreign import ccall "wrapper" _wrapper_ip_  :: Wrapper (Int -> Ptr b -> IO ())
+instance CCallable (Int -> Ptr b -> IO ()) where wrapper = _wrapper_ip_
+foreign import ccall "wrapper" _wrapper_ip_i :: Wrapper (Int -> Ptr b -> IO Int)
+instance CCallable (Int -> Ptr b -> IO Int) where wrapper = _wrapper_ip_i
+foreign import ccall "wrapper" _wrapper_ip_p :: Wrapper (Int -> Ptr b -> IO (Ptr a))
+instance CCallable (Int -> Ptr b -> IO (Ptr a)) where wrapper = _wrapper_ip_p
+foreign import ccall "wrapper" _wrapper_pi_  :: Wrapper (Ptr c -> Int -> IO ())
+instance CCallable (Ptr c -> Int -> IO ()) where wrapper = _wrapper_pi_
+foreign import ccall "wrapper" _wrapper_pi_i :: Wrapper (Ptr c -> Int -> IO Int)
+instance CCallable (Ptr c -> Int -> IO Int) where wrapper = _wrapper_pi_i
+foreign import ccall "wrapper" _wrapper_pi_p :: Wrapper (Ptr c -> Int -> IO (Ptr a))
+instance CCallable (Ptr c -> Int -> IO (Ptr a)) where wrapper = _wrapper_pi_p
+foreign import ccall "wrapper" _wrapper_pp_  :: Wrapper (Ptr c -> Ptr b -> IO ())
+instance CCallable (Ptr c -> Ptr b -> IO ()) where wrapper = _wrapper_pp_
+foreign import ccall "wrapper" _wrapper_pp_i :: Wrapper (Ptr c -> Ptr b -> IO Int)
+instance CCallable (Ptr c -> Ptr b -> IO Int) where wrapper = _wrapper_pp_i
+foreign import ccall "wrapper" _wrapper_pp_p :: Wrapper (Ptr c -> Ptr b -> IO (Ptr a))
+instance CCallable (Ptr c -> Ptr b -> IO (Ptr a)) where wrapper = _wrapper_pp_p
+foreign import ccall "wrapper" _wrapper_iii_  :: Wrapper (Int -> Int -> Int -> IO ())
+instance CCallable (Int -> Int -> Int -> IO ()) where wrapper = _wrapper_iii_
+foreign import ccall "wrapper" _wrapper_iii_i :: Wrapper (Int -> Int -> Int -> IO Int)
+instance CCallable (Int -> Int -> Int -> IO Int) where wrapper = _wrapper_iii_i
+foreign import ccall "wrapper" _wrapper_iii_p :: Wrapper (Int -> Int -> Int -> IO (Ptr a))
+instance CCallable (Int -> Int -> Int -> IO (Ptr a)) where wrapper = _wrapper_iii_p
+foreign import ccall "wrapper" _wrapper_iip_  :: Wrapper (Int -> Int -> Ptr b -> IO ())
+instance CCallable (Int -> Int -> Ptr b -> IO ()) where wrapper = _wrapper_iip_
+foreign import ccall "wrapper" _wrapper_iip_i :: Wrapper (Int -> Int -> Ptr b -> IO Int)
+instance CCallable (Int -> Int -> Ptr b -> IO Int) where wrapper = _wrapper_iip_i
+foreign import ccall "wrapper" _wrapper_iip_p :: Wrapper (Int -> Int -> Ptr b -> IO (Ptr a))
+instance CCallable (Int -> Int -> Ptr b -> IO (Ptr a)) where wrapper = _wrapper_iip_p
+foreign import ccall "wrapper" _wrapper_ipi_  :: Wrapper (Int -> Ptr c -> Int -> IO ())
+instance CCallable (Int -> Ptr c -> Int -> IO ()) where wrapper = _wrapper_ipi_
+foreign import ccall "wrapper" _wrapper_ipi_i :: Wrapper (Int -> Ptr c -> Int -> IO Int)
+instance CCallable (Int -> Ptr c -> Int -> IO Int) where wrapper = _wrapper_ipi_i
+foreign import ccall "wrapper" _wrapper_ipi_p :: Wrapper (Int -> Ptr c -> Int -> IO (Ptr a))
+instance CCallable (Int -> Ptr c -> Int -> IO (Ptr a)) where wrapper = _wrapper_ipi_p
+foreign import ccall "wrapper" _wrapper_ipp_  :: Wrapper (Int -> Ptr c -> Ptr b -> IO ())
+instance CCallable (Int -> Ptr c -> Ptr b -> IO ()) where wrapper = _wrapper_ipp_
+foreign import ccall "wrapper" _wrapper_ipp_i :: Wrapper (Int -> Ptr c -> Ptr b -> IO Int)
+instance CCallable (Int -> Ptr c -> Ptr b -> IO Int) where wrapper = _wrapper_ipp_i
+foreign import ccall "wrapper" _wrapper_ipp_p :: Wrapper (Int -> Ptr c -> Ptr b -> IO (Ptr a))
+instance CCallable (Int -> Ptr c -> Ptr b -> IO (Ptr a)) where wrapper = _wrapper_ipp_p
+foreign import ccall "wrapper" _wrapper_pii_  :: Wrapper (Ptr d -> Int -> Int -> IO ())
+instance CCallable (Ptr d -> Int -> Int -> IO ()) where wrapper = _wrapper_pii_
+foreign import ccall "wrapper" _wrapper_pii_i :: Wrapper (Ptr d -> Int -> Int -> IO Int)
+instance CCallable (Ptr d -> Int -> Int -> IO Int) where wrapper = _wrapper_pii_i
+foreign import ccall "wrapper" _wrapper_pii_p :: Wrapper (Ptr d -> Int -> Int -> IO (Ptr a))
+instance CCallable (Ptr d -> Int -> Int -> IO (Ptr a)) where wrapper = _wrapper_pii_p
+foreign import ccall "wrapper" _wrapper_pip_  :: Wrapper (Ptr d -> Int -> Ptr b -> IO ())
+instance CCallable (Ptr d -> Int -> Ptr b -> IO ()) where wrapper = _wrapper_pip_
+foreign import ccall "wrapper" _wrapper_pip_i :: Wrapper (Ptr d -> Int -> Ptr b -> IO Int)
+instance CCallable (Ptr d -> Int -> Ptr b -> IO Int) where wrapper = _wrapper_pip_i
+foreign import ccall "wrapper" _wrapper_pip_p :: Wrapper (Ptr d -> Int -> Ptr b -> IO (Ptr a))
+instance CCallable (Ptr d -> Int -> Ptr b -> IO (Ptr a)) where wrapper = _wrapper_pip_p
+foreign import ccall "wrapper" _wrapper_ppi_  :: Wrapper (Ptr d -> Ptr c -> Int -> IO ())
+instance CCallable (Ptr d -> Ptr c -> Int -> IO ()) where wrapper = _wrapper_ppi_
+foreign import ccall "wrapper" _wrapper_ppi_i :: Wrapper (Ptr d -> Ptr c -> Int -> IO Int)
+instance CCallable (Ptr d -> Ptr c -> Int -> IO Int) where wrapper = _wrapper_ppi_i
+foreign import ccall "wrapper" _wrapper_ppi_p :: Wrapper (Ptr d -> Ptr c -> Int -> IO (Ptr a))
+instance CCallable (Ptr d -> Ptr c -> Int -> IO (Ptr a)) where wrapper = _wrapper_ppi_p
+foreign import ccall "wrapper" _wrapper_ppp_  :: Wrapper (Ptr d -> Ptr c -> Ptr b -> IO ())
+instance CCallable (Ptr d -> Ptr c -> Ptr b -> IO ()) where wrapper = _wrapper_ppp_
+foreign import ccall "wrapper" _wrapper_ppp_i :: Wrapper (Ptr d -> Ptr c -> Ptr b -> IO Int)
+instance CCallable (Ptr d -> Ptr c -> Ptr b -> IO Int) where wrapper = _wrapper_ppp_i
+foreign import ccall "wrapper" _wrapper_ppp_p :: Wrapper (Ptr d -> Ptr c -> Ptr b -> IO (Ptr a))
+instance CCallable (Ptr d -> Ptr c -> Ptr b -> IO (Ptr a)) where wrapper = _wrapper_ppp_p

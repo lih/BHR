@@ -372,7 +372,7 @@ x86_sys :: (?x86 :: X86)
            -> SystemHooks                                       -- ^ Standalone hooks
            -> System
 x86_sys name prog machine builtins hooks =
-  System name (set (each.executePerm) True) (standalone prog) (Just hooks) $
+  System name (set (each.executePerm) True) prog (Just hooks) $
   Imperative (\mh -> case mh of
                  Just h -> let ?sysHooks = h in withNewCurlyBuiltins builtins machine
                  Nothing -> error "The X86 system must provide a JIT environment") 

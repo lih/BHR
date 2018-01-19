@@ -306,6 +306,20 @@ data Builtin = B_Undefined
              | B_StringLength
              | B_AddString | B_ShowInt
 
+             | B_MkArray
+             | B_ArrayLength
+             | B_ArrayAt
+
+             | B_SyntaxNode
+             | B_SyntaxSym
+             | B_SyntaxExpr
+             | B_SyntaxInd
+
+             | B_ExprLambda
+             | B_ExprApply
+             | B_ExprSym
+             | B_ExprInd
+
              | B_FileDesc Int
              | B_Open | B_Read | B_Write | B_Close
              deriving (Eq,Ord,Show,Generic)

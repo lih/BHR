@@ -41,7 +41,7 @@ import GHC.Conc (par)
 import Control.DeepSeq
 
 curlyLibVersion :: Int
-curlyLibVersion = 6
+curlyLibVersion = 7
 
 newtype Compressed a = Compressed { unCompressed :: a }
                      deriving (Show,Eq,Ord)
@@ -449,7 +449,7 @@ builtinsLib = let blib = zero & set exports builtinsMod . set metadata meta
   where Join meta = fromAList [(["synopsis"],Pure "The library of Curly builtins")
                               ,(["author","name"],Pure "Marc Coiffier")
                               ,(["author","email"],Pure "marc@coiffier.net")
-                              ,(["version"],Pure "0.1")]
+                              ,(["version"],Pure "0.2")]
         builtinsMod = fromPList [
           (["undefined"],Pure (pureIdent "undefined",undefLeaf)),
           (["seq"],mkBLeaf "seq" B_Seq seqDoc),
@@ -466,7 +466,18 @@ builtinsLib = let blib = zero & set exports builtinsMod . set metadata meta
           (["arithmetic","divInt"],mkBLeaf "divInt" B_DivInt divIntDoc),
           (["string","addString"],mkBLeaf "addString" B_AddString addStringDoc),
           (["string","stringLength"],mkBLeaf "stringLength" B_StringLength stringLengthDoc),
-          (["string","showInt"],mkBLeaf "showInt" B_ShowInt showIntDoc)
+          (["string","showInt"],mkBLeaf "showInt" B_ShowInt showIntDoc),
+          (["array","mkArray"],mkBLeaf "mkArray" B_MkArray mkArrayDoc),
+          (["array","arrayLength"],mkBLeaf "arrayLength" B_ArrayLength arrayLengthDoc),
+          (["array","arrayAt"],mkBLeaf "arrayAt" B_ArrayAt arrayAtDoc),
+          (["syntax","mkSyntaxNode"],mkBLeaf "mkSyntaxNode" B_SyntaxNode mkSyntaxNodeDoc),
+          (["syntax","mkSyntaxSym"],mkBLeaf "mkSyntaxSym" B_SyntaxSym mkSyntaxSymDoc),
+          (["syntax","mkSyntaxExpr"],mkBLeaf "mkSyntaxExpr" B_SyntaxExpr mkSyntaxExprDoc),
+          (["syntax","syntaxInd"],mkBLeaf "syntaxInd" B_SyntaxInd syntaxIndDoc),
+          (["syntax","mkExprLambda"],mkBLeaf "mkExprLambda" B_ExprLambda mkExprLambdaDoc),
+          (["syntax","mkExprApply"],mkBLeaf "mkExprApply" B_ExprApply mkExprApplyDoc),
+          (["syntax","mkExprSym"],mkBLeaf "mkExprSym" B_ExprSym mkExprSymDoc),
+          (["syntax","exprInd"],mkBLeaf "exprInd" B_ExprInd exprIndDoc)
           ]
             where mkBLeaf n b d = Pure (pureIdent n,undefLeaf & leafVal %- mkSymbol (pureIdent n,Pure (Builtin (builtinType b) b)) & leafDoc %- mkDoc d)
                   seqDoc = unlines [
@@ -539,6 +550,17 @@ builtinsLib = let blib = zero & set exports builtinsMod . set metadata meta
                     "{p Gets the length of a string.}}"
                     ]
                   showIntDoc = "{section {title Show Number} Produces a string representation of its argument}"
+                  mkArrayDoc = "{section {title Make Array} {p Usage: mkArray n {i: ...}} {p Creates an array of size n, populated by calling the given function on every index from 0 to n-1}}"
+                  arrayLengthDoc = "{section {title Get Array Length} {p Gets the length of an array.}}"
+                  arrayAtDoc = "{section {title Get Array Element} {p Usage: arrayAt arr i} {p Gets the element at index i in the array arr}}"
+                  mkSyntaxNodeDoc = ""
+                  mkSyntaxSymDoc = ""
+                  mkSyntaxExprDoc = ""
+                  syntaxIndDoc = ""
+                  mkExprLambdaDoc = ""
+                  mkExprApplyDoc = ""
+                  mkExprSymDoc = ""
+                  exprIndDoc = ""
 
 data RepoConfig = RepoConfig { repoProtoRoots :: [String] }
 data Repository = CustomRepo String (RepoConfig -> IO (Expires [(LibraryID,Metadata)])) (RepoConfig -> LibraryID -> IO Bytes)

@@ -178,4 +178,4 @@ arm_machine = VonNeumannMachine {
   where cp = map2 arm_instr arm_cp 
 
 arm_sys :: String -> Standalone -> System
-arm_sys name prog = System name (set (each.executePerm) True) (standalone prog) Nothing $ Imperative (const arm_machine)
+arm_sys name prog = System name (set (each.executePerm) True) prog Nothing $ Imperative (const arm_machine)

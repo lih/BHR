@@ -15,16 +15,17 @@ strEncode = foldMap encode
 instance BCSerializable Instruction where
   bcEncode (Instruction s) = BC 1 1 (foldMap encode (s+";")^..bytesBuilder)
 
-system = System "javascript" id (void . rawProgram [TextSection]) Nothing
+system = System "javascript" id (Standalone (void . rawProgram [TextSection])) Nothing
          (RawSystem (yb bytesBuilder . strEncode . generateJS . anonymous . by leafVal))
 systemASM =
   System "jsasm" id 
-  (\m -> rawProgram [RawSection "header",TextSection,RawSection "footer"] $ mdo
-      inSection (RawSection "header") $ do
-        tell $ bytesCode (Just 0,0) $ yb bytesBuilder $ strEncode (format "function main(){var %s,pc=%s;while(true){switch(pc){" (intercalate "," (map (showReg . RegID) [0..4])) (showAddr start))
-      start <- m
-      inSection (RawSection "footer") $ do
-        tell $ bytesCode (Just 0,0) $ yb bytesBuilder $ strEncode "}}}")
+  (Standalone
+   (\m -> rawProgram [RawSection "header",TextSection,RawSection "footer"] $ mdo
+       inSection (RawSection "header") $ do
+         tell $ bytesCode (Just 0,0) $ yb bytesBuilder $ strEncode (format "function main(){var %s,pc=%s;while(true){switch(pc){" (intercalate "," (map (showReg . RegID) [0..3])) (showAddr start))
+       start <- m
+       inSection (RawSection "footer") $ do
+         tell $ bytesCode (Just 0,0) $ yb bytesBuilder $ strEncode "}}}"))
   Nothing
   $ Imperative (const js_machine)
 
@@ -53,14 +54,18 @@ js_machine = VonNeumannMachine {
 
 js_curlyBuiltin :: BUILTIN_INSTR
 js_curlyBuiltin x = let ?sys = js_machine in
+  commonBuiltin x +
   case x of
-    B_AddInt -> Just $ map (,Constant 0) $ defBuiltinGet TextSection "addInt" $ do
-      tmpReg <-- thisReg!ValueOffset
-      callThunk (tmpReg!TypeOffset)
-      tmpReg <-- tmpReg!EnvOffset
-      callThunk (tmpReg!TypeOffset)
-      tmpReg <-- thisReg!ValueOffset
-      add (destReg!ValueOffset) (tmpReg!ValueOffset)
+    B_Write -> Just $ map (,Constant 0) $ defBuiltinGet TextSection "write" $ do
+      [file,str,cont] <- builtinArgs 3
+      pushing [thisReg] $ callThunk file
+      pushing [thisReg] $ callThunk str
+      instr (format "if (%s == 1) { console.log(%s); }" (showLoc (file!ValueOffset)) (showLoc (destReg!ValueOffset)))
+      tailCall cont
+    B_String s -> Just $ map (,Constant 0) $ defBuiltinGet TextSection ("str:"+s) $ do
+      cst <- getConstantFun
+      destReg!TypeOffset <-- cst
+      instr (format "%s=%s" (showLoc (destReg!ValueOffset)) (show s))
       ret
     _ -> Nothing
 

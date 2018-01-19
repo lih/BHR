@@ -10,6 +10,8 @@ import IO.Filesystem
 
 newtype RegID = RegID Int
               deriving (Show,Eq,Ord)
+newtype BinAddress = BA { getBA :: Int }
+                     deriving (Semigroup,Monoid,Eq,Ord)
 data Locus = Register RegID
            | AtOffset Locus Offset
            deriving (Show,Eq,Ord)
@@ -19,73 +21,29 @@ data Offset = Offset Int
 data Value = Constant Integer
            | Variable Locus
            deriving (Show,Eq,Ord)
+ 
+class IsLocus t where
+  toLocus :: t -> Locus
+instance IsLocus Locus where toLocus = id
+instance IsLocus RegID where toLocus = Register
+instance IsLocus l => IsLocus (l,Offset) where toLocus = uncurry (!)
 
-data BinaryCode = BC {
-  _bcSize :: Int,
-  _bcEstimate :: Int,
-  _bData :: Bytes
-  }
-class BCSerializable t where
-  bcEncode :: t -> BinaryCode
-                  
-newtype BinAddress = BA { getBA :: Int }
-                     deriving (Semigroup,Monoid,Eq,Ord)
-data Section = TextSection | DataSection | InitSection | RawSection String
-             deriving (Eq,Ord,Show)
-data Runtime s = Runtime {
-  _rtAddresses :: Map (AnnExpr s) BinAddress,
-  _rtPartial :: Map Int BinAddress,
-  _rtBuiltins :: Map (Section,String) BinAddress,
-  _rtSections :: Map Section (BinaryCode,BinAddress)
-  }
-newtype ASMT s m a = ASMT (StateT (Runtime s) (CounterT BinaryCode BinAddress m) a)
-                 deriving (Functor,SemiApplicative,Applicative,Unit,MonadFix
-                          ,MonadWriter BinaryCode,MonadCounter BinaryCode BinAddress
-                          ,MonadState (Runtime s))
-i'ASMT :: Iso (ASMT s m a) (ASMT s' m' a') (StateT (Runtime s) (CounterT BinaryCode BinAddress m) a) (StateT (Runtime s') (CounterT BinaryCode BinAddress m') a') 
-i'ASMT = iso ASMT (\(ASMT a) -> a)
-runASMT :: MonadFix m => Runtime s -> ASMT s m a -> m (a,Runtime s,BinaryCode)
-runASMT rt m = (m^..stateT.i'ASMT) rt^..i'counterT <&> \ ~(~(rt',a),_,bc) -> (a,rt',bc)
+class IsValue t where
+  toValue :: t -> Value
+instance IsValue Value where toValue = id
+newtype V t = V t
+instance IsLocus l => IsValue (V l) where toValue (V x) = Variable (toLocus x)
+instance IsValue Locus where toValue = Variable
+instance IsValue RegID where toValue = Variable . toLocus
+instance IsValue Integer where toValue = Constant
+instance IsValue Int where toValue = Constant . fromIntegral
+instance IsValue Word32 where toValue = Constant . fromIntegral
+instance IsValue Word8 where toValue = Constant . fromIntegral
+instance IsValue BinAddress where toValue (BA a) = Constant (fromIntegral a)
 
-
-newtype Standalone = Standalone { standalone :: forall m s. MonadASM m s => m BinAddress -> m () }
-data System = System {
-  _sysName :: String,
-  _sysProgPerms :: FilePermissions -> FilePermissions,
-  _sysStandalone :: forall m s. MonadASM m s => m BinAddress -> m (),
-  _sysStandaloneHooks :: Maybe SystemHooks,
-  _sysImpl :: SysImpl
-  }
-rawProgram secs m = mdo
-  rtSections =- fromAList [(s',(zero,rt'^.rtSection s.l'2)) | (s,s') <- zip secs (tail secs)]
-  ret <- inSection (head secs) m
-  rt' <- get
-  tell $ fold [rt'^.rtSection s.l'1 | s <- secs]
-  return ret
-  
-rawSections = c'map $ fromAList [(TextSection,BA 1)]
-data SysImpl = Imperative (Maybe SystemHooks -> VonNeumannMachine)
-             | RawSystem (LeafExpr GlobalID -> Bytes)
-instance Eq System where a == b = compare a b == EQ
-instance Ord System where
-  compare = comparing _sysName
-instance Show System where show = _sysName
-
-instance Semigroup BinaryCode where
-  ~(BC lo hi d) + ~(BC lo' hi' d') = BC (lo+lo') (hi+hi') (d+d')
-instance SubSemi BinAddress BinaryCode where
-  cast (BC lo _ _) = BA lo
-instance Monoid BinaryCode where
-  zero = BC zero zero zero
-
-instance Monad m => Monad (ASMT s m) where join = coerceJoin ASMT
-instance MonadTrans (ASMT s) where lift = ASMT . lift . lift
-instance MonadReader r m => MonadReader r (ASMT s m) where
-  ask = lift ask
-  local f = from (mapping i'counterT.stateT.i'ASMT) %~ map (local f)
-
-class (MonadCounter BinaryCode BinAddress m,MonadFix m,MonadState (Runtime s) m) => MonadASM m s | m -> s
-instance MonadFix m => MonadASM (ASMT s m) s
+(!) :: IsLocus l => l -> Offset -> Locus
+(!) = AtOffset . toLocus
+infixl 8 !
 
 t'Register :: Traversal' Locus RegID
 t'Register k (Register r) = Register<$>k r
@@ -101,22 +59,20 @@ baseRegister :: Locus -> RegID
 baseRegister (Register r) = r
 baseRegister (AtOffset l _) = baseRegister l
 
-rtAddresses :: Lens (Map (AnnExpr s) BinAddress) (Map (AnnExpr s') BinAddress) (Runtime s) (Runtime s')
-rtAddresses = lens _rtAddresses (\x y -> x { _rtAddresses = y })
-rtPartial :: Lens' (Runtime s) (Map Int BinAddress)
-rtPartial = lens _rtPartial (\x y -> x { _rtPartial = y })
-rtBuiltins :: Lens' (Runtime s) (Map (Section,String) BinAddress)
-rtBuiltins = lens _rtBuiltins (\x y -> x { _rtBuiltins = y })
-rtBuiltin :: Section -> String -> Lens' (Runtime s) BinAddress
-rtBuiltin s n = rtBuiltins.at (s,n).l'Just zero
-rtSections :: Lens' (Runtime s) (Map Section (BinaryCode,BinAddress))
-rtSections = lens _rtSections (\x y -> x { _rtSections = y })
-rtSection :: Section -> Lens' (Runtime s) (BinaryCode,BinAddress)
-rtSection s = rtSections.at s.l'Just zero
-
-defaultRuntime :: Runtime s
-defaultRuntime = Runtime zero zero zero zero
-
+data BinaryCode = BC {
+  _bcSize :: Int,
+  _bcEstimate :: Int,
+  _bData :: Bytes
+  }
+instance Semigroup BinaryCode where
+  ~(BC lo hi d) + ~(BC lo' hi' d') = BC (lo+lo') (hi+hi') (d+d')
+instance SubSemi BinAddress BinaryCode where
+  cast (BC lo _ _) = BA lo
+instance Monoid BinaryCode where
+  zero = BC zero zero zero
+class BCSerializable t where
+  bcEncode :: t -> BinaryCode
+ 
 bcSize :: Lens' BinaryCode Int
 bcSize = lens _bcSize (\x y -> x { _bcSize = y })
 bcEstimate :: Lens' BinaryCode Int
@@ -131,6 +87,62 @@ bytesCode (mlo,hi) bs = BC lo hi bs
   where lo = fromMaybe (bytesSize bs) mlo
 bytesCode' :: Bytes -> BinaryCode
 bytesCode' bs = let s = bytesSize bs in bytesCode (Just s,s) bs
+
+data Section = TextSection | DataSection | InitSection | RawSection String
+             deriving (Eq,Ord,Show)
+data Runtime s = Runtime {
+  _rtAddresses :: Map (AnnExpr s) BinAddress,
+  _rtPartial :: Map Int BinAddress,
+  _rtBuiltins :: Map (Section,String) BinAddress,
+  _rtSections :: Map Section (BinaryCode,BinAddress),
+  _rtDirty :: Map Int Bool
+  }
+ 
+rtAddresses :: Lens (Map (AnnExpr s) BinAddress) (Map (AnnExpr s') BinAddress) (Runtime s) (Runtime s')
+rtAddresses = lens _rtAddresses (\x y -> x { _rtAddresses = y })
+rtPartial :: Lens' (Runtime s) (Map Int BinAddress)
+rtPartial = lens _rtPartial (\x y -> x { _rtPartial = y })
+rtBuiltins :: Lens' (Runtime s) (Map (Section,String) BinAddress)
+rtBuiltins = lens _rtBuiltins (\x y -> x { _rtBuiltins = y })
+rtBuiltin :: Section -> String -> Lens' (Runtime s) BinAddress
+rtBuiltin s n = rtBuiltins.at (s,n).l'Just zero
+rtSections :: Lens' (Runtime s) (Map Section (BinaryCode,BinAddress))
+rtSections = lens _rtSections (\x y -> x { _rtSections = y })
+rtSection :: Section -> Lens' (Runtime s) (BinaryCode,BinAddress)
+rtSection s = rtSections.at s.l'Just zero
+rtDirty :: Int -> Lens' (Runtime s) Bool
+rtDirty reg = lens _rtDirty (\x y -> x { _rtDirty = y }).mat reg
+
+defaultRuntime :: Runtime s
+defaultRuntime = Runtime zero zero zero zero zero
+
+newtype ASMT s m a = ASMT (StateT (Runtime s) (CounterT BinaryCode BinAddress m) a)
+                 deriving (Functor,SemiApplicative,Applicative,Unit,MonadFix
+                          ,MonadWriter BinaryCode,MonadCounter BinaryCode BinAddress
+                          ,MonadState (Runtime s))
+instance Monad m => Monad (ASMT s m) where join = coerceJoin ASMT
+instance MonadTrans (ASMT s) where lift = ASMT . lift . lift
+instance MonadReader r m => MonadReader r (ASMT s m) where
+  ask = lift ask
+  local f = from (mapping i'counterT.stateT.i'ASMT) %~ map (local f)
+
+
+class (MonadCounter BinaryCode BinAddress m,MonadFix m,MonadState (Runtime s) m) => MonadASM m s | m -> s
+instance MonadFix m => MonadASM (ASMT s m) s
+ 
+i'ASMT :: Iso (ASMT s m a) (ASMT s' m' a') (StateT (Runtime s) (CounterT BinaryCode BinAddress m) a) (StateT (Runtime s') (CounterT BinaryCode BinAddress m') a') 
+i'ASMT = iso ASMT (\(ASMT a) -> a)
+runASMT :: MonadFix m => Runtime s -> ASMT s m a -> m (a,Runtime s,BinaryCode)
+runASMT rt m = (m^..stateT.i'ASMT) rt^..i'counterT <&> \ ~(~(rt',a),_,bc) -> (a,rt',bc)
+
+align :: MonadASM m s => Int -> Word8 -> m ()
+align n c = do
+  BA cur <- getCounter
+  let padSize = nn - ((cur + nn) `mod` n)
+      nn = n-1
+  tell (bytesCode (Just padSize,nn) (pack (take padSize (repeat c))))
+reserve :: MonadASM m s => Int -> Word8 -> m ()
+reserve n c = tell (bytesCode (Just n,n) (pack (take n (repeat c))))
 inSection :: MonadASM m s => Section -> m a -> m a
 inSection sec ma = mdo
   cur <- getCounter
@@ -140,6 +152,14 @@ inSection sec ma = mdo
   setCounter cur
   return a
 
+rawProgram secs m = mdo
+  rtSections =- fromAList [(s',(zero,rt'^.rtSection s.l'2)) | (s,s') <- zip secs (tail secs)]
+  ret <- inSection (head secs) m
+  rt' <- get
+  tell $ fold [rt'^.rtSection s.l'1 | s <- secs]
+  return ret
+rawSections = c'map $ fromAList [(TextSection,BA 1)]
+ 
 type INSTR0            = forall m s. MonadASM m s => m ()
 type INSTR1 a          = forall m s. MonadASM m s => a -> m ()
 type INSTR2 a b        = forall m s. MonadASM m s => a -> b -> m ()
@@ -184,10 +204,9 @@ defBuiltinGet sec b m = do
     Nothing -> mfix $ \a -> do
       rtBuiltins =~ insert (sec,b) a
       inSection sec (newFunction sec <* m)
-      
 withNewCurlyBuiltins :: BUILTIN_INSTR -> VonNeumannMachine -> VonNeumannMachine
 withNewCurlyBuiltins getB m = m { _curlyBuiltin = liftA2 (+) getB (_curlyBuiltin m) }
-
+ 
 getArgFun :: (?sys :: VonNeumannMachine,MonadASM m s) => m BinAddress
 getArgFun = defBuiltinGet TextSection "argument" $ do 
   pushing [thisReg] $ do
@@ -271,29 +290,6 @@ commonBuiltin B_Seq = Just $ do
   f <- getSeq
   return (f,Constant 0)
 commonBuiltin _ = Nothing
-
-class IsLocus t where
-  toLocus :: t -> Locus
-instance IsLocus Locus where toLocus = id
-instance IsLocus RegID where toLocus = Register
-instance IsLocus l => IsLocus (l,Offset) where toLocus = uncurry (!)
-
-class IsValue t where
-  toValue :: t -> Value
-instance IsValue Value where toValue = id
-newtype V t = V t
-instance IsLocus l => IsValue (V l) where toValue (V x) = Variable (toLocus x)
-instance IsValue Locus where toValue = Variable
-instance IsValue RegID where toValue = Variable . toLocus
-instance IsValue Integer where toValue = Constant
-instance IsValue Int where toValue = Constant . fromIntegral
-instance IsValue Word32 where toValue = Constant . fromIntegral
-instance IsValue Word8 where toValue = Constant . fromIntegral
-instance IsValue BinAddress where toValue (BA a) = Constant (fromIntegral a)
-
-(!) :: IsLocus l => l -> Offset -> Locus
-(!) = AtOffset . toLocus
-infixl 8 !
 
 (<--) :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l,IsValue v) => l -> v -> m ()
 l <-- v = _cp ?sys (toLocus l) (toValue v)
@@ -403,12 +399,19 @@ rotateL [] = unit
 rotateL [_] = unit
 rotateL l = sequence_ $ zipWith (<--) (Register tmpReg:map toLocus l) (map toLocus l+[Register tmpReg])
 
-align :: MonadASM m s => Int -> Word8 -> m ()
-align n c = do
-  BA cur <- getCounter
-  let padSize = nn - ((cur + nn) `mod` n)
-      nn = n-1
-  tell (bytesCode (Just padSize,nn) (pack (take padSize (repeat c))))
-reserve :: MonadASM m s => Int -> Word8 -> m ()
-reserve n c = tell (bytesCode (Just n,n) (pack (take n (repeat c))))
+newtype Standalone = Standalone { standalone :: forall m s. MonadASM m s => m BinAddress -> m () }
+data SysImpl = Imperative (Maybe SystemHooks -> VonNeumannMachine)
+             | RawSystem (LeafExpr GlobalID -> Bytes)
+data System = System {
+  _sysName :: String,
+  _sysProgPerms :: FilePermissions -> FilePermissions,
+  _sysStandalone :: Standalone,
+  _sysStandaloneHooks :: Maybe SystemHooks,
+  _sysImpl :: SysImpl
+  }
+instance Eq System where a == b = compare a b == EQ
+instance Ord System where
+  compare = comparing _sysName
+instance Show System where show = _sysName
+
 

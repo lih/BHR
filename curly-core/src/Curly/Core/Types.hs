@@ -32,10 +32,11 @@ t'assoc = i'ascList.traverse
 i'ascList :: (OrderedMap m k a,OrderedMap m' k' a') => Iso [(k,a)] [(k',a')] m m'
 i'ascList = iso (by ascList) (yb ascList)
 
-data TypeClass s = Function | NamedType Int s | ClassType Int [Set Int] s
+data TypeClass s = Function | Array | NamedType Int s | ClassType Int [Set Int] s
                deriving (Show,Eq,Ord,Generic)
 instance HasIdents s s' (TypeClass s) (TypeClass s') where
   ff'idents _ Function = pure Function
+  ff'idents _ Array = pure Array
   ff'idents k (NamedType n s) = NamedType n<$>k s
   ff'idents k (ClassType n is s) = ClassType n is<$>k s
 instance NFData s => NFData (TypeClass s)
@@ -44,15 +45,17 @@ instance Format s => Format (TypeClass s)
 
 typeClassNArgs :: TypeClass s -> Int
 typeClassNArgs Function = 2
+typeClassNArgs Array = 1
 typeClassNArgs (NamedType n _) = n
 typeClassNArgs (ClassType n _ _) = n
 
-data NativeType = NT_Int | NT_String | NT_Unit | NT_File | NT_RigidType String
+data NativeType = NT_RigidType String | NT_Int | NT_String | NT_Unit | NT_File | NT_Syntax | NT_Expr
                 deriving (Eq,Ord,Generic)
 instance Show NativeType where
+  show (NT_RigidType t) = "#."+t
   show NT_Int = "#int" ; show NT_String = "#string"
   show NT_Unit = "#unit" ; show NT_File = "#file"
-  show (NT_RigidType t) = "#."+t
+  show NT_Syntax = "#syn" ; show NT_Expr = "#expr"
 instance Serializable NativeType
 instance Format NativeType
 instance NFData NativeType
@@ -212,10 +215,13 @@ instance Identifier s => Show (Type s) where
           showC Function = "_ -> _"
           showC (NamedType _ s) = identName s
           showC (ClassType _ _ s) = identName s
+          showC Array = "#[_]"
           showNT NT_Int = "#int"
           showNT NT_String = "#string"
           showNT NT_Unit = "#unit"
           showNT NT_File = "#file"
+          showNT NT_Syntax = "#syn"
+          showNT NT_Expr = "#expr"
           showNT (NT_RigidType t) = t
           pathList = paths^.ascList <&> \(x,(_,y,z)) -> (x,(y,z))
           namesFrom cs = "":fold (deZip (for cs (\c -> Zip (map (c:) (namesFrom cs)))))
@@ -452,11 +458,33 @@ builtinType b = (zero :: Type s) & i'typeRel %~ case b of
   B_ShowInt       -> ln' [] (intT --> stringT)
   B_Unit          -> ln' [] unitT
   B_FileDesc _    -> ln' [] fileT
+  B_MkArray       -> ln' [] (intT --> (intT --> poly) --> arrayT poly)
+                     . ln [Out,Out,TypeIndex Array 0] [Out,In,Out] poly
+  B_ArrayLength   -> ln' [] (arrayT poly --> intT)
+  B_ArrayAt       -> ln' [] (arrayT poly --> intT --> poly)
+                     . ln [In,TypeIndex Array 0] [Out,Out] poly
+  B_SyntaxNode    -> ln' [] (arrayT synT --> synT)
+  B_SyntaxSym     -> ln' [] (stringT --> synT)
+  B_SyntaxExpr    -> ln' [] (exprT --> synT)
+  B_SyntaxInd     -> ln' [] (synT --> (arrayT synT --> poly) --> (exprT --> poly) --> (stringT --> poly) --> poly)
+                     . ln [Out,In,Out] [Out,Out,In,Out] poly
+                     . ln [Out,In,Out] [Out,Out,Out,In,Out] poly
+                     . ln [Out,In,Out] [Out,Out,Out,Out] poly
+
+  B_ExprLambda    -> ln' [] (stringT --> exprT --> exprT)
+  B_ExprApply     -> ln' [] (exprT --> exprT --> exprT)
+  B_ExprSym       -> ln' [] (stringT --> exprT)
+  B_ExprInd       -> ln' [] (exprT --> (stringT --> exprT --> poly) --> (exprT --> exprT --> poly) --> (stringT --> poly) --> poly)
+                     . ln [Out,In,Out,Out] [Out,Out,In,Out,Out] poly
+                     . ln [Out,In,Out,Out] [Out,Out,Out,In,Out] poly
+                     . ln [Out,In,Out,Out] [Out,Out,Out,Out] poly
   where
     nativeT = Pure . NativeType
     intT = nativeT NT_Int ; stringT = nativeT NT_String
     fileT = nativeT NT_File ; unitT = nativeT NT_Unit
-  
+    synT = nativeT NT_Syntax ; exprT = nativeT NT_Expr
+    arrayT skel = Join (Compose (Array,[skel]))
+
 newtype InstanceMap s a = InstanceMap (Map s (Map (Type s) a))
                         deriving (Eq,Ord,Generic,Semigroup,Monoid)
 i'InstanceMap :: Iso (InstanceMap s a) (InstanceMap s' a') (Map s (Map (Type s) a)) (Map s' (Map (Type s') a'))
