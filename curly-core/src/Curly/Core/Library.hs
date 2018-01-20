@@ -470,6 +470,7 @@ builtinsLib = let blib = zero & set exports builtinsMod . set metadata meta
           (["array","mkArray"],mkBLeaf "mkArray" B_MkArray mkArrayDoc),
           (["array","arrayLength"],mkBLeaf "arrayLength" B_ArrayLength arrayLengthDoc),
           (["array","arrayAt"],mkBLeaf "arrayAt" B_ArrayAt arrayAtDoc),
+          (["array","arraySet"],mkBLeaf "arraySet" B_ArraySet arraySetDoc),
           (["syntax","mkSyntaxNode"],mkBLeaf "mkSyntaxNode" B_SyntaxNode mkSyntaxNodeDoc),
           (["syntax","mkSyntaxSym"],mkBLeaf "mkSyntaxSym" B_SyntaxSym mkSyntaxSymDoc),
           (["syntax","mkSyntaxExpr"],mkBLeaf "mkSyntaxExpr" B_SyntaxExpr mkSyntaxExprDoc),
@@ -553,6 +554,7 @@ builtinsLib = let blib = zero & set exports builtinsMod . set metadata meta
                   mkArrayDoc = "{section {title Make Array} {p Usage: mkArray n {i: ...}} {p Creates an array of size n, populated by calling the given function on every index from 0 to n-1}}"
                   arrayLengthDoc = "{section {title Get Array Length} {p Gets the length of an array.}}"
                   arrayAtDoc = "{section {title Get Array Element} {p Usage: arrayAt arr i} {p Gets the element at index i in the array arr}}"
+                  arraySetDoc = "{section {title Set Array Element} {p Usage: arraySet arr i x k} {p Sets the element at index i, then evaluate k}}"
                   mkSyntaxNodeDoc = ""
                   mkSyntaxSymDoc = ""
                   mkSyntaxExprDoc = ""

@@ -357,7 +357,7 @@ x86_machine_common = VonNeumannMachine {
   _ret = x86_ret, _push = x86_push,
   _pop = x86_pop, _call = x86_call,
   _jcmp = x86_jcmp, _jmp = x86_jmp,
-  _curlyBuiltin = let ?sys = x86_machine_common in liftA2 (+) commonBuiltin (assemblyBuiltin encodeWord),
+  _curlyBuiltin = let ?sys = x86_machine_common in commonBuiltin,
   _assemblyMachine = Just AssemblyMachine {
     _ccall = x86_ccall,
     _poolReg = reg R_ebp_ch,
@@ -376,5 +376,5 @@ x86_sys :: (?x86 :: X86)
 x86_sys name prog machine builtins hooks =
   System name (set (each.executePerm) True) prog (Just hooks) $
   Imperative (\mh -> case mh of
-                 Just h -> let ?sysHooks = h in withNewCurlyBuiltins builtins machine
+                 Just h -> let ?sysHooks = h in withAdditionalBuiltins builtins machine
                  Nothing -> error "The X86 system must provide a JIT environment") 

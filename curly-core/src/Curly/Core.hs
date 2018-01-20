@@ -309,6 +309,7 @@ data Builtin = B_Undefined
              | B_MkArray
              | B_ArrayLength
              | B_ArrayAt
+             | B_ArraySet
 
              | B_SyntaxNode
              | B_SyntaxSym

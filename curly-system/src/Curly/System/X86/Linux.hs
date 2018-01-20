@@ -65,19 +65,19 @@ x86_linux_syscall sc getArg = if32 syscall_32 syscall_64
 x86_linux_malloc, x86_linux_memextend_, x86_linux_brkaddr :: (?x86 :: X86, MonadASM m s) => m BinAddress
 x86_linux_memextend_page :: (?x86 :: X86,MonadASM m s) => m BinAddress
 
-x86_linux_brkaddr = x86_common $ mfix $ \brk -> defBuiltinGet DataSection "brkaddr" $ do
-  defBuiltinGet InitSection "brkaddr-init" $ do
+x86_linux_brkaddr = x86_common $ mfix $ \brk -> getOrDefine DataSection "brkaddr" $ do
+  getOrDefine InitSection "brkaddr-init" $ do
     x86_linux_syscall SC_Brk [pure (Constant 0)]
     store brk destReg
   tell $ encodeWord 0
 -- x86 brk: syscall 0x2d; ebx=<new break>
-x86_linux_memextend_page = x86_common $ defBuiltinGet TextSection "memextend-page" $ do
+x86_linux_memextend_page = x86_common $ getOrDefine TextSection "memextend-page" $ do
   brk <- x86_linux_brkaddr
   pushing [destReg] $ do
     x86_linux_syscall SC_Brk [load tmpReg brk >> add tmpReg (pageSize :: Int) >> argVal tmpReg]
     store brk destReg
   ret
-x86_linux_memextend_pool sz = x86_common $ defBuiltinGet TextSection ("memextend-pool-"+show sz) $ do
+x86_linux_memextend_pool sz = x86_common $ getOrDefine TextSection ("memextend-pool-"+show sz) $ do
   ext <- x86_linux_memextend_page
   brk <- x86_linux_brkaddr
   call ext
@@ -92,16 +92,16 @@ x86_linux_memextend_pool sz = x86_common $ defBuiltinGet TextSection ("memextend
       add destReg (sz :: Int)
       jmp begin
   ret
-x86_linux_memextend_ = x86_common $ defBuiltinGet TextSection "memextend_" $ do
+x86_linux_memextend_ = x86_common $ getOrDefine TextSection "memextend_" $ do
   brk <- x86_linux_brkaddr
   tmpReg <-- esp!Offset (2*x86_wordSize)
   pushing [destReg] $ do
     x86_linux_syscall SC_Brk [argVal tmpReg]
     store brk destReg
   ret
-x86_linux_malloc = x86_common $ defBuiltinGet TextSection "malloc" $ do
+x86_linux_malloc = x86_common $ getOrDefine TextSection "malloc" $ do
   let npools = 9
-  pools <- defBuiltinGet DataSection "malloc-pools" $ reserve (npools*wordSize) 0
+  pools <- getOrDefine DataSection "malloc-pools" $ reserve (npools*wordSize) 0
   let used = [thisReg,tmpReg]
   pushing used $ do
     destReg <-- esp ! Offset (x86_wordSize*(1+length used))
@@ -149,7 +149,8 @@ x86_popThunk dest = x86_common $ do
   dest <-- vr ! EnvOffset
 
 x86_linux_system :: (?x86 :: X86) => String -> System
-x86_linux_system name = x86_sys name prog x86_machine_linux x86_linux_builtin
+x86_linux_system name = x86_sys name prog x86_machine_linux
+                        (liftA2 (+) x86_linux_builtin (let ?sys = x86_machine_linux in assemblyBuiltin encodeWord))
                         (SystemHooks x86_pushThunk x86_popThunk x86_linux_sysAllocBytes)
   where prog = Standalone $ \mtext -> x86_common $ do
           mute $ rawProgram [InitSection,TextSection,DataSection] $ do
@@ -181,7 +182,7 @@ x86_linux_system name = x86_sys name prog x86_machine_linux x86_linux_builtin
         pstart = 0x40000000 + fromIntegral (if32 (ehSize linux_x86) (ehSize linux_x64))
 
 x86_defBuiltin :: (?x86 :: X86,?sysHooks :: SystemHooks,MonadASM m s) => String -> ((?sys :: VonNeumannMachine) => m ()) -> Maybe (m (BinAddress,Value))
-x86_defBuiltin name m = Just $ x86_extended $ (,Constant 0) <$> defBuiltinGet TextSection name m
+x86_defBuiltin name m = Just $ x86_extended $ (,Constant 0) <$> getOrDefine TextSection name m
 
 x86_linux_builtin :: (?x86 :: X86, ?sysHooks :: SystemHooks) => BUILTIN_INSTR
 x86_linux_builtin B_Write = x86_defBuiltin "write" $ do
@@ -219,7 +220,7 @@ x86_linux_builtin B_Read = x86_defBuiltin "read" $ do
     pushing [thisReg] $ callThunk cont
     pushThunk (destReg!ValueOffset)
     tmpReg <-- destReg!ValueOffset
-    cst <- getConstantFun
+    cst <- global_constant
     setThunkVal tmpReg cst extraReg
   tailCall destReg
 x86_linux_builtin B_Open = x86_defBuiltin "open" $ do
@@ -234,7 +235,7 @@ x86_linux_builtin B_Open = x86_defBuiltin "open" $ do
     pushing [thisReg] $ callThunk cont
     pushThunk (destReg!ValueOffset)
     tmpReg <-- destReg!ValueOffset
-    cst <- getConstantFun
+    cst <- global_constant
     setThunkVal tmpReg cst extraReg
   tailCall destReg
 x86_linux_builtin B_Close = x86_defBuiltin "close" $ do
@@ -245,7 +246,7 @@ x86_linux_builtin B_Close = x86_defBuiltin "close" $ do
 x86_linux_builtin B_StringLength = x86_defBuiltin "string-length" $ do
   [string] <- builtinArgs 1
   pushing [thisReg] $ callThunk string
-  cst <- getConstantFun
+  cst <- global_constant
   setThunkVal thisReg cst (destReg!ValueOffset!Offset wordSize)
   jmp cst
 x86_linux_builtin _ = Nothing

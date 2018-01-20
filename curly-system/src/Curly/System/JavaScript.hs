@@ -56,14 +56,14 @@ js_curlyBuiltin :: BUILTIN_INSTR
 js_curlyBuiltin x = let ?sys = js_machine in
   commonBuiltin x +
   case x of
-    B_Write -> Just $ map (,Constant 0) $ defBuiltinGet TextSection "write" $ do
+    B_Write -> Just $ map (,Constant 0) $ getOrDefine TextSection "write" $ do
       [file,str,cont] <- builtinArgs 3
       pushing [thisReg] $ callThunk file
       pushing [thisReg] $ callThunk str
       instr (format "if (%s == 1) { console.log(%s); }" (showLoc (file!ValueOffset)) (showLoc (destReg!ValueOffset)))
       tailCall cont
-    B_String s -> Just $ map (,Constant 0) $ defBuiltinGet TextSection ("str:"+s) $ do
-      cst <- getConstantFun
+    B_String s -> Just $ map (,Constant 0) $ getOrDefine TextSection ("str:"+s) $ do
+      cst <- global_constant
       destReg!TypeOffset <-- cst
       instr (format "%s=%s" (showLoc (destReg!ValueOffset)) (show s))
       ret

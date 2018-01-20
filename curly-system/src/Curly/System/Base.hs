@@ -201,30 +201,36 @@ data SystemHooks = SystemHooks {
   _sysAllocBytes :: ALLOC_BYTES
   }
 
-defBuiltinGet :: (?sys :: VonNeumannMachine, MonadASM m s) => Section -> String -> m () -> m BinAddress
-defBuiltinGet sec b m = do
+getOrDefine :: (?sys :: VonNeumannMachine, MonadASM m s) => Section -> String -> m () -> m BinAddress
+getOrDefine sec b m = do
   ma <- getl (rtBuiltins.at (sec,b))
   mute $ case ma of
     Just a -> return a
     Nothing -> mfix $ \a -> do
       rtBuiltins =~ insert (sec,b) a
       inSection sec (newFunction sec <* m)
-withNewCurlyBuiltins :: BUILTIN_INSTR -> VonNeumannMachine -> VonNeumannMachine
-withNewCurlyBuiltins getB m = m { _curlyBuiltin = liftA2 (+) getB (_curlyBuiltin m) }
+getOrDefineBuiltin :: (?sys :: VonNeumannMachine, MonadASM m s) => Section -> String -> Value -> m () -> m (BinAddress,Value)
+getOrDefineBuiltin sec b v m = (,v) <$> getOrDefine sec b m
+getOrDefineBuiltin0 :: (?sys :: VonNeumannMachine, MonadASM m s) => Section -> String -> m () -> m (BinAddress,Value)
+getOrDefineBuiltin0 sec b m = getOrDefineBuiltin sec b (Constant 0) m
+globalBuiltin :: (?sys :: VonNeumannMachine, MonadASM m s) => m BinAddress -> Value -> m (BinAddress,Value)
+globalBuiltin ma v = map (,v) ma
+withAdditionalBuiltins :: BUILTIN_INSTR -> VonNeumannMachine -> VonNeumannMachine
+withAdditionalBuiltins getB m = m { _curlyBuiltin = liftA2 (+) getB (_curlyBuiltin m) }
  
-getArgFun :: (?sys :: VonNeumannMachine,MonadASM m s) => m BinAddress
-getArgFun = defBuiltinGet TextSection "argument" $ do 
+global_argFun :: (?sys :: VonNeumannMachine,MonadASM m s) => m BinAddress
+global_argFun = getOrDefine TextSection "argument" $ do 
   pushing [thisReg] $ do
     callThunk (thisReg!ValueOffset)
     tmpReg <-- thisReg
   thisReg <== tmpReg
   ret
-getConstantFun :: (?sys :: VonNeumannMachine,MonadASM m s) => m BinAddress
-getConstantFun = defBuiltinGet TextSection "constant" $ do
+global_constant :: (?sys :: VonNeumannMachine,MonadASM m s) => m BinAddress
+global_constant = getOrDefine TextSection "constant" $ do
   destReg <== thisReg
   ret
-getPartial :: (?sys :: VonNeumannMachine, MonadASM m s) => Int -> m BinAddress
-getPartial nbargs = do
+global_partialApply :: (?sys :: VonNeumannMachine, MonadASM m s) => Int -> m BinAddress
+global_partialApply nbargs = do
   ma <- getl (rtPartial.at nbargs)
   mute $ case ma of
     Just a -> return a
@@ -249,8 +255,8 @@ getPartial nbargs = do
 
         jmp (thisReg!TypeOffset)
 
-getSeq :: (?sys :: VonNeumannMachine,MonadASM m s) => m BinAddress
-getSeq = defBuiltinGet TextSection "seq" $ do
+global_seq :: (?sys :: VonNeumannMachine,MonadASM m s) => m BinAddress
+global_seq = getOrDefine TextSection "seq" $ do
   builtinArgs 2
   pushing [thisReg] $ callThunk (thisReg!ValueOffset!EnvOffset)
   thisReg <-- thisReg!ValueOffset
@@ -267,43 +273,67 @@ builtinArgs n = reverse (take n (iterate (!EnvOffset) (thisReg!ValueOffset))) <$
           ba (n-1)
 
 commonBuiltin :: (?sys :: VonNeumannMachine) => BUILTIN_INSTR
-commonBuiltin B_AddInt = Just $ do
-  a <- defBuiltinGet TextSection "addInt" $ mdo
-    builtinArgs 2
-    pushing [thisReg] $ callThunk (thisReg!ValueOffset)
-    pushV (destReg!ValueOffset)
-    popThunk (thisReg!ValueOffset)
-    pushing [thisReg] $ callThunk (thisReg!ValueOffset)
-    popThunk (thisReg!ValueOffset)
-    popV tmpReg
-    add (destReg!ValueOffset) tmpReg
-    cst <- getConstantFun
-    thisReg!TypeOffset <-- cst
-    thisReg!ValueOffset <-- destReg!ValueOffset
-    ret
-  return (a,Constant 0)
-commonBuiltin (B_Number n) = Just $ do
-  cst <- getConstantFun
-  return (cst,toValue n)
-commonBuiltin (B_FileDesc n) = Just $ do
-  cst <- getConstantFun
-  return (cst,toValue n)
-commonBuiltin B_Unit = Just $ do
-  f <- defBuiltinGet TextSection "starting-world" $ ret
-  return (f,Constant 0)
-commonBuiltin B_Seq = Just $ do
-  f <- getSeq
-  return (f,Constant 0)
+commonBuiltin B_AddInt = Just $ getOrDefineBuiltin0 TextSection "addInt" $ mdo
+  builtinArgs 2
+  pushing [thisReg] $ callThunk (thisReg!ValueOffset)
+  pushV (destReg!ValueOffset)
+  popThunk (thisReg!ValueOffset)
+  pushing [thisReg] $ callThunk (thisReg!ValueOffset)
+  popThunk (thisReg!ValueOffset)
+  popV tmpReg
+  add (destReg!ValueOffset) tmpReg
+  cst <- global_constant
+  thisReg!TypeOffset <-- cst
+  thisReg!ValueOffset <-- destReg!ValueOffset
+  ret
+commonBuiltin (B_Number n) = Just $ globalBuiltin global_constant (toValue n)
+commonBuiltin (B_FileDesc n) = Just $ globalBuiltin global_constant (toValue n)
+commonBuiltin B_Unit = Just $ getOrDefineBuiltin0 TextSection "unit" $ ret
+commonBuiltin B_Seq = Just $ globalBuiltin global_seq (Constant 0)
 commonBuiltin _ = Nothing
 
-assemblyBuiltin :: (?sys :: VonNeumannMachine) => (Word32 -> BinaryCode) -> BUILTIN_INSTR
+assemblyBuiltin :: (?sysHooks :: SystemHooks, ?sys :: VonNeumannMachine) => (Word32 -> BinaryCode) -> BUILTIN_INSTR
 assemblyBuiltin encodeWord (B_String s) = Just $ do
   str <- inSection DataSection $ getCounter <* do
     tell $ encodeWord 1
     tell $ encodeWord (fromIntegral (length s))
     for_ s $ tell . binaryCode (Just 1,1)
-  cst <- getConstantFun
-  return (cst,toValue str)
+  globalBuiltin global_constant (toValue str)
+assemblyBuiltin _ B_MkArray = Just $ getOrDefineBuiltin0 TextSection "mkArray" $ do
+  [size] <- builtinArgs 1
+  tmpReg <-- size
+  doTimes (case wordSize of 8 -> 3; _ -> 2) $ add tmpReg tmpReg
+  add tmpReg (2*wordSize :: Int)
+  allocBytes tmpReg tmpReg
+  tmpReg!Offset 0 <-- (1::Int)
+  tmpReg!Offset wordSize <-- size
+  cst <- global_constant
+  thisReg!TypeOffset <-- cst
+  thisReg!ValueOffset <-- tmpReg
+  jmp cst
+assemblyBuiltin _ B_ArrayAt = Just $ getOrDefineBuiltin0 TextSection "arrayGet" $ do
+  [arr,ind] <- builtinArgs 2
+  pushing [thisReg] $ callThunk arr
+  pushing [thisReg] $ callThunk ind
+  tmpReg <-- destReg!ValueOffset
+  cst <- global_constant
+  thisReg!ValueOffset <-- arr!ValueOffset!%(WordStride tmpReg,Offset (2*wordSize))
+  thisReg!TypeOffset <-- cst
+  jmp cst
+assemblyBuiltin _ B_ArraySet = Just $ getOrDefineBuiltin0 TextSection "arraySet" $ do
+  [arr,ind,v,k] <- builtinArgs 4
+  pushing [thisReg] $ callThunk arr
+  pushing [thisReg] $ callThunk ind
+  tmpReg <-- destReg!ValueOffset
+  arr!ValueOffset!%(WordStride tmpReg,Offset (2*wordSize)) <-- v
+  tailCall k
+assemblyBuiltin _ B_ArrayLength = Just $ getOrDefineBuiltin0 TextSection "arrayLength" $ do
+  [arr] <- builtinArgs 1
+  pushing [thisReg] $ callThunk arr
+  cst <- global_constant
+  thisReg!ValueOffset <-- arr!ValueOffset!Offset wordSize
+  thisReg!TypeOffset <-- cst
+  jmp cst
 assemblyBuiltin _ _ = Nothing
 
 (<--) :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l,IsValue v) => l -> v -> m ()

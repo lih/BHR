@@ -59,7 +59,7 @@ specialize expr = inSection TextSection $ getCounter <* specTail (sem expr)
       tailCall destReg
 
     specHead (SemSymbol (Argument n)) = do
-      f <- getArgFun
+      f <- global_argFun
       setDest f (composing (const (!EnvOffset)) [1..n] (thisReg!ValueOffset))
     specHead (SemSymbol (Builtin _ b)) = case _curlyBuiltin ?sys b of
       Just mav -> uncurry setDest =<< mav
@@ -76,7 +76,7 @@ specialize expr = inSection TextSection $ getCounter <* specTail (sem expr)
                   pushThunk destReg
                   specHead (sem arg)
                 tmpReg <-- destReg
-              szth <- getPartial (length l)
+              szth <- global_partialApply (length l)
               setDest szth tmpReg
 
 
@@ -203,7 +203,7 @@ jit_exprInd pe = let ?sys = jit_machine in do
         poke (castPtr pret) (2 :: Int)
         poke (castPtr (pret`plusPtr`wordSize)) ps
 
-jit_memextend_pool sz = defBuiltinGet TextSection ("memextend-pool-"+show sz) $ do
+jit_memextend_pool sz = getOrDefine TextSection ("memextend-pool-"+show sz) $ do
   ccall (Just poolReg) mallocAddr [return (Constant pageSize)]
   pushing [poolReg] $ do
     tmpReg <-- poolReg
@@ -231,9 +231,7 @@ jit_popThunk dest = ignore $ let ?sys = jit_machine in do
   poolReg <-- dest
   dest <-- dest ! EnvOffset
 
-jit_defBuiltin :: MonadASM m s => Section -> String -> ((?sys :: VonNeumannMachine) => m ()) -> Maybe (m (BinAddress,Value))
-jit_defBuiltin sec b m = Just $ let ?sys = jit_machine in defBuiltinGet sec b m <&> (,Constant 0)
-jit_curlyBuiltin B_ExprSym = jit_defBuiltin TextSection "mkExprSymbol" $ do
+jit_builtin B_ExprSym = Just $ getOrDefineBuiltin0 TextSection "mkExprSymbol" $ do
   [str] <- builtinArgs 1
   pushing [thisReg] $ callThunk str
   ccall2 (Just (thisReg!ValueOffset)) (hsAddr jit_mkExprSymbol) 
@@ -241,10 +239,10 @@ jit_curlyBuiltin B_ExprSym = jit_defBuiltin TextSection "mkExprSymbol" $ do
     (do tmpReg <-- str!ValueOffset
         add tmpReg (2*wordSize :: Integer)
         return tmpReg)
-  cst <- getConstantFun
+  cst <- global_constant
   thisReg!TypeOffset <-- cst
   jmp cst
-jit_curlyBuiltin B_ExprLambda = jit_defBuiltin TextSection "mkExprLambda" $ do
+jit_builtin B_ExprLambda = Just $ getOrDefineBuiltin0 TextSection "mkExprLambda" $ do
   [param,body] <- builtinArgs 2
   pushing [thisReg] $ callThunk param
   pushing [thisReg] $ callThunk body
@@ -255,27 +253,27 @@ jit_curlyBuiltin B_ExprLambda = jit_defBuiltin TextSection "mkExprLambda" $ do
         add tmpReg (2*wordSize :: Integer)
         return tmpReg)
     (pure (body!ValueOffset))
-  cst <- getConstantFun
+  cst <- global_constant
   thisReg!TypeOffset <-- cst
   jmp cst
-jit_curlyBuiltin B_ExprApply = jit_defBuiltin TextSection "mkExprApply" $ do
+jit_builtin B_ExprApply = Just $ getOrDefineBuiltin0 TextSection "mkExprApply" $ do
   [f,x] <- builtinArgs 2
   pushing [thisReg] $ callThunk f
   pushing [thisReg] $ callThunk x
   ccall2 (Just (thisReg!ValueOffset)) (hsAddr jit_mkExprApply) (pure (f!ValueOffset)) (pure (x!ValueOffset))
-  cst <- getConstantFun
+  cst <- global_constant
   thisReg!TypeOffset <-- cst
   jmp cst
-jit_curlyBuiltin B_ExprInd = jit_defBuiltin TextSection "exprInd" $ mdo
+jit_builtin B_ExprInd = Just $ getOrDefineBuiltin0 TextSection "exprInd" $ mdo
   [e,kl,ka,ks] <- builtinArgs 4
   pushing [thisReg] $ callThunk e
   ccall1 (Just tmpReg) (hsAddr jit_exprInd) (pure (e!ValueOffset))
-  vTable <- defBuiltinGet DataSection "exprInd_t1" $ do
+  vTable <- getOrDefine DataSection "exprInd_t1" $ do
     for_ [onAp,onLam,onSym] (\(BA n) -> tell (binaryCode (Just wordSize,wordSize) n))
   add (tmpReg!Offset 0) vTable
   jmp (tmpReg!Offset 0)
   
-  cst <- getConstantFun
+  cst <- global_constant
   let on2 k = do
         pushing [tmpReg] $ callThunk k
         pushThunk (destReg!ValueOffset)
@@ -297,12 +295,14 @@ jit_curlyBuiltin B_ExprInd = jit_defBuiltin TextSection "exprInd" $ mdo
     tailCall destReg
   return ()
   
-jit_curlyBuiltin _ = Nothing
+jit_builtin _ = Nothing
 
 jit_machine :: VonNeumannMachine
 jit_machine = let Imperative imp = _sysImpl hostSystem
-              in withNewCurlyBuiltins jit_curlyBuiltin $
-                 imp $ Just $ SystemHooks jit_pushThunk jit_popThunk jit_allocBytes
+                  sys = let ?sys = sys
+                        in withAdditionalBuiltins jit_builtin $
+                           imp $ Just $ SystemHooks jit_pushThunk jit_popThunk jit_allocBytes
+              in sys
 newJITContext :: IO (JITContext s)
 newJITContext = map JITContext (newIORef (JITData defaultRuntime zero))
 jitExpr :: (Show (Pretty s),Identifier s) => JITContext s -> AnnExpr s -> IO RunJITExpr
