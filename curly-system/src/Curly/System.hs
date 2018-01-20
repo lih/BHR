@@ -25,6 +25,7 @@ import Foreign.Marshal.Array
 import Foreign.Marshal.Alloc (mallocBytes)
 import Foreign.StablePtr
 import Foreign.C.String (castCCharToChar)
+import Foreign.Storable (peek,poke)
 
 knownSystems :: Map String System
 knownSystems = fromAList [(_sysName s,s) | s <- [hostSystem
@@ -155,21 +156,52 @@ mallocAddr = hsAddr mallocBytes
 type JIT_Expr = Ptr ()
 jit_mkExprSymbol :: Int -> Ptr CChar -> IO JIT_Expr
 jit_mkExprSymbol n p = do
-  str <- peekArray n p
-  sp <- newStablePtr (mkSymbol (map castCCharToChar str) :: Expression String String)
+  str <- map castCCharToChar <$> peekArray n p
+  sp <- newStablePtr (mkSymbol str :: Expression String String)
   return (castStablePtrToPtr sp)
 jit_mkExprLambda :: Int -> Ptr CChar -> JIT_Expr -> IO JIT_Expr
 jit_mkExprLambda n ps pe = do
-  str <- peekArray n ps
+  str <- map castCCharToChar <$> peekArray n ps
   e <- deRefStablePtr (castPtrToStablePtr pe)
-  sp <- newStablePtr (mkAbstract (map castCCharToChar str) e :: Expression String String)
+  putStrLn $ format "mkExprLambda %s %s" str (show e)
+  sp <- newStablePtr (mkAbstract str e :: Expression String String)
   return (castStablePtrToPtr sp)
 jit_mkExprApply :: JIT_Expr -> JIT_Expr -> IO JIT_Expr
 jit_mkExprApply pf px  = do
   f <- deRefStablePtr (castPtrToStablePtr pf)
   x <- deRefStablePtr (castPtrToStablePtr px)
+  putStrLn $ format "mkExprApply %s %s" (show f) (show x)
   sp <- newStablePtr (mkApply f x :: Expression String String)
   return (castStablePtrToPtr sp)
+jit_exprInd :: JIT_Expr -> IO (Ptr ())
+jit_exprInd pe = let ?sys = jit_machine in do
+  e <- deRefStablePtr (castPtrToStablePtr pe)
+  case e :: Expression String String of
+    Join (Apply f x) -> do
+      pf <- castStablePtrToPtr <$> newStablePtr f
+      px <- castStablePtrToPtr <$> newStablePtr x
+      mallocBytes (3*wordSize) <*= \pret -> do
+        poke (castPtr pret) (0 :: Int)
+        poke (castPtr (pret`plusPtr`wordSize)) pf
+        poke (castPtr (pret`plusPtr`(2*wordSize))) px
+    Join (Lambda s e) -> do
+      pe <- castStablePtrToPtr <$> newStablePtr e
+      ps <- mallocBytes (2*wordSize + length s)
+      do poke (castPtr ps) (1 :: Int)
+         poke (castPtr (ps`plusPtr`wordSize)) (length s)
+         pokeArray (castPtr (ps`plusPtr`(2*wordSize))) s
+      mallocBytes (3*wordSize) <*= \pret -> do
+        poke (castPtr pret) (1 :: Int)
+        poke (castPtr (pret`plusPtr`wordSize)) ps
+        poke (castPtr (pret`plusPtr`(2*wordSize))) pe
+    Pure s -> do
+      ps <- mallocBytes (2*wordSize + length s)
+      do poke (castPtr ps) (1 :: Int)
+         poke (castPtr (ps`plusPtr`wordSize)) (length s)
+         pokeArray (castPtr (ps`plusPtr`(2*wordSize))) s
+      mallocBytes (2*wordSize) <*= \pret -> do
+        poke (castPtr pret) (2 :: Int)
+        poke (castPtr (pret`plusPtr`wordSize)) ps
 
 jit_memextend_pool sz = defBuiltinGet TextSection ("memextend-pool-"+show sz) $ do
   ccall (Just poolReg) mallocAddr [return (Constant pageSize)]
@@ -202,8 +234,69 @@ jit_popThunk dest = ignore $ let ?sys = jit_machine in do
 jit_defBuiltin :: MonadASM m s => Section -> String -> ((?sys :: VonNeumannMachine) => m ()) -> Maybe (m (BinAddress,Value))
 jit_defBuiltin sec b m = Just $ let ?sys = jit_machine in defBuiltinGet sec b m <&> (,Constant 0)
 jit_curlyBuiltin B_ExprSym = jit_defBuiltin TextSection "mkExprSymbol" $ do
-  call $ hsAddr $ putStrLn "Called from Curly !"
-  ret
+  [str] <- builtinArgs 1
+  pushing [thisReg] $ callThunk str
+  ccall2 (Just (thisReg!ValueOffset)) (hsAddr jit_mkExprSymbol) 
+    (pure (str!ValueOffset!Offset wordSize))
+    (do tmpReg <-- str!ValueOffset
+        add tmpReg (2*wordSize :: Integer)
+        return tmpReg)
+  cst <- getConstantFun
+  thisReg!TypeOffset <-- cst
+  jmp cst
+jit_curlyBuiltin B_ExprLambda = jit_defBuiltin TextSection "mkExprLambda" $ do
+  [param,body] <- builtinArgs 2
+  pushing [thisReg] $ callThunk param
+  pushing [thisReg] $ callThunk body
+  
+  ccall3 (Just (thisReg!ValueOffset)) (hsAddr jit_mkExprLambda) 
+    (pure (param!ValueOffset!Offset wordSize))
+    (do tmpReg <-- param!ValueOffset
+        add tmpReg (2*wordSize :: Integer)
+        return tmpReg)
+    (pure (body!ValueOffset))
+  cst <- getConstantFun
+  thisReg!TypeOffset <-- cst
+  jmp cst
+jit_curlyBuiltin B_ExprApply = jit_defBuiltin TextSection "mkExprApply" $ do
+  [f,x] <- builtinArgs 2
+  pushing [thisReg] $ callThunk f
+  pushing [thisReg] $ callThunk x
+  ccall2 (Just (thisReg!ValueOffset)) (hsAddr jit_mkExprApply) (pure (f!ValueOffset)) (pure (x!ValueOffset))
+  cst <- getConstantFun
+  thisReg!TypeOffset <-- cst
+  jmp cst
+jit_curlyBuiltin B_ExprInd = jit_defBuiltin TextSection "exprInd" $ mdo
+  [e,kl,ka,ks] <- builtinArgs 4
+  pushing [thisReg] $ callThunk e
+  ccall1 (Just tmpReg) (hsAddr jit_exprInd) (pure (e!ValueOffset))
+  vTable <- defBuiltinGet DataSection "exprInd_t1" $ do
+    for_ [onAp,onLam,onSym] (\(BA n) -> tell (binaryCode (Just wordSize,wordSize) n))
+  add (tmpReg!Offset 0) vTable
+  jmp (tmpReg!Offset 0)
+  
+  cst <- getConstantFun
+  let on2 k = do
+        pushing [tmpReg] $ callThunk k
+        pushThunk (destReg!ValueOffset)
+        destReg!ValueOffset!TypeOffset <-- cst
+        destReg!ValueOffset!ValueOffset <-- tmpReg!Offset wordSize
+        pushing [tmpReg] $ callThunk destReg
+        pushThunk (destReg!ValueOffset)
+        destReg!ValueOffset!TypeOffset <-- cst
+        destReg!ValueOffset!ValueOffset <-- tmpReg!Offset (2*wordSize)
+        tailCall destReg
+      
+  onLam <- getCounter <* on2 kl
+  onAp <- getCounter <* on2 ka
+  onSym <- getCounter <* do
+    pushing [thisReg,tmpReg] $ callThunk ks
+    pushThunk (destReg!ValueOffset)
+    destReg!ValueOffset!TypeOffset <-- cst
+    destReg!ValueOffset!ValueOffset <-- tmpReg!Offset wordSize
+    tailCall destReg
+  return ()
+  
 jit_curlyBuiltin _ = Nothing
 
 jit_machine :: VonNeumannMachine

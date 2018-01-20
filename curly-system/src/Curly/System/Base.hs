@@ -12,8 +12,10 @@ newtype RegID = RegID Int
               deriving (Show,Eq,Ord)
 newtype BinAddress = BA { getBA :: Int }
                      deriving (Semigroup,Monoid,Eq,Ord)
+data OffsetStride = ByteStride RegID | WordStride RegID | NoStride
+                  deriving (Eq,Ord,Show)
 data Locus = Register RegID
-           | AtOffset Locus Offset
+           | AtOffset Locus OffsetStride Offset 
            deriving (Show,Eq,Ord)
 data Offset = Offset Int
             | ValueOffset | TypeOffset | EnvOffset
@@ -41,15 +43,18 @@ instance IsValue Word32 where toValue = Constant . fromIntegral
 instance IsValue Word8 where toValue = Constant . fromIntegral
 instance IsValue BinAddress where toValue (BA a) = Constant (fromIntegral a)
 
+
+(!%) :: IsLocus l => l -> (OffsetStride,Offset) -> Locus
+l !% (i,o) = AtOffset (toLocus l) i o
 (!) :: IsLocus l => l -> Offset -> Locus
-(!) = AtOffset . toLocus
-infixl 8 !
+l ! o = l !% (NoStride,o)
+infixl 8 !, !%
 
 t'Register :: Traversal' Locus RegID
 t'Register k (Register r) = Register<$>k r
 t'Register _ x = return x
-t'AtOffset :: Traversal' Locus (Locus,Offset)
-t'AtOffset k (AtOffset r o) = uncurry AtOffset<$>k (r,o)
+t'AtOffset :: Traversal' Locus (Locus,OffsetStride,Offset)
+t'AtOffset k (AtOffset r i o) = uncurry3 AtOffset<$>k (r,i,o)
 t'AtOffset _ x = return x
 t'Variable :: Traversal' Value Locus
 t'Variable k (Variable r) = Variable<$>k r
@@ -57,7 +62,7 @@ t'Variable _ x = return x
 
 baseRegister :: Locus -> RegID
 baseRegister (Register r) = r
-baseRegister (AtOffset l _) = baseRegister l
+baseRegister (AtOffset l _ _) = baseRegister l
 
 data BinaryCode = BC {
   _bcSize :: Int,
@@ -291,6 +296,16 @@ commonBuiltin B_Seq = Just $ do
   return (f,Constant 0)
 commonBuiltin _ = Nothing
 
+assemblyBuiltin :: (?sys :: VonNeumannMachine) => (Word32 -> BinaryCode) -> BUILTIN_INSTR
+assemblyBuiltin encodeWord (B_String s) = Just $ do
+  str <- inSection DataSection $ getCounter <* do
+    tell $ encodeWord 1
+    tell $ encodeWord (fromIntegral (length s))
+    for_ s $ tell . binaryCode (Just 1,1)
+  cst <- getConstantFun
+  return (cst,toValue str)
+assemblyBuiltin _ _ = Nothing
+
 (<--) :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l,IsValue v) => l -> v -> m ()
 l <-- v = _cp ?sys (toLocus l) (toValue v)
 infix 3 <--,<==
@@ -346,8 +361,22 @@ add l v = _add ?sys (toLocus l) (toValue v)
 
 assemblyMachine :: (?sys :: VonNeumannMachine) => AssemblyMachine
 assemblyMachine = let Just asm = _assemblyMachine ?sys in asm
+ccall_void :: Maybe Locus
+ccall_void = Nothing
 ccall :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l) => Maybe l -> BinAddress -> [m Value] -> m ()
 ccall ml = _ccall assemblyMachine (map toLocus ml)
+ccall0 :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l) => Maybe l -> BinAddress -> m ()
+ccall0 ml a = ccall ml a []
+ccall1 :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l,IsValue v) => Maybe l -> BinAddress ->
+          m v -> m ()
+ccall1 ml a v1 = ccall ml a [map toValue v1]
+ccall2 :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l,IsValue v,IsValue v') => Maybe l -> BinAddress ->
+          m v -> m v' -> m ()
+ccall2 ml a v1 v2 = ccall ml a [map toValue v1, map toValue v2]
+ccall3 :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l,IsValue v,IsValue v',IsValue v'') => Maybe l -> BinAddress ->
+          m v -> m v' -> m v'' -> m ()
+ccall3 ml a v1 v2 v3 = ccall ml a [map toValue v1, map toValue v2, map toValue v3]
+
 poolReg :: (?sys :: VonNeumannMachine) => RegID
 poolReg = _poolReg assemblyMachine
 wordSize :: (?sys :: VonNeumannMachine,Num n) => n

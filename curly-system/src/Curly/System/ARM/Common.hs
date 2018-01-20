@@ -96,10 +96,10 @@ rdst = reg R_r11
 arm_cp (Register r) (Constant c) = [Conditional C_AL (MOVL (toR r) (fromIntegral c))
                                            ,Conditional C_AL (MOVH (toR r) (fromIntegral (c`shiftR`16)))]
 arm_cp (Register rd) (Variable (Register rs)) = [Conditional C_AL (MOV (toR rd) (toR rs))]
-arm_cp (Register rd) (Variable (AtOffset (Register rs) off)) = [Conditional C_AL (LDR (toR rd) (toR rs,archOffset off))]
-arm_cp (Register rd) (Variable (AtOffset l off)) = arm_cp (Register rsrc) (Variable l) + arm_cp (Register rd) (Variable (rsrc!off))
-arm_cp (AtOffset (Register rd) off) (Variable (Register rs)) = [Conditional C_AL (STR (toR rd,archOffset off) (toR rs))]
-arm_cp (AtOffset l off) v = arm_cp (Register rdst) (Variable l) + arm_cp (rdst!off) v
+arm_cp (Register rd) (Variable (AtOffset (Register rs) _ off)) = [Conditional C_AL (LDR (toR rd) (toR rs,archOffset off))]
+arm_cp (Register rd) (Variable (AtOffset l _ off)) = arm_cp (Register rsrc) (Variable l) + arm_cp (Register rd) (Variable (rsrc!off))
+arm_cp (AtOffset (Register rd) _ off) (Variable (Register rs)) = [Conditional C_AL (STR (toR rd,archOffset off) (toR rs))]
+arm_cp (AtOffset l _ off) v = arm_cp (Register rdst) (Variable l) + arm_cp (rdst!off) v
 
 arm_add = undefined
 arm_push (Variable (Register r)) = arm_instr [Conditional C_AL (Push [toR r])]
@@ -124,8 +124,8 @@ arm_jmp (Constant n) = do
   BA cur <- getCounter
   arm_instr [Conditional C_AL (Branch (fromIntegral n - fromIntegral cur - 8))]
 arm_jmp (Variable (Register r)) = arm_instr [Conditional C_AL (MOV R_pc (toR r))]
-arm_jmp (Variable (AtOffset (Register r) off)) = arm_instr [Conditional C_AL (LDR R_pc (toR r,archOffset off))]
-arm_jmp (Variable (AtOffset l off)) = do
+arm_jmp (Variable (AtOffset (Register r) _ off)) = arm_instr [Conditional C_AL (LDR R_pc (toR r,archOffset off))]
+arm_jmp (Variable (AtOffset l _ off)) = do
   arm_instr (arm_cp (Register rsrc) (Variable l))
   arm_jmp (Variable (rsrc!off))
 

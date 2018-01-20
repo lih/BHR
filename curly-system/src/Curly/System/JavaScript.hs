@@ -88,13 +88,15 @@ showReg (RegID 2) = "tmp"
 showReg (RegID 3) = "extra"
 showReg (RegID n) = error ("unknown register "+show n)
 
-showOff (Offset o) = format "[%d]" o
-showOff ValueOffset = ".value"
-showOff TypeOffset = ".type"
-showOff EnvOffset = ".child"
+showOff NoStride (Offset o) = format "[%d]" o
+showOff (ByteStride r) (Offset o) = format "[%s+%d]" (showReg r) o
+showOff (WordStride r) (Offset o) = format "[4*%s+%d]" (showReg r) o
+showOff _ ValueOffset = ".value"
+showOff _ TypeOffset = ".type"
+showOff _ EnvOffset = ".child"
 
 showLoc (Register r) = showReg r
-showLoc (AtOffset r off) = showLoc r+showOff off
+showLoc (AtOffset r i off) = showLoc r+showOff i off
 
 showVal (Constant i) = show i
 showVal (Variable l) = showLoc l
