@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                curly-system
-version:             0.2.2
+version:             0.3
 -- synopsis:            
 -- description:         
 license:             MIT
