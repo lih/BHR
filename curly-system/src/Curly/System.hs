@@ -12,6 +12,7 @@ import Definitive
 import Curly.Core
 import Curly.Core.Annotated
 import Curly.Core.Library
+import Curly.Core.Documentation
 import Curly.System.Base
 import qualified Curly.System.X86.Linux as X86_Linux
 import qualified Curly.System.ARM.Linux as ARM_Linux
@@ -43,7 +44,7 @@ setDest t v = do
   destReg!TypeOffset  <-- t
   destReg!ValueOffset <-- v
 
-specialize :: forall m s. (?sys :: VonNeumannMachine,MonadASM m s,Show s,Show (Pretty s),Identifier s) => AnnExpr s -> m BinAddress
+specialize :: forall m s. (?sys :: VonNeumannMachine,MonadASM m s,Show s,Documented s,Identifier s) => AnnExpr s -> m BinAddress
 specialize expr = inSection TextSection $ getCounter <* specTail (sem expr)
   where
     specLambda e = get >>= \m -> mute $ case m^.rtAddresses.at e of
@@ -305,7 +306,7 @@ jit_machine = let Imperative imp = _sysImpl hostSystem
               in sys
 newJITContext :: IO (JITContext s)
 newJITContext = map JITContext (newIORef (JITData defaultRuntime zero))
-jitExpr :: (Show (Pretty s),Identifier s) => JITContext s -> AnnExpr s -> IO RunJITExpr
+jitExpr :: (Documented s,Identifier s) => JITContext s -> AnnExpr s -> IO RunJITExpr
 jitExpr cxt e = let ?sys = jit_machine in runJIT cxt (specialize (mkRunExpr e))
 
 foreign import ccall "mprotect"

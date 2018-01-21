@@ -6,11 +6,11 @@ module Main(
 import Definitive
 import Language.Format
 import System.Environment (getArgs)
+import Curly.Core.Documentation
 import Curly.DHT.Kademlia
 import Curly.Core.Security
 import Curly.Core.Library
 import Curly.Core.VCS
-import Curly.Core (pretty)
 import IO.Network.Socket
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar

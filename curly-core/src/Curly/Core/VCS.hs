@@ -17,9 +17,9 @@ newtype Hash = Hash Chunk
 hashData :: Bytes -> Hash
 hashData b = Hash (SHA256.hashlazy b)
 instance Show Hash where
-  show (Hash h) = pretty h
+  show (Hash h) = show (B64Chunk h)
 instance Read Hash where
-  readsPrec _ = readsParser (readable <&> \(Pretty h) -> Hash h)
+  readsPrec _ = readsParser (readable <&> \(B64Chunk h) -> Hash h)
 instance Serializable Hash where
   encode (Hash h) = h^.chunkBuilder
 instance Format Hash where
@@ -52,17 +52,17 @@ class MonadIO vc => MonadVC vc s | vc -> s where
   vcLoad :: Format a => s -> (WithResponse a -> VCKey ()) -> vc (Maybe a)
   runVC :: vc a -> IO a
 
+keyName k = show (B64Chunk (serialize (k WithResponse :: VCKey ())^.chunk))
+
 newtype File_VC a = File_VC (IO a)
                   deriving (Functor,SemiApplicative,Unit,Applicative)
 instance Monad File_VC where join = coerceJoin File_VC
 instance MonadIO File_VC where liftIO = File_VC
 instance MonadVC File_VC String where
   vcStore base k v = liftIO $ do
-    let keyName = pretty (serialize (k WithResponse)^.chunk)
-    writeSerial (base+"/"+keyName) v
+    writeSerial (base+"/"+keyName k) v
   vcLoad base k = liftIO $ do
-    let keyName = pretty (serialize (k WithResponse)^.chunk)
-    try (return Nothing) (Just <$> readFormat (base+"/"+keyName))
+    try (return Nothing) (Just <$> readFormat (base+"/"+keyName k))
   runVC (File_VC io) = io
 
 vcsProtoRoots :: IORef [FilePath]
@@ -73,18 +73,16 @@ instance Monad Proto_VC where join = coerceJoin Proto_VC
 instance MonadIO Proto_VC where liftIO = Proto_VC
 instance MonadVC Proto_VC (String,String) where
   vcStore (proto,path) k v = liftIO $ do
-    let keyName = pretty (serialize (k WithResponse)^.chunk)
     foldr (\dir tryNext ->
             try tryNext
-            $ withCreateProcess (Sys.proc "sh" [dir+"/"+proto,"put",path,keyName]) { Sys.std_in = Sys.CreatePipe }
+            $ withCreateProcess (Sys.proc "sh" [dir+"/"+proto,"put",path,keyName k]) { Sys.std_in = Sys.CreatePipe }
             $ \(Just i) _ _ _ -> writeHSerial i v)
       unit =<< readIORef vcsProtoRoots
     
   vcLoad (proto,path) k = liftIO $ do
-    let keyName = pretty (serialize (k WithResponse)^.chunk)
     foldr (\dir tryNext ->
             try tryNext
-            $ withCreateProcess (Sys.proc "sh" [dir+"/"+proto,"get",path,keyName]) { Sys.std_out = Sys.CreatePipe }
+            $ withCreateProcess (Sys.proc "sh" [dir+"/"+proto,"get",path,keyName k]) { Sys.std_out = Sys.CreatePipe }
             $ \_ (Just o) _ _ -> try (return Nothing) (Just <$> readHFormat o))
       (return Nothing) =<< readIORef vcsProtoRoots
   runVC (Proto_VC io) = io

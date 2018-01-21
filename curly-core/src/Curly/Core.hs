@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances, ScopedTypeVariables, StandaloneDeriving, PatternSynonyms, ViewPatterns #-}
+{-# LANGUAGE UndecidableInstances, ScopedTypeVariables, StandaloneDeriving, PatternSynonyms, ViewPatterns, TypeFamilies #-}
 module Curly.Core(
   -- * Expressions
   ExprNode(..),Expression,
@@ -8,17 +8,18 @@ module Curly.Core(
   -- ** Utilities
   c'Expression,syntax,semantic,mapParams,
   -- * Pretty-printing
-  Pretty(..),pretty,indent,(</>),FormatArg(..),FormatType(..),format,
+  indent,(</>),FormatArg(..),FormatType(..),format,
   -- * Environment
   envVar,curlyUserDir,curlyKeysFile,curlyCacheDir,curlyCommitDir,curlyPort,
   -- * Conditional output
   LogLevel(..),envLogLevel,logLine,trylogLevel,trylog,liftIOLog,cyDebug,
   -- * Misc
-  PortNumber,watchFile,connectTo,(*+)
+  B64Chunk(..),PortNumber,watchFile,connectTo,(*+)
   ) where
 
 import Definitive
 import Language.Format
+import Curly.Core.Documentation
 import Control.DeepSeq
 import IO.Filesystem ((</>))
 import IO.Network.Socket (PortNumber,connect,getAddrInfo)
@@ -65,7 +66,6 @@ instance (Format (f (Cofree f a)),Format a) => Format (Cofree f a) where
   datum = uncurry Step<$>datum
 c'Expression :: Constraint (Expression a b)
 c'Expression = c'_
-
 
 data SemanticT e i o = SemApply e e
                      | SemAbstract i e
@@ -124,13 +124,6 @@ mapParams f = doMap
           SemAbstract s e -> mkAbstract (f s) (doMap e)
           SemApply a b -> mkApply (doMap a) (doMap b)
 
--- | A type for objects that should be printed prettily
-newtype Pretty a = Pretty a
-
--- | A shortcut for @show . Pretty@
-pretty :: Show (Pretty a) => a -> String
-pretty = show . Pretty
-
 -- | Prepend the second to each line of the first.
 indent :: String -> String -> String
 indent p s = p+indent' s
@@ -138,15 +131,10 @@ indent p s = p+indent' s
         indent' [] = []
         indent' (c:t) = c:indent' t
 
-instance (Show (Pretty a), Show (Pretty b)) => Show (Pretty (a,b)) where
-  show (Pretty (a,b)) = show (Pretty a,Pretty b)
-instance Show (Pretty String) where
-  show (Pretty s) = s
-instance Show (Pretty Int) where show (Pretty n) = show n
-instance (Show (Pretty s),Show (Pretty a)) => Show (Pretty (Expression s a)) where
-  show (Pretty expr) = show' "" expr
+instance (Documented s,Documented a) => Documented (Expression s a) where
+  document expr = docTag' "expr" [Pure $ show' "" expr]
     where
-      show' :: forall a' s'. (Show (Pretty a'),Show (Pretty s')) => String -> Expression s' a' -> String
+      show' :: forall a' s'. (Documented a',Documented s') => String -> Expression s' a' -> String
       show' h (Pure s) = h+"-> "+pretty s
       show' h (Join (Lambda s e@(Join (Lambda _ _)))) = h+"<- "+pretty s+" "+drop (length h+3) (show' h e)
       show' h (Join (Lambda s e)) = h+"<- "+pretty s+"\n"+show' (h+"| ") e
@@ -155,21 +143,24 @@ instance (Show (Pretty s),Show (Pretty a)) => Show (Pretty (Expression s a)) whe
       show' h (Join (Apply (Pure f) (Pure x))) = h+"-> "+pretty f+"("+pretty x+")"
       show' h (Join (Apply f x)) = show' h f+"\n"
                                        +show' (h+"- ") x
-instance Show (Pretty Chunk) where
-  show (Pretty l) = foldMap to $ Base64.encode l^.i'elems
+
+newtype B64Chunk = B64Chunk Chunk
+instance Show B64Chunk where
+  show (B64Chunk l) = foldMap to $ Base64.encode l^.i'elems
     where to '/' = "-"
           to '+' = "_"
           to '=' = []
           to x = [x]
-instance Read (Pretty Chunk) where
+instance Read B64Chunk where
   readsPrec _ = readsParser $ do
     let from '-' = '/'
         from '_' = '+'
         from x = x
         pad c = c+take (negate (length c)`mod`4) "===="
     c <- many' (from <$> satisfy p)
-    (const zero <|> return . Pretty) (Base64.decode (pad c^..i'elems))
+    (const zero <|> return . B64Chunk) (Base64.decode (pad c^..i'elems))
     where p x = inRange 'a' 'z' x || inRange 'A' 'Z' x || inRange '0' '9' x || x=='_' || x=='-'
+
 -- | `envVar def var` retrieves a `var` from the environment, or returns `def` if the former doesn't exist
 envVar :: String -> String -> String
 envVar d s = fromMaybe d (lookupEnv s^.thunk)
@@ -238,7 +229,6 @@ instance FormatArg Float where argClass _ = 'f'
 instance FormatArg Double where argClass _ = 'f'
 instance FormatArg String where argClass _ = 's'; showFormat = id
 instance FormatArg PortNumber where argClass _ = 'p'
-instance Show (Pretty a) => FormatArg (Pretty a) where argClass _ = 'a'
 
 -- | Runs an IO action, logging its errors if the given log level is lower than the environment
 trylogLevel :: LogLevel -> IO a -> IO a -> IO a
@@ -325,10 +315,11 @@ data Builtin = B_Undefined
              | B_FileDesc Int
              | B_Open | B_Read | B_Write | B_Close
              deriving (Eq,Ord,Show,Generic)
-instance Show (Pretty Builtin) where
-  show (Pretty (B_Number n)) = show n
-  show (Pretty (B_String s)) = show s
-  show (Pretty b) = show b
+instance Documented Builtin where
+  document b = Pure (show' b)
+    where show' (B_Number n) = show n
+          show' (B_String s) = show s
+          show' b = show b
 instance Serializable Builtin where
 instance Format Builtin where
 instance NFData Builtin where rnf b = b`seq`()

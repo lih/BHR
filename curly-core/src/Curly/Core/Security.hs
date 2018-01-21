@@ -78,12 +78,12 @@ zest bs = pack $ zipWith xor (unpack bs) zestBytes
 
 newtype Zesty a = Zesty a
 instance Serializable a => Show (Zesty a) where
-  show (Zesty a) = pretty (zest (serialize a)^.chunk)
+  show (Zesty a) = show (B64Chunk (zest (serialize a)^.chunk))
 instance Format a => Read (Zesty a) where
-  readsPrec _ = readsParser ((readable <&> \(Pretty c) -> zest (c^..chunk)) >*> (Zesty<$>datum))
+  readsPrec _ = readsParser ((readable <&> \(B64Chunk c) -> zest (c^..chunk)) >*> (Zesty<$>datum))
 
 fpSize = 8
-instance Show KeyFingerprint where show (KeyFingerprint f) = pretty f
+instance Show KeyFingerprint where show (KeyFingerprint f) = show (B64Chunk f)
 instance FormatArg KeyFingerprint where argClass _ = 'k'
 instance Bounded KeyFingerprint where
   minBound = KeyFingerprint (pack [0 :: Word8 | _ <- [1..fpSize]])
@@ -179,7 +179,7 @@ sharedSecret :: MonadIO m => Bool -> PrivateKey -> PublicKey -> m SharedSecret
 sharedSecret isClient (PrivateKey priv) (PublicKey pub) = liftIO $ do
   let kh = SHA256.hashlazy (serialize (EC.pmul pub priv))
       mkCtx = AES.newCtx AES.CTR kh . \isClt -> if isClt then clientCtrStart else serverCtrStart
-  logLine Debug $ format "Shared secret : %a" (Pretty kh)
+  logLine Debug $ format "Shared secret : %s" (show (B64Chunk kh))
   SharedSecret <$> mkCtx isClient AES.Decrypt <*> mkCtx (not isClient) AES.Encrypt
 
 decrypt :: (MonadIO m,Format a, ?secret :: SharedSecret) => ParserT Bytes m a

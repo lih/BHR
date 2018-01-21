@@ -6,6 +6,7 @@ import Language.Format
 import Curly.Core
 import Curly.Core.Annotated
 import Curly.Core.Library
+import Curly.Core.Documentation
 import Curly.System.Base
 
 newtype Instruction = Instruction String

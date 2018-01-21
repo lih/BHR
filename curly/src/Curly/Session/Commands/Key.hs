@@ -79,7 +79,7 @@ keyCmd = withDoc keyDoc $ False <$ do
     "meta" -> do
       name <- expected "key name" (nbhsp >> dirArg)
       path <- many' (nbhsp >> dirArg)
-      mm <- getKeyStore <&> \ks -> ks^?at name.t'Just.l'4.getter (Join).at path.t'Just
+      mm <- getKeyStore <&> \ks -> ks^?at name.t'Just.l'4.getter (\(Metadata m) -> Join m).at path.t'Just
       maybe unit (serveStrLn . showMetaDir . mapF (\m -> ModDir (m^.ascList))) mm
     "grant" -> do
       tp <- expected "access type" (nbhsp >> (dirArg >*> readable))

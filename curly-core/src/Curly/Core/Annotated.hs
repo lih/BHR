@@ -20,6 +20,7 @@ module Curly.Core.Annotated(
 
 import Definitive
 import Curly.Core
+import Curly.Core.Documentation
 import Data.IORef
 import Language.Format
 import Control.DeepSeq
@@ -49,7 +50,8 @@ argument _ x = pure x
 instance Show (Symbol s) where
   show (Argument n) = "$"+show n
   show (Builtin _ b) = "#"+show b
-instance Show (Pretty (Symbol s)) where show (Pretty s) = show s
+instance Documented (Symbol s) where
+  document s = Pure (show s)
 instance (Serializable s,Identifier s) => Serializable (Symbol s)
 instance (Format s,Identifier s) => Format (Symbol s)
 instance NFData (Symbol s) where

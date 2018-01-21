@@ -8,6 +8,7 @@ import Curly.UI
 import Curly.UI.Options hiding (nbsp,spc)
 import Curly.Core.Parser
 import Curly.Style
+import Curly.Core.Documentation
 import Data.IORef 
 import Language.Format hiding (space)
 import Control.Exception (fromException)

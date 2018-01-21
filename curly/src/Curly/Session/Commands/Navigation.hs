@@ -8,6 +8,7 @@ import Curly.Core.Parser
 import Data.IORef 
 import Language.Format hiding (space)
 import Curly.Session.Commands.Common
+import Curly.Core.Documentation
 
 lsPath :: (?sessionState :: IORef SessionState) => OpParser IO [String]
 lsPath = do

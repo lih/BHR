@@ -17,6 +17,7 @@ module Curly.UI.Options (
 import Definitive
 import Curly.Core
 import Curly.Core.Library
+import Curly.Core.Documentation
 import Language.Syntax.CmdArgs
 import Curly.System.Base (System)
 import Curly.System 

@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                curly-core
-version:             0.2.11
+version:             0.3
 -- synopsis:            
 -- description:         
 license:             MIT
@@ -16,7 +16,18 @@ extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
                                          
 library
-  exposed-modules:     Curly.Core, Curly.Core.Library, Curly.Core.Types, Curly.Core.Security, Curly.Core.Peers, Curly.Core.Parser, Curly.Core.Annotated, Curly.Core.VCS, Curly.Core.Security.EC, Curly.Core.VCS.Diff
+  exposed-modules:
+    Curly.Core,
+    Curly.Core.Annotated,
+    Curly.Core.Documentation,
+    Curly.Core.Library,
+    Curly.Core.Parser,
+    Curly.Core.Peers,
+    Curly.Core.Security,
+    Curly.Core.Security.EC,
+    Curly.Core.Types,
+    Curly.Core.VCS,
+    Curly.Core.VCS.Diff
   -- other-modules:       
   default-extensions: RebindableSyntax
                       FlexibleInstances

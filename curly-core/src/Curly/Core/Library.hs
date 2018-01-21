@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies, StandaloneDeriving #-}
 module Curly.Core.Library(
   -- * Modules
   -- ** Nodes 
@@ -10,11 +10,11 @@ module Curly.Core.Library(
   -- * Libraries
   GlobalID(..),
   LibraryID(..),isLibData,
-  Metadata,Library,metadata,imports,exports,symbols,implicits,
+  Metadata(..),Library,metadata,imports,exports,symbols,implicits,
   addImport,addExport,setExports,defSymbol,libSymbol,
   exprIn,optExprIn,builtinsLib,
   -- ** Documentation
-  LeafExpr,DocNode(..),Documentation,l'attrs,l'subs,descSymbol,docAtom,docLine,mkDoc,
+  LeafExpr,DocNode(..),Documentation,docNodeAttrs,docNodeSubs,descSymbol,docAtom,docLine,mkDoc,
   -- * Files
   FileLibrary,flLibrary,flID,flBytes,flFromSource,flSource,
   rawLibrary,fileLibrary,  
@@ -27,6 +27,7 @@ module Curly.Core.Library(
 
 import Crypto.Hash.SHA256
 import Curly.Core
+import Curly.Core.Documentation
 import Curly.Core.Annotated
 import Data.IORef
 import Language.Format
@@ -59,13 +60,13 @@ instance Format a => Format (Chunked a) where
 newtype ModDir s a = ModDir [(s,a)]
                       deriving (Semigroup,Monoid,Show)
 type Module a = Free (ModDir String) a
-instance Show (Pretty a) => Show (Pretty (Module a)) where
-  show (Pretty m) = show' m
-    where show' (Join (ModDir l)) = intercalate "\n" $ map show'' l
-          show' (Pure s) = "- "+pretty s
-          show'' (s,Pure n) | s==pretty n = "- "+s
-                            | otherwise = "- "+pretty n+" as "+s
-          show'' (s,Join (ModDir l)) = "* "+s+":\n"+indent "  " (intercalate "\n" $ map show'' l)
+instance Documented a => Documented (Module a) where
+  document (Join (ModDir l)) = docTag "ul" [("class","modDir")] (map doc' l)
+    where doc' (s,Pure n) | s==pretty n = docTag' "li" [Pure s]
+                          | otherwise = docTag' "li" [document n,Pure "as",Pure s]
+          doc' (s,Join (ModDir l)) = docTag "ul" [("class","modDir")]
+                                     (docTag' "ln" [Pure (s+":")] : map doc' l)
+  document (Pure s) = docTag' "li" [document s]
 
 instance (Serializable s,Serializable a) => Serializable (ModDir s a) where
   encode = coerceEncode (ModDir . getChunked)
@@ -102,10 +103,10 @@ instance Format LibraryID where
   datum = LibraryID<$>getChunk idSize
 instance NFData LibraryID
 instance Show LibraryID where
-  show (LibraryID l) = pretty l
+  show (LibraryID l) = show (B64Chunk l)
 instance Read LibraryID where
-  readsPrec _ = readsParser (readable >>= \(Pretty c) -> LibraryID c <$ guard (chunkSize c==idSize))
-instance Show (Pretty LibraryID) where show (Pretty l) = show l
+  readsPrec _ = readsParser (readable >>= \(B64Chunk c) -> LibraryID c <$ guard (chunkSize c==idSize))
+instance Documented LibraryID where document l = Pure (show l)
 
 registerLib :: FileLibrary -> FileLibrary
 registerLib l = by thunk $ do
@@ -119,58 +120,6 @@ fileLibrary :: Library -> Maybe String -> FileLibrary
 fileLibrary l = rawLibrary True l (serialize l)
 isLibData :: LibraryID -> Bytes -> Bool
 isLibData (LibraryID i) bs = hashlazy bs==i 
-
-data DocNode a = DocTag String [(String,String)] [a]
-               deriving (Eq,Ord,Show,Generic)
-instance Serializable a => Serializable (DocNode a)
-instance Format a => Format (DocNode a)
-instance Show (Pretty a) => Show (Pretty (DocNode a)) where
-  show (Pretty (DocTag t as xs)) = format "{%s%s%s%s}" t (foldMap showA as)
-                                   (if empty xs then "" else " ") (foldMap pretty xs)
-    where showA (n,v) = ":"+n+"="+v
-instance Functor DocNode where map f (DocTag t a xs) = DocTag t a (map f xs)
-instance Foldable DocNode where fold (DocTag _ _ l) = fold l
-instance Traversable DocNode where sequence (DocTag t as l) = DocTag t as<$>sequence l
-l'attrs :: Lens' (DocNode a) [(String,String)]
-l'attrs = lens (\(DocTag _ as _) -> as) (\(DocTag t _ s) as -> DocTag t as s)
-l'subs :: Lens [a] [b] (DocNode a) (DocNode b)
-l'subs = lens (\(DocTag _ _ x) -> x) (\(DocTag t as _) x -> DocTag t as x)
-
-type Documentation = Free DocNode String
-nodoc = Join (DocTag "nodoc" [] [])
-mkDoc d = Join . DocTag "doc" [] $ fromMaybe [] $ matches Just (between spc spc (sepBy' docAtom spc)) d
-spc :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => ParserT s m ()
-spc = skipMany' (oneOf " \t\n")
-docAtom :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => ParserT s m Documentation
-docAtom = tag <+? txt
-  where letter p = token >>= \c -> case c of
-          '\\' -> token
-          _ | (c`isKeyIn`reserved) || not (p c) -> zero
-            | otherwise -> return c
-        reserved = c'set (fromKList " \t\n{}\\")
-        nameTo cs = many1' (letter (\c -> not (c`isKeyIn`res)))
-          where res = c'set (fromKList (cs+"+.:#\""))
-        attrName = nameTo "="
-        className = nameTo ""
-        attribute = (single ':' >> liftA2 (,) attrName (single '=' >> quotedString '"'))
-                    <+? (single '.' >> className <&> ("class",))
-                    <+? (single '#' >> className <&> ("id",))
-        tag = between (single '{') (single '}') $ between spc spc $ do
-          (tn,an):ns <- liftA2 (,) className (many' attribute) `sepBy1'` single '+'
-          subs <- spc >> sepBy' docAtom spc
-          return (Join $ DocTag tn an $ foldr (\(t,attrs) sub -> [Join $ DocTag t attrs sub]) subs ns)
-        txt = (Pure <$> many1' (letter (/='"'))) <+? strSplice
-          where strSplice = between (single '"') (single '"') $ do
-                  h <- option' id ((:) . Left <$> many1' strChar)
-                  t <- many' (map Left (many1' strChar) <+? map Right tag)
-                  return $ case h t of
-                    [Left s] -> Pure s
-                    l -> Join $ DocTag "splice" [] (map (Pure <|> id) l)
-                strChar = satisfy (\x -> not (x`elem`"\"{\\"))
-                          <+? single '\\' >> token
-docLine :: (ParseToken c, ParseStream c s, TokenPayload c ~ Char, Monad m)
-           => String -> [(String,String)] -> ParserT s m Documentation
-docLine n as = Join . DocTag n as <$> many1' (skipMany' (oneOf " \t") >> docAtom)
 
 data ModLeaf s a = ModLeaf {
   _leafDoc :: Documentation,
@@ -221,9 +170,10 @@ type LeafExpr s = ModLeaf s (NameExpr s)
 
 data GlobalID = GlobalID String (Maybe (String,LibraryID))
            deriving (Eq,Ord,Show,Generic)
-instance Show (Pretty GlobalID) where
-  show | envLogLevel>=Verbose = \(Pretty (GlobalID n l)) -> n+showL l
-       | otherwise = \(Pretty (GlobalID n _)) -> n
+instance Documented GlobalID where
+  document = if envLogLevel>=Verbose
+             then \(GlobalID n l) -> Pure (n+showL l)
+             else \(GlobalID n _) -> Pure n
     where showL (Just (n,l)) = "["+show l+":"+n+"]"
           showL _ = "[]"
 instance Serializable GlobalID
@@ -233,18 +183,24 @@ instance Identifier GlobalID where
   pureIdent n = GlobalID n Nothing
   identName (GlobalID n _) = n
 type Context = Module (GlobalID,LeafExpr GlobalID)
-type Metadata = Forest (Map String) String
-instance Show (Pretty Metadata) where
-  show (Pretty m) = showM m
+newtype Metadata = Metadata (Forest (Map String) String)
+                 deriving (Semigroup,Monoid,Serializable)
+instance Format Metadata where datum = coerceDatum Metadata
+instance DataMap Metadata String (Free (Map String) String) where 
+  at i = iso (\(Metadata m) -> m) Metadata .at i
+instance Show Metadata where
+  show (Metadata m) = showM m
     where showM m = format "{%s}" (intercalate " " [format "%s:%s" (show a) (showV v)
                                                    | (a,v) <- m^.ascList])
           showV (Pure s) = show s
           showV (Join m) = showM m
-instance Read (Pretty Metadata) where
-  readsPrec _ = readsParser (map Pretty brack)
+instance Read Metadata where
+  readsPrec _ = readsParser (map Metadata brack)
     where val = map Pure readable <+? map Join brack
           brack = fromAList <$> between (single '{') (single '}') (sepBy' assoc (single ' '))
             where assoc = liftA2 (,) readable (single ':' >> val)
+instance Documented Metadata where
+  document m = Pure (show m)
 
 data Library = Library {
   _metadata :: Metadata,
@@ -268,9 +224,9 @@ exports = lens _exports (\x y -> x { _exports = y })
 instance Semigroup Library where
   Library syn i s is e + Library _ i' s' is' e' = Library syn (i+i') (s+s') (is+is') (e+e')
 instance Monoid Library where
-  zero = Library zero zero zero zero zero
+  zero = Library (Metadata zero) zero zero zero zero
 instance Show Library where
-  show (Library syn imp sym _ _exp) =
+  show (Library (Metadata syn) imp sym _ _exp) =
     "Library: "+fromMaybe "" (syn^?at "synopsis".t'Just.t'Pure) +"\n"
     + "Imports: \n"
     + indent "  " (pretty (by l'1<$>imp))+"\n"
@@ -443,8 +399,8 @@ libSymbol :: Library -> GlobalID -> Maybe (LeafExpr GlobalID)
 libSymbol l (GlobalID i Nothing) = l^.symbols.at i
 libSymbol _ (GlobalID _ (Just (i,l))) = findLib l >>= \l -> l^.flLibrary.symbols.at i
 
-
-builtinsLib = let blib = zero & set exports builtinsMod . set metadata meta
+builtinsLib :: FileLibrary
+builtinsLib = let blib = zero & set exports builtinsMod . set metadata (Metadata meta)
               in rawLibrary False blib (serialize blib) Nothing
   where Join meta = fromAList [(["synopsis"],Pure "The library of Curly builtins")
                               ,(["author","name"],Pure "Marc Coiffier")
@@ -604,7 +560,7 @@ instance Read Repository where
                               (dir:dirs) -> try (again dirs) $ runInteractiveProcess (dir</>proto) ([path,show l]) Nothing Nothing
                               [] -> undefined
                             readHBytes out
-                          lib = liftA2 (,) readable (many' space >> readable <&> \(Pretty a) -> a)
+                          lib = liftA2 (,) readable (many' space >> readable)
                           getLs conf = do
                             (_,out,_,_) <- flip fix (repoProtoRoots conf) $ \again dirs -> case dirs of
                               (dir:dirs) -> try (again dirs) $ runInteractiveProcess (dir</>proto) [path] Nothing Nothing
@@ -633,18 +589,15 @@ nslookup :: String -> PortNumber -> Maybe AddrInfo
 nslookup = curry $ cached $ \(s,p) -> convert $ thunk $^ getAddrInfo Nothing (Just s) (Just (show p))
 
 type Template = Documentation
-instance Show (Pretty Documentation) where
-  show (Pretty (Join tag)) = pretty tag
-  show (Pretty (Pure s)) = s
-defaultTemplate = Join $ DocTag "$*" [] [] 
+defaultTemplate = docTag' "$*" []
 
 showTemplate :: Metadata -> Template -> Maybe String
 showTemplate _ (Pure x) = return x
-showTemplate m (Join (DocTag "$*" [] x)) = do
-  v <- traverse (showTemplate m) x
-  pretty <$> (Join m^?at v.t'Just.t'Join)
-showTemplate m (Join (DocTag "$" [] x)) = do
-  (vh:vt) <- traverse (showTemplate m) x
+showTemplate (Metadata m) (Join (DocTag "$*" [] x)) = do
+  v <- traverse (showTemplate (Metadata m)) x
+  show . Metadata <$> (Join m^?at v.t'Just.t'Join)
+showTemplate (Metadata m) (Join (DocTag "$" [] x)) = do
+  (vh:vt) <- traverse (showTemplate (Metadata m)) x
   m^?at vh.t'Just.at vt.t'Just.t'Pure
 showTemplate m (Join (DocTag "if" [] (p:vs))) = showTemplate m p >> map fold (traverse (showTemplate m) vs)
 showTemplate m (Join (DocTag "not" [] vs)) = maybe (return "") (const zero) (traverse_ (showTemplate m) vs)

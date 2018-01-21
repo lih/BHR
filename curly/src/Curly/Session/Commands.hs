@@ -16,6 +16,7 @@ module Curly.Session.Commands(
 
 import Curly.Core
 import Curly.Core.Annotated
+import Curly.Core.Documentation
 import Curly.Core.Library
 import Curly.Core.Security
 import Curly.UI
@@ -106,7 +107,7 @@ showInstancesCmd = withDoc showInstancesDoc $ False <$ do
 quitDoc = "{section {title Quit} Quit the program}"
 quitCmd = withDoc quitDoc $ liftIO ?quitSession >> return True
 
-subTag t = t'Join.l'subs.traverse.sat (isTag t)
+subTag t = t'Join.docNodeSubs.traverse.sat (isTag t)
   where isTag x (Join (DocTag t _ _)) = t==x
         isTag _ _ = False
 
@@ -120,11 +121,11 @@ helpCmd = withDoc helpDoc $ False <$ do
           lis = commands <&> \(h,cmds) ->
             docTag "p" . (:) (docTag "title" [Pure (h+":")]) . pure . docTag "ul"
             $ cmds <&> \(c,(d,_)) ->
-            let sub = d^?subTag "section".subTag "title".t'Join.l'subs
+            let sub = d^?subTag "section".subTag "title".t'Join.docNodeSubs
             in docTag "li" [Pure (c+":"),docTag "em" (head sub)]
-      serveStrLn $ docString term (docTag "doc" (Pure "Here are the available commands (enter 'help <cmd>' to show specific sections) :":lis))
+      serveStrLn $ docString term ?style (docTag "doc" (Pure "Here are the available commands (enter 'help <cmd>' to show specific sections) :":lis))
     (cmd:_) -> case foldMap snd commands^.at cmd of
-      Just (d,_) -> withStyle (serveStrLn $ docString term d)
+      Just (d,_) -> withStyle (serveStrLn $ docString term ?style d)
       _  -> serveStrLn $ "Error: "+cmd+": no such command."
 
 configDoc = unlines [

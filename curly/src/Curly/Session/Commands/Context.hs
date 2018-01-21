@@ -23,7 +23,7 @@ cleanCmd = withDoc cleanDoc $ False <$ liftIO (sequence_ [clean c | (_,Source _ 
 metaDoc = "{section {title Show Metadata} Show the metadata associated with the given path}"
 metaCmd = withDoc metaDoc $ fill False $ withMountain $ do
   path <- many' (nbhsp >> dirArg)
-  let mod = ?mountain >>= \fl -> mapF (\m -> ModDir (m^.ascList)) (Join (fl^.flLibrary.metadata))
+  let mod = ?mountain >>= \fl -> mapF (\m -> ModDir (m^.ascList)) (Join (fl^.flLibrary.metadata.iso (\(Metadata m) -> m) Metadata))
   serveStrLn $ maybe "" showMetaDir (mod^?atMs path)
 
 reloadDoc = "{section {title Reload All Files} Reload the context}"

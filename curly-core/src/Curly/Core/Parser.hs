@@ -17,6 +17,7 @@ module Curly.Core.Parser (
 
 import Curly.Core
 import Curly.Core.Annotated
+import Curly.Core.Documentation
 import Curly.Core.Library
 import IO.Filesystem
 import Data.Char (isAlpha)
@@ -30,8 +31,8 @@ instance IsString (Set Char) where
 newtype ParseExpr s a = ParseExpr (((,) SourceRange :.: Free (ExprNode s:.:(,) SourceRange)) a)
                     deriving (Functor,Foldable,Unit,SemiApplicative,Applicative)
 instance Monad (ParseExpr s) where join = coerceJoin ParseExpr
-instance (Show (Pretty s),Show (Pretty a)) => Show (Pretty (ParseExpr s a)) where
-  show (Pretty e) = pretty (semantic e :: Expression s a)
+instance (Documented s,Documented a) => Documented (ParseExpr s a) where
+  document e = document (semantic e :: Expression s a)
 instance Traversable (ParseExpr s) where sequence = coerceSequence ParseExpr
 
 type SourceExpr = ParseExpr String (String,Maybe (NameExpr GlobalID))
@@ -107,9 +108,9 @@ data Warning = Warning (Int,Int) String
 data CurlyParserException = CurlyParserException (Maybe String) [Warning]
                           deriving (Show,Typeable)
 instance Exception CurlyParserException
-instance Show (Pretty CurlyParserException) where
-  show (Pretty (CurlyParserException s ws)) =
-    intercalate "\n" [format "  Warning #%d:%s" (i :: Int) (showWarning s w) | (i,w) <- zip [1..] ws]
+instance Documented CurlyParserException where
+  document (CurlyParserException s ws) =
+    Pure $ intercalate "\n" [format "  Warning #%d:%s" (i :: Int) (showWarning s w) | (i,w) <- zip [1..] ws]
 
 showWarning :: Maybe String -> Warning -> String
 showWarning f (Warning (l,c) s) = format "%s%d:%d: %s" (c'string $ maybe "" (format "%s: ") f) l c s

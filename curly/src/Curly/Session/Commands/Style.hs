@@ -2,6 +2,7 @@
 module Curly.Session.Commands.Style where
 
 import Curly.Core.Parser
+import Curly.Core.Documentation
 import Curly.Style
 import Data.IORef 
 import Language.Format hiding (space)
@@ -32,17 +33,17 @@ styleCmd = withDoc styleDoc $ False <$ do
       boolean = (True <$ several "true") <+> (False <$ several "false")
 
   let kw s v = v<$several s
-      styleSpec :: String -> Lens' ClassStyle (Maybe a) -> OpParser IO a -> OpParser IO (ClassStyle -> ClassStyle)
+      styleSpec :: String -> Lens' TagStyle (Maybe a) -> OpParser IO a -> OpParser IO (TagStyle -> TagStyle)
       styleSpec n l ma = several n >> nbsp >> ((Just<$>ma)<+?(Nothing<$several "none")) <&> set l
   nbsp
-  stl <- styleSpec "color"     (classColor.l'1)  color <+?
-         styleSpec "bgcolor"   (classColor.l'2)  color <+?
-         styleSpec "display"   classDisplay      (kw "block" (Block True) <+? kw "line" (Block False) <+? kw "inline" Inline) <+?
-         styleSpec "underline" classIsUnderlined boolean <+?
-         styleSpec "italic"    classIsItalic     boolean <+?
-         styleSpec "bold"      classIsBold       boolean <+?
-         styleSpec "indent"    classIndent       number <+?
-         styleSpec "prefix"    classPrefix       (quotedString '"')
+  stl <- styleSpec "color"     (tagColor.l'1)  color <+?
+         styleSpec "bgcolor"   (tagColor.l'2)  color <+?
+         styleSpec "display"   tagDisplay      (kw "block" (Block True) <+? kw "line" (Block False) <+? kw "inline" Inline) <+?
+         styleSpec "underline" tagIsUnderlined boolean <+?
+         styleSpec "italic"    tagIsItalic     boolean <+?
+         styleSpec "bold"      tagIsBold       boolean <+?
+         styleSpec "indent"    tagIndent       number <+?
+         styleSpec "prefix"    tagPrefix       (quotedString '"')
   liftIOWarn (modifyIORef ?sessionState (style.at tag.folded %~ stl))
 
 -- | A list of colors gotten from 'http://www.color-hex.com/color-names.html'

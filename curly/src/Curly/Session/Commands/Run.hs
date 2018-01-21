@@ -6,6 +6,7 @@ import Curly.Core.Annotated
 import Curly.Core.Library
 import Curly.UI.Options hiding (nbsp,spc)
 import Curly.Core.Parser
+import Curly.Core.Documentation
 import Curly.System
 import Language.Format hiding (space)
 import Curly.Session.Commands.Common

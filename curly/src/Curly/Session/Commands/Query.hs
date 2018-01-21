@@ -3,6 +3,7 @@ module Curly.Session.Commands.Query where
 
 import Curly.Core
 import Curly.Core.Annotated
+import Curly.Core.Documentation
 import Curly.Core.Library
 import Curly.UI
 import Curly.Core.Parser
@@ -33,7 +34,7 @@ whyDoc = unlines [
   ,"{p Show the documentation for the function at PATH, or of the symbol NAME.}}"
   ]
 whyCmd = viewCmd whyDoc zero (const zero) $ \_ (by leafDoc -> d) ->
-  setupTermFromEnv >>= \t -> withStyle (serveStrLn $ docString t d)
+  setupTermFromEnv >>= \t -> withStyle (serveStrLn $ docString t ?style d)
 
 whenceDoc = unlines [
   "{section {title Show Function Strictness}"
@@ -49,8 +50,8 @@ howDoc = unlines [
   ,"{p Show the implementation of the function at PATH, or an expression EXPR in the local context.}}"
   ]
 data VerboseVar = VerboseVar GlobalID (Maybe Int)
-instance Show (Pretty VerboseVar) where
-  show (Pretty (VerboseVar v n)) = pretty v+maybe "" (\x -> "["+show x+"]") n
+instance Documented VerboseVar where
+  document (VerboseVar v n) = Pure $ pretty v+maybe "" (\x -> "["+show x+"]") n
 serveHow v | envLogLevel>=Verbose = serveStrLn (pretty (map withSym (semantic v) :: Expression GlobalID VerboseVar))
            | otherwise = serveStrLn (pretty (map fst (semantic v) :: Expression GlobalID GlobalID))
   where withSym (s,Pure (Argument n)) = VerboseVar s (Just n)

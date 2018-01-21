@@ -99,7 +99,7 @@ vcsCmd = withDoc vcsDoc $ False <$ do
           Just b -> do
             bs <- getAll b =<< deepBranch b pub
             forl_ (ascList.each) bs $ \(lid,m) -> do
-              for_ (maybe (Just $ pretty m) (showTemplate m) template) $ \s -> 
+              for_ (maybe (Just $ show m) (showTemplate m) template) $ \s -> 
                 serveStrLn $ format "%s %s" (show lid) s
 
     "get" -> do
@@ -222,4 +222,4 @@ vcsCmd = withDoc vcsDoc $ False <$ do
           ls <- liftIO availableLibs
           case fold [showTemplate m d >> return l | (l,m) <- ls] of
             Just l -> return l
-            Nothing -> guardWarn (format "Error: no library matches the search pattern %s" (pretty d)) False >> zero
+            Nothing -> guardWarn (format "Error: no library matches the search pattern %s" (show d)) False >> zero

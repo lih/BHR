@@ -76,13 +76,14 @@ cacheCurly (src,cache) a ms = by thunk $ do
         Just s -> case getId (parseCurly (force s) (curlyFile <* eoi)) of
           Right f' -> do
             createDirectoryIfMissing True (dropFileName cacheName)
-            keyInfo <- getKeyStore <&> \ks x -> lookup x ks <&> \(_,pub,_,meta,_) -> (pub,meta)
+            keyInfo <- getKeyStore <&> \ks x -> lookup x ks <&> \(_,pub,_,Metadata meta,_) -> (pub,meta)
             time <- currentTime
             let f = case envVar "" "CURLY_PUBLISHER" of
                   "" -> f'
-                  x -> f' & metadata %~ insert "publisher" (maybe id (\x -> insert ["public-key"] (Pure (show (Zesty x)))) (fst <$> keyInfo x)
-                                                            $ withDate
-                                                            $ Join (maybe zero snd (keyInfo x)))
+                  x -> f' & metadata.iso (\(Metadata m) -> m) Metadata
+                       %~ insert "publisher" (maybe id (\x -> insert ["public-key"] (Pure (show (Zesty x)))) (fst <$> keyInfo x)
+                                              $ withDate
+                                              $ Join (maybe zero snd (keyInfo x)))
                        . insert "context" (mapF (\(ModDir d) -> fromAList d)
                                            $ shortZipWith (const . show . by flID) ?mountain (f'^.imports))
                 withDate x | x^?at ["timestamp"].t'Just.t'Pure == Just "date" = insert ["timestamp"] (Pure (show (floor (1000*time)))) x
