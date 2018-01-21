@@ -438,8 +438,12 @@ builtinType b = (zero :: Type s) & i'typeRel %~ case b of
   B_Undefined     -> ln' [] poly
   B_Seq           -> ln' [] (poly --> poly --> poly)
                      . ln [Out,In] [Out,Out] poly
+
   (B_Number _)    -> ln' [] intT
   (B_String _)    -> ln' [] stringT
+  B_Unit          -> ln' [] unitT
+  B_FileDesc _    -> ln' [] fileT
+
   B_Open          -> ln' [] (stringT --> (fileT --> poly) --> poly)
                      . ln [Out,In,Out] [Out,Out] poly
   B_Read          -> ln' [] (fileT --> intT --> (stringT --> poly) --> poly)
@@ -448,20 +452,29 @@ builtinType b = (zero :: Type s) & i'typeRel %~ case b of
                      . ln [Out,Out,In] [Out,Out,Out] poly
   B_Close         -> ln' [] (fileT --> poly --> poly)
                      . ln [Out,In] [Out,Out] poly
+
   B_AddInt        -> ln' [] (intT --> intT --> intT)
   B_SubInt        -> ln' [] (intT --> intT --> intT)
   B_MulInt        -> ln' [] (intT --> intT --> intT)
   B_DivInt        -> ln' [] (intT --> intT --> intT)
+  B_CmpInt_LT     -> ln' [] (intT --> intT --> poly --> poly --> poly)
+                     . ln [Out,Out,In] [Out,Out,Out,In] poly
+                     . ln [Out,Out,In] [Out,Out,Out,Out] poly
+  B_CmpInt_EQ     -> ln' [] (intT --> intT --> poly --> poly --> poly)
+                     . ln [Out,Out,In] [Out,Out,Out,In] poly
+                     . ln [Out,Out,In] [Out,Out,Out,Out] poly
+
   B_AddString     -> ln' [] (stringT --> stringT --> stringT)
   B_StringLength  -> ln' [] (stringT --> intT)
   B_ShowInt       -> ln' [] (intT --> stringT)
-  B_Unit          -> ln' [] unitT
-  B_FileDesc _    -> ln' [] fileT
+
+  
   B_MkArray       -> ln' [] (intT --> arrayT)
   B_ArrayLength   -> ln' [] (arrayT --> intT)
   B_ArrayAt       -> ln' [] (arrayT --> intT --> poly)
   B_ArraySet      -> ln' [] (arrayT --> intT --> poly --> poly --> poly)
                      . ln [Out,Out,Out,In] [Out,Out,Out,Out] poly
+
   B_SyntaxNode    -> ln' [] (arrayT --> synT)
   B_SyntaxSym     -> ln' [] (stringT --> synT)
   B_SyntaxExpr    -> ln' [] (exprT --> synT)

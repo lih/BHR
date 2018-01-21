@@ -301,7 +301,8 @@ data Builtin = B_Undefined
 
              | B_Number Int
              | B_AddInt | B_SubInt | B_MulInt | B_DivInt
-             
+             | B_CmpInt_LT | B_CmpInt_EQ
+               
              | B_String String
              | B_StringLength
              | B_AddString | B_ShowInt

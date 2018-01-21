@@ -464,6 +464,8 @@ builtinsLib = let blib = zero & set exports builtinsMod . set metadata meta
           (["arithmetic","subInt"],mkBLeaf "subInt" B_SubInt subIntDoc),
           (["arithmetic","mulInt"],mkBLeaf "mulInt" B_MulInt mulIntDoc),
           (["arithmetic","divInt"],mkBLeaf "divInt" B_DivInt divIntDoc),
+          (["arithmetic","cmpInt_lt"],mkBLeaf "cmpInt_lt" B_CmpInt_LT cmpInt_ltDoc),
+          (["arithmetic","cmpInt_eq"],mkBLeaf "cmpInt_eq" B_CmpInt_EQ cmpInt_eqDoc),
           (["string","addString"],mkBLeaf "addString" B_AddString addStringDoc),
           (["string","stringLength"],mkBLeaf "stringLength" B_StringLength stringLengthDoc),
           (["string","showInt"],mkBLeaf "showInt" B_ShowInt showIntDoc),
@@ -539,6 +541,16 @@ builtinsLib = let blib = zero & set exports builtinsMod . set metadata meta
                     "{section {title Divide Integers}",
                     "{p {em Usage:} divInt a b}",
                     "{p Divides two integers.}}"
+                    ]
+                  cmpInt_ltDoc = unlines [
+                    "{section {title Compare Integers (lower than)}",
+                    "{p {em Usage:} cmpInt n m x y}",
+                    "{p Returns x when n<m, and y otherwise.}}"
+                    ]
+                  cmpInt_eqDoc = unlines [
+                    "{section {title Compare Integers (equality)}",
+                    "{p {em Usage:} cmpInt n m x y}",
+                    "{p Returns x when n=m, and y otherwise.}}"
                     ]
                   addStringDoc = unlines [
                     "{section {title Add Strings}",

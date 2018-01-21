@@ -290,6 +290,24 @@ commonBuiltin (B_Number n) = Just $ globalBuiltin global_constant (toValue n)
 commonBuiltin (B_FileDesc n) = Just $ globalBuiltin global_constant (toValue n)
 commonBuiltin B_Unit = Just $ getOrDefineBuiltin0 TextSection "unit" $ ret
 commonBuiltin B_Seq = Just $ globalBuiltin global_seq (Constant 0)
+commonBuiltin B_CmpInt_LT = Just $ getOrDefineBuiltin0 TextSection "cmpInt_lt" $ do
+  [n,m] <- builtinArgs 2
+  pushing [thisReg] $ callThunk n
+  pushing [thisReg] $ callThunk m
+  itecmp (True,LT) (n!ValueOffset) (m!ValueOffset)
+    (do [th,_] <- builtinArgs 2
+        tailCall th)
+    (do [_,el] <- builtinArgs 2
+        tailCall el)
+commonBuiltin B_CmpInt_EQ = Just $ getOrDefineBuiltin0 TextSection "cmpInt_eq" $ do
+  [n,m] <- builtinArgs 2
+  pushing [thisReg] $ callThunk n
+  pushing [thisReg] $ callThunk m
+  itecmp (True,EQ) (n!ValueOffset) (m!ValueOffset)
+    (do [th,_] <- builtinArgs 2
+        tailCall th)
+    (do [_,el] <- builtinArgs 2
+        tailCall el)
 commonBuiltin _ = Nothing
 
 assemblyBuiltin :: (?sysHooks :: SystemHooks, ?sys :: VonNeumannMachine) => (Word32 -> BinaryCode) -> BUILTIN_INSTR
