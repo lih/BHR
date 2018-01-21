@@ -41,7 +41,7 @@ import GHC.Conc (par)
 import Control.DeepSeq
 
 curlyLibVersion :: Int
-curlyLibVersion = 7
+curlyLibVersion = 8
 
 newtype Compressed a = Compressed { unCompressed :: a }
                      deriving (Show,Eq,Ord)
