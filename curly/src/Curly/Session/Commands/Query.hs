@@ -93,7 +93,7 @@ whereCmd = viewCmd whereDoc zero onPath $ \path (by leafPos -> r) -> case r of
 formatDoc = "{section {title Formatted Query} {p {em Usage:} format PATTERN PATH} {p Show the function at PATH according to the pattern PAT}}"
 formatCmd = withDoc formatDoc . fill False $ do
   pat <- nbhsp >> docAtom
-  path <- nbhsp >> liftA2 subPath (getSession wd) dirArgs
+  path <- liftA2 subPath (getSession wd) (many' (nbhsp >> dirArg))
   withMountain $ let ctx = fold $ c'list $ localContext^??atMs path in do
     let params (n,v) = let Join p = composing (uncurry insert) [
                              (["type"],Pure $ document (exprType (v^.leafVal))),
