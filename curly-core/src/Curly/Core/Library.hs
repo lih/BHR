@@ -61,11 +61,12 @@ newtype ModDir s a = ModDir [(s,a)]
                       deriving (Semigroup,Monoid,Show)
 type Module a = Free (ModDir String) a
 instance Documented a => Documented (Module a) where
-  document (Join (ModDir l)) = docTag "ul" [("class","modDir")] (map doc' l)
+  document (Join (ModDir l)) = docTag' "ul" (map doc' l)
     where doc' (s,Pure n) | s==pretty n = docTag' "li" [Pure s]
                           | otherwise = docTag' "li" [document n,Pure "as",Pure s]
-          doc' (s,Join (ModDir l)) = docTag "ul" [("class","modDir")]
-                                     (docTag' "ln" [Pure (s+":")] : map doc' l)
+          doc' (s,Join (ModDir l)) = docTag "li" [("class","modDir")]
+                                     [docTag' "ln" [Pure (s+":")]
+                                     ,docTag' "ul"  (map doc' l)]
   document (Pure s) = docTag' "li" [document s]
 
 instance (Serializable s,Serializable a) => Serializable (ModDir s a) where

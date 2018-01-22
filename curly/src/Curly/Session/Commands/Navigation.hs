@@ -9,6 +9,7 @@ import Data.IORef
 import Language.Format hiding (space)
 import Curly.Session.Commands.Common
 import Curly.Core.Documentation
+import Curly.Style (setupTermFromEnv)
 
 lsPath :: (?sessionState :: IORef SessionState) => OpParser IO [String]
 lsPath = do
@@ -36,7 +37,8 @@ treeDoc = unlines [
   ]
 treeCmd = withDoc treeDoc $ False <$ do
   p <- lsPath
-  withMountain $ serveStrLn . pretty . map fst . Join . fold . c'list $ (localContext^??atMs p.t'Join)
+  term <- liftIO setupTermFromEnv
+  withStyle $ withMountain $ serveStrLn . docString term ?style . document . map fst . Join . fold . c'list $ (localContext^??atMs p.t'Join)
 
 cdDoc = unlines [
   "{section {title Change Directory}"
