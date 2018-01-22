@@ -3,7 +3,7 @@ module Curly.Core.Documentation(
   -- * The Documentation format
   DocNode(..),Documentation,Documented(..),
   docNodeAttrs,docNodeSubs,
-  docTag,docTag',nodoc,mkDoc,docAtom,docLine,
+  docTag,docTag',nodoc,mkDoc,docAtom,docLine,evalDoc,
   -- * Rendering documentation
   -- ** Styles
   TagStyle(..),TermColor(..),TagDisplay(..),Style,defaultStyle,
@@ -35,8 +35,8 @@ docTag' t = docTag t []
 type Documentation = Free DocNode String
 class Documented t where
   document :: t -> Documentation
-instance Documented Documentation where
-  document = id
+instance Documented a => Documented (Free DocNode a) where
+  document = join . map document
 instance Documented String where
   document = Pure
 instance Documented Int where
@@ -137,8 +137,9 @@ defaultStyle = fromAList [
   ("nodoc",zero & tagColor.l'1 %- Just (ColorNumber 67)),
   ("section",isBl zero),
   ("em",isB zero),
-  ("ul",((tagDisplay %- Just (Block True)) . (tagIndent %- Just 2)) zero),
-  ("li",((tagDisplay %- Just (Block False)) . (tagPrefix %- Just "* ")) zero),
+  ("ul",compose [set tagDisplay (Just (Block True)), set tagIndent (Just 2)] zero),
+  ("li",((tagDisplay %- Just (Block False)) . (tagPrefix %- Just "- ")) zero),
+  ("modDir",set tagPrefix (Just "* ") zero),
   ("ln",set tagDisplay (Just (Block False)) zero),
   ("sub",set tagIndent (Just 2) zero)
   ]
@@ -163,15 +164,17 @@ instance Terminal DummyTerminal where
   
 docString :: Terminal trm => trm -> Style -> Documentation -> String
 docString trm stl d = getId ((doc' d^..i'RWST) ((),(BeginP,zero,0))) & \(_,_,t) -> t
-  where doc' (Join (DocTag t as subs)) = do
+  where addStyles s s' = (s+s') & set tagPrefix (s'^.tagPrefix + s^.tagPrefix) 
+
+        doc' (Join (DocTag t as subs)) = do
           l'2.l'2 =~ compose [tagDisplay %- Nothing,tagIndent %- Nothing]
           pref <- saving l'2 $ saving l'3 $ do
-            l'2 =~ \(_,s) -> (False,(s + fold [stl^.at c.folded | ("class",c) <- (("class",t):as)]))
+            l'2 =~ \(_,s) -> (False,(s + foldl' addStyles zero [stl^.at c.folded | ("class",c) <- (("class",t):as)]))
             s <- getl (l'2.l'2)
-            maybe unit (\i -> l'3 =~ (+i)) (s^.tagIndent)
+            maybe unit (\i -> l'3 =~ maybe id ((+) . length) (s^.tagPrefix) . (+i)) (s^.tagIndent)
             maybe unit setDisplay (s^.tagDisplay)
             case t of
-              "nodoc" -> styleStart >> tell "Not documented."
+              "nodoc" -> doc' (Pure "Not documented.")
               _ -> subDoc subs
             styleEnd
             getl (l'2.l'2.tagPrefix)
@@ -186,7 +189,8 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),(BeginP,zero,0))) & \(_,_,t) 
             InP -> tell " "
             _ -> unit
           styleStart
-          tell t
+          ind <- getl l'3
+          tell (withIndent ind t)
           l'1 =- InP
         subDoc docs = traverse_ doc' docs
 
@@ -214,9 +218,16 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),(BeginP,zero,0))) & \(_,_,t) 
             maybe unit (const (tell $ restoreDefaultColors trm)) (fg+bg)
 
         addPrefix p = tell p >> (l'3 =~ (+ length p))
-        indent = getl l'1 >>= \st -> case st of
-          BeginP -> getl l'3 >>= \n -> tell (take n (repeat ' '))
-          _ -> unit
+        indent = do
+          st <- getl l'1
+          pref <- getl (l'2.l'2.tagPrefix)
+          case st of
+            BeginP -> getl l'3 >>= \n -> tell (take (n - maybe 0 length pref) (repeat ' '))
+            _ -> unit
+        withIndent n = go
+          where go "" = ""
+                go ('\n':t) = '\n' : (take n (repeat ' ') + go t)
+                go (c:t) = c : go t
 
         bType b st = b || case st of EndP x -> x ; _ -> False
         setDisplay (Block b) = getl l'1 >>= \st -> do

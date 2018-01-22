@@ -1,6 +1,9 @@
 ifeq ($(WATCH),true)
 STACK_FLAGS += --file-watch
 endif
+ifeq ($(NOTIFY),true)
+STACK_FLAGS += --exec scripts/notify-build-success
+endif
 
 build:
 	stack build $(STACK_FLAGS)

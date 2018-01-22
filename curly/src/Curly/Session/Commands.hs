@@ -61,6 +61,7 @@ commands = [
       ("how",howCmd),
       ("what",whatCmd),
       ("whence",whenceCmd),
+      ("format",formatCmd),
       ("compareTypes",compareTypesCmd),
       ("showInstances",showInstancesCmd),
       ("where",whereCmd)]),
@@ -82,6 +83,7 @@ commandNames = let
   ?access = undefined
   ?clientOps = undefined
   ?subSession = undefined
+  ?terminal = undefined
   in map fst $ foldMap snd commands
 
 quitCmd,helpCmd,configCmd,killCmd,compareTypesCmd,showInstancesCmd :: Interactive Command

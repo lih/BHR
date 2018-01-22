@@ -111,7 +111,8 @@ type Interactive t = (?sessionState :: IORef SessionState
                      ,?quitSession :: IO ()
                      ,?access :: Access
                      ,?subSession :: CurlyConfig -> OpParser IO ()
-                     ,?clientOps :: KeyOps)
+                     ,?clientOps :: KeyOps
+                     ,?terminal :: POSIXTerm)
                      => t
 type Command = (Documentation,OpParser IO Bool)
 

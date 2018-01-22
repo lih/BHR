@@ -63,7 +63,7 @@ type ExprStrictness = ([Strictness],Strictness)
 data StrictnessHead = StH_B Builtin
                     | StH_V Int
                     | StH_Fix String ExprStrictness
-                    deriving (Eq,Ord,Show,Generic)
+                    deriving (Eq,Ord,Generic)
 instance Serializable StrictnessHead
 instance Format StrictnessHead
 
@@ -72,8 +72,8 @@ data Strictness = Delayed String ExprStrictness
                 deriving (Eq,Ord,Generic)
 instance Serializable Strictness
 instance Format Strictness
-instance Show Strictness where
-  showsPrec n st t = sh n [] st + t
+instance Documented Strictness where
+  document st = docTag' "strictness" [Pure (sh 0 [] st)]
     where sh n env (Delayed s e) = let env' = newVar s env
                                    in par 0 n $ format "\\%s. %s" (head env') (shS 0 env' e)
           sh _ env (HNF h []) = shH env h

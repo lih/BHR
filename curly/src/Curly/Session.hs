@@ -15,6 +15,7 @@ import Curly.Core.Peers
 import Curly.Core.Security
 import Curly.Core.VCS
 import Curly.Session.Commands
+import Curly.Style
 import Curly.UI
 import Curly.UI.Options hiding (nbsp,spc)
 import Data.IORef 
@@ -110,11 +111,14 @@ runCurlySession thr clt srv = (Connection<$>newChan<*>newChan) >>= \conn -> mdo
     FileClient f -> (Almighty,) <$> forkMVar (fileClient f conn)
   takeMVar sem
 
-localServer :: (?curlyPlex :: CurlyPlex, ?curlyConfig :: CurlyConfig, ?targetParams :: TargetParams, ?sessionState :: IORef SessionState) => Bool -> (ThreadId -> IO ()) -> Access -> Connection -> IO ()
+localServer :: (?curlyPlex :: CurlyPlex, ?curlyConfig :: CurlyConfig, ?targetParams :: TargetParams, ?sessionState :: IORef SessionState)
+               => Bool -> (ThreadId -> IO ()) -> Access -> Connection -> IO ()
 localServer hasLocalClient thr acc conn@(Connection clt srv) = do
   forkIO watchSources
   start <- newEmptyMVar
   compPlex <- newIORef ?curlyPlex
+  term <- setupTermFromEnv
+  let ?terminal = term
   let getClientKeys = do
         clt <- dupChan (connClient conn)
         serve conn KeyListRequest
