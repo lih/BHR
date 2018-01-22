@@ -61,13 +61,13 @@ newtype ModDir s a = ModDir [(s,a)]
                       deriving (Semigroup,Monoid,Show)
 type Module a = Free (ModDir String) a
 instance Documented a => Documented (Module a) where
-  document (Join (ModDir l)) = docTag' "ul" (map doc' l)
-    where doc' (s,Pure n) | s==pretty n = docTag' "li" [Pure s]
-                          | otherwise = docTag' "li" [document n,Pure "as",Pure s]
-          doc' (s,Join (ModDir l)) = docTag "li" [("class","modDir")]
-                                     [docTag' "ln" [Pure (s+":")]
-                                     ,docTag' "ul"  (map doc' l)]
-  document (Pure s) = docTag' "li" [document s]
+  document (Join (ModDir l)) = docTag' "ul" (map (docTag "li" [("class","modVal")] . pure . doc') l)
+    where doc' (s,Pure n) | s==pretty n = Pure s
+                          | otherwise = document n
+          doc' (s,Join (ModDir l)) = docTag' "p"
+                                     [docTag "ln" [("class","modName")] [Pure (s+":")]
+                                     ,docTag' "ul"  (map (docTag "li" [("class","modVal")] . pure . doc') l)]
+  document (Pure s) = document s
 
 instance (Serializable s,Serializable a) => Serializable (ModDir s a) where
   encode = coerceEncode (ModDir . getChunked)
@@ -279,7 +279,7 @@ scoped = iso f g
                 instDeps = c'set $ fromKList [k | (Just k,_) <- toList is]
         g (syn,i',s',is',isd,e') = Library syn i s is e
           where symVal (GlobalID _ (Just (s,l))) = fromMaybe (error $ "Couldn't find library "+show l) (findLib l)
-                                                ^.flLibrary.symbols.at s.l'Just undefLeaf
+                                                   ^.flLibrary.symbols.at s.l'Just undefLeaf
                 symVal (GlobalID i Nothing) = s^.at i.l'Just undefLeaf
                 fromSym (s,Just sym) = (s,Pure sym)
                 fromSym (s,Nothing) = (s,Join (symVal s^.leafVal))

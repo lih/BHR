@@ -11,7 +11,7 @@ import Curly.Style
 import Language.Format hiding (space)
 import Curly.Session.Commands.Common
 
-whereCmd,whyCmd,whenceCmd,whatCmd,howCmd :: Interactive Command
+whereCmd,whyCmd,whenceCmd,whatCmd,howCmd,formatCmd :: Interactive Command
 
 viewCmd doc onExpr onPath showV = withDoc doc . fill False $ (several "'s" >> viewSym) <+? viewPath
   where viewPath = nbsp >> do
@@ -34,7 +34,7 @@ whyDoc = unlines [
   ,"{p Show the documentation for the function at PATH, or of the symbol NAME.}}"
   ]
 whyCmd = viewCmd whyDoc zero (const zero) $ \_ (by leafDoc -> d) ->
-  setupTermFromEnv >>= \t -> withStyle (serveStrLn $ docString t ?style d)
+  withStyle (serveStrLn $ docString ?terminal ?style d)
 
 whenceDoc = unlines [
   "{section {title Show Function Strictness}"
@@ -42,7 +42,8 @@ whenceDoc = unlines [
   ,"{p Show the strictness for the function at PATH, or of the symbol NAME.}}"
   ]
 whenceCmd = viewCmd whenceDoc zero (const zero) $ \_ (by leafVal -> v) ->
-  serveStrLn (show (exprStrictness v))
+  serveStrLn (pretty (snd $ exprStrictness v))
+
 
 howDoc = unlines [
   "{section {title Show Function Implementation}"
@@ -88,3 +89,18 @@ whereCmd = viewCmd whereDoc zero onPath $ \path (by leafPos -> r) -> case r of
           case ?mountain^?atMs p.t'Pure.flLibrary.symbols.traverse.leafPos.rangeFile of
             Just s -> liftIOWarn $ editSource s (0,0) reloadMountain
             _ -> zero
+
+formatDoc = "{section {title Formatted Query} {p {em Usage:} format PATTERN PATH} {p Show the function at PATH according to the pattern PAT}}"
+formatCmd = withDoc formatDoc . fill False $ do
+  pat <- nbhsp >> docAtom
+  path <- nbhsp >> liftA2 subPath (getSession wd) dirArgs
+  withMountain $ let ctx = fold $ c'list $ localContext^??atMs path in do
+    let params (n,v) = let Join p = composing (uncurry insert) [
+                             (["type"],Pure $ document (exprType (v^.leafVal))),
+                             (["name"],Pure $ Pure (identName n)),
+                             (["doc"],Pure $ v^.leafDoc),
+                             (["strictness"],Pure $ document (snd $ exprStrictness $ v^.leafVal))
+                             ] zero
+                       in p
+    withStyle $ serveStrLn (docString ?terminal ?style (document (map (\v -> fromMaybe nodoc (evalDoc (params v) pat)) ctx)))
+    

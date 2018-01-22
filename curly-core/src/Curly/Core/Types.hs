@@ -21,6 +21,7 @@ module Curly.Core.Types (
 
 import Definitive
 import Curly.Core
+import Curly.Core.Documentation
 import Language.Format
 import qualified Data.Map
 import Control.DeepSeq
@@ -234,6 +235,8 @@ instance Identifier s => Show (Type s) where
           subs = interleave ("\n  where ":repeat "\n        ") $ "":[
             format "%s = %s" short long
             | (_,(Just short,long)) <- pathList]
+instance Identifier s => Documented (Type s) where
+  document t = docTag' "type" [Pure (show t)]
 
 zipTypes :: (Monad m,Identifier s) => (TypeShape s -> TypeShape s -> m ()) -> Type s -> Type s -> m (Type s)
 zipTypes zipNodes (Type ta) (Type tb) =

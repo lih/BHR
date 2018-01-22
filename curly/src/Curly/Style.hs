@@ -1,6 +1,6 @@
 module Curly.Style(
   -- * Writing documentation out
-  setupTerm,setupTermFromEnv) where
+  POSIXTerm,setupTerm,setupTermFromEnv) where
  
 import Definitive
 import Curly.Core.Documentation
