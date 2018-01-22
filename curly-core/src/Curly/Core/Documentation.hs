@@ -165,13 +165,14 @@ instance Terminal DummyTerminal where
 docString :: Terminal trm => trm -> Style -> Documentation -> String
 docString trm stl d = getId ((doc' d^..i'RWST) ((),(BeginP,zero,0))) & \(_,_,t) -> t
   where addStyles s s' = (s+s') & set tagPrefix (s'^.tagPrefix + s^.tagPrefix) 
-
+        tagStl t as = foldl' addStyles zero [stl^.at c.folded | ("class",c) <- (("class",t):as)]
         doc' (Join (DocTag t as subs)) = do
           l'2.l'2 =~ compose [tagDisplay %- Nothing,tagIndent %- Nothing]
           pref <- saving l'2 $ saving l'3 $ do
-            l'2 =~ \(_,s) -> (False,(s + foldl' addStyles zero [stl^.at c.folded | ("class",c) <- (("class",t):as)]))
+            let tstl = tagStl t as
+            l'2 =~ \(_,s) -> (False,(s + tstl))
             s <- getl (l'2.l'2)
-            maybe unit (\i -> l'3 =~ maybe id ((+) . length) (s^.tagPrefix) . (+i)) (s^.tagIndent)
+            maybe unit (\i -> l'3 =~ maybe id ((+) . length) (tstl^.tagPrefix) . (+i)) (s^.tagIndent)
             maybe unit setDisplay (s^.tagDisplay)
             case t of
               "nodoc" -> doc' (Pure "Not documented.")
@@ -217,7 +218,7 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),(BeginP,zero,0))) & \(_,_,t) 
             boolSt it (tell $ setItalic trm False)
             maybe unit (const (tell $ restoreDefaultColors trm)) (fg+bg)
 
-        addPrefix p = tell p >> (l'3 =~ (+ length p))
+        addPrefix p = tell p
         indent = do
           st <- getl l'1
           pref <- getl (l'2.l'2.tagPrefix)
