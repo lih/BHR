@@ -75,7 +75,6 @@ cacheCurly (src,cache) a ms = by thunk $ do
       readSourceFile = case ms of
         Just s -> case getId (parseCurly (force s) (curlyFile <* eoi)) of
           Right f' -> do
-            createDirectoryIfMissing True (dropFileName cacheName)
             keyInfo <- getKeyStore <&> \ks x -> lookup x ks <&> \(_,pub,_,Metadata meta,_) -> (pub,meta)
             time <- currentTime
             let f = case envVar "" "CURLY_PUBLISHER" of
@@ -96,7 +95,8 @@ cacheCurly (src,cache) a ms = by thunk $ do
                   _ -> map (`f`x) a
                 ser = serialize f
                 lid = LibraryID (hashlazy ser)
-                canPath = curlyCacheDir</>show lid+".cyl"
+                canPath = cacheFileName curlyCacheDir (show lid) "cyl"
+            createFileDirectory canPath
             trylog unit $ do
               writeBytes canPath ser
               modifyPermissions canPath (set (each.executePerm) True)

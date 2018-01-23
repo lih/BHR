@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                curly
-version:             0.55
+version:             0.55.1
 -- synopsis:            
 -- description:         
 license:             MIT

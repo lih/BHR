@@ -647,15 +647,19 @@ wildcards ('*':t@(c:_)) = do
 wildcards (c:t) = single c >> wildcards t
 wildcards [] = eoi
 
+cacheName :: LibraryID -> String
+cacheName l = cacheFileName curlyCacheDir (show l) "cyl"
+
 getRepoLib :: LibraryID -> Repository -> IO (Maybe FileLibrary)
 getRepoLib l r = do
   logLine Verbose $ format "Looking up library %s from repository %s" (show l) (show r)
   res <- (map checkHash . trylog (return zero) . findL) r
   case res of
     Just (_,b) -> void $ forkIO $ do
-      createDirectoryIfMissing True curlyCacheDir
-      writeBytes (cacheName l) b
-      modifyPermissions (cacheName l) (set (each.executePerm) True)
+      let f = cacheName l
+      createFileDirectory f
+      writeBytes f b
+      modifyPermissions f (set (each.executePerm) True)
     _ -> unit
   return (res <&> \(f,b) -> FileLibrary f b l False Nothing)
   where findL (CurlyRepo h p) = case nslookup h p of
@@ -695,9 +699,6 @@ availableLibs = do
   repos <- readIORef repositories
   fold <$> traverse listRepository (toList repos)
   
-cacheName :: LibraryID -> String
-cacheName l = curlyCacheDir</>show l+".cyl"
-
 readCachedLibrary l = do
   b <- trylog (return zero) $ readBytes (cacheName l)
   return $ do

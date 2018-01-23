@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, ExistentialQuantification #-}
+{-# LANGUAGE DeriveGeneric, ExistentialQuantification, KindSignatures, UndecidableInstances #-}
 module Curly.Core.VCS where
 
 import Curly.Core
@@ -31,7 +31,7 @@ commitHash c = hashData (serialize c)
 type Commit = Compressed (Patch LibraryID Metadata,Maybe Hash)
 type Branches = Map String ((PublicKey,String):+:Hash)
 data VCKey o = LibraryKey LibraryID (WithResponse Bytes)
-             | SourceKey LibraryID (WithResponse (Signed String))
+             | AdditionalKey LibraryID String (WithResponse (Signed (String,Bytes)))
              | BranchesKey PublicKey (WithResponse (Signed Branches))
              | CommitKey Hash (WithResponse Commit)
              | OtherKey o
@@ -43,7 +43,7 @@ instance Serializable o => Ord (VCKey o) where compare = comparing serialize
 instance Functor VCKey where
   map f (OtherKey o) = OtherKey (f o)
   map f (LibraryKey a b) = LibraryKey a b
-  map f (SourceKey a b) = SourceKey a b
+  map f (AdditionalKey a b c) = AdditionalKey a b c
   map f (CommitKey a b) = CommitKey a b
   map f (BranchesKey a b) = BranchesKey a b
 
@@ -54,15 +54,26 @@ class MonadIO vc => MonadVC vc s | vc -> s where
 
 keyName k = show (B64Chunk (serialize (k WithResponse :: VCKey ())^.chunk))
 
+newtype Dummy_VC a = Dummy_VC (IO a)
+                   deriving (Functor,SemiApplicative,Unit,Applicative)
+instance Monad Dummy_VC where join = coerceJoin Dummy_VC
+instance MonadIO Dummy_VC where liftIO = Dummy_VC
+instance MonadVC Dummy_VC () where
+  vcStore _ _ _ = Dummy_VC unit
+  vcLoad _ _ = Dummy_VC (return Nothing)
+  runVC (Dummy_VC x) = x
+
 newtype File_VC a = File_VC (IO a)
                   deriving (Functor,SemiApplicative,Unit,Applicative)
 instance Monad File_VC where join = coerceJoin File_VC
 instance MonadIO File_VC where liftIO = File_VC
 instance MonadVC File_VC String where
   vcStore base k v = liftIO $ do
-    writeSerial (base+"/"+keyName k) v
+    let f = cacheFileName base (keyName k) "blob"
+    createFileDirectory f
+    writeSerial f v
   vcLoad base k = liftIO $ do
-    try (return Nothing) (Just <$> readFormat (base+"/"+keyName k))
+    try (return Nothing) (Just <$> readFormat (cacheFileName base (keyName k) "blob"))
   runVC (File_VC io) = io
 
 vcsProtoRoots :: IORef [FilePath]
@@ -97,6 +108,25 @@ instance MonadVC Client_VC Handle where
     exchange (\r -> (False,k (pMaybe r))) >>= maybe zero pure
   runVC (Client_VC io) = io
 
+newtype Combined_VC vc1 vc2 a = Combined_VC ((vc1 :.: vc2) a)
+                              deriving (Functor,SemiApplicative,Unit,Applicative)
+combined_lift1 vc1 = Combined_VC (Compose (map return vc1))
+instance (MonadVC vc1 _c1, MonadVC vc2 _c2) => Monad (Combined_VC vc1 vc2) where
+  join (Combined_VC (Compose vc1212)) = Combined_VC $ Compose $ liftIO $ do
+    vc121 <- runVC vc1212
+    Combined_VC (Compose vc12) <- runVC vc121
+    runVC vc12
+instance (MonadVC vc1 _c1) => MonadTrans (Combined_VC vc1) where
+  lift vc2 = Combined_VC (Compose $ return vc2)
+instance (MonadVC vc1 conn1, MonadVC vc2 conn2) => MonadVC (Combined_VC vc1 vc2) (conn1,conn2) where
+  vcStore (c1,c2) k v = do combined_lift1 (vcStore c1 k v); lift (vcStore c2 k v)
+  vcLoad (c1,c2) k = do
+    v1 <- combined_lift1 (vcLoad c1 k)
+    case v1 of
+      Just _ -> return v1
+      _ -> lift (vcLoad c2 k)
+  runVC (Combined_VC (Compose m)) = runVC m >>= runVC
+
 pMaybe :: WithResponse (Maybe a) -> WithResponse a
 pMaybe _ = WithResponse
 maybeP :: WithResponse a -> WithResponse (Maybe a)
@@ -107,13 +137,13 @@ vcServer (VCSB_Native _ st run) = do
   logLine Verbose ("Received request "+show (b,k))
   if b then case k of
     LibraryKey lid _ -> receive >>= liftIO . run . vcStore st (LibraryKey lid)
-    SourceKey lid _ ->  receive >>= liftIO . run . vcStore st (SourceKey lid)
+    AdditionalKey lid nm _ ->  receive >>= liftIO . run . vcStore st (AdditionalKey lid nm)
     CommitKey h _ ->    receive >>= liftIO . run . vcStore st (CommitKey h)
     BranchesKey pub _ -> receive >>= liftIO . run . vcStore st (BranchesKey pub)
     OtherKey () -> return ()
     else case k of
     LibraryKey lid t -> sending (maybeP t) =<< liftIO (run $ vcLoad st (LibraryKey lid))
-    SourceKey lid t -> sending (maybeP t) =<< liftIO (run $ vcLoad st (SourceKey lid))
+    AdditionalKey lid nm t -> sending (maybeP t) =<< liftIO (run $ vcLoad st (AdditionalKey lid nm))
     CommitKey h t -> sending (maybeP t) =<< liftIO (run $ vcLoad st (CommitKey h))
     BranchesKey pub t -> sending (maybeP t) =<< liftIO (run $ vcLoad st (BranchesKey pub))
     OtherKey () -> return ()
@@ -126,13 +156,10 @@ vcbLoadP :: (Format a,MonadIO m) => VCSBackend -> (WithResponse a -> VCKey ()) -
 vcbLoadP b k = vcbLoad b k >>= maybe zero return
 
 data VCSBackend = forall m s. MonadVC m s => VCSB_Native String s (forall a. m a -> IO a)
-                | VCSB_None
 instance Eq VCSBackend where a == b = compare a b == EQ
 instance Ord VCSBackend where
   compare (VCSB_Native s _ _) (VCSB_Native s' _ _) = compare s s'
-  compare (VCSB_Native _ _ _) _ = LT
-  compare VCSB_None VCSB_None = EQ
-  compare VCSB_None _ = GT
+dummyBackend = VCSB_Native "dummy" () (\(Dummy_VC io) -> io)
 nativeBackend :: MonadIO m => String -> PortNumber -> m VCSBackend
 nativeBackend h p = do
   conn <- liftIO (connectTo h p)
@@ -141,10 +168,9 @@ fileBackend p = VCSB_Native ("file://"+p) p (\(File_VC io) -> io)
 protoBackend pr p = VCSB_Native (pr+"://"+p) (pr,p) (\(Proto_VC io) -> io)
 instance Show VCSBackend where
   show (VCSB_Native s _ _) = s
-  show VCSB_None = "none"
 instance Read VCSBackend where
-  readsPrec _ = readsParser $ backend
-    where backend = proto_native <+? proto_file <+? proto_arbitrary <+? fill VCSB_None (several "none")
+  readsPrec _ = readsParser backend
+    where backend = proto_native <+? proto_file <+? proto_arbitrary <+? fill dummyBackend (several "dummy")
           proto_native = do
             several "curly-vc://" <+? single '@'
             map (by thunk) $ liftA2 nativeBackend
@@ -160,11 +186,11 @@ instance Read VCSBackend where
               
 curlyVCSBackend :: VCSBackend
 curlyVCSBackend = fromMaybe (getDefaultVCS^.thunk) (matches Just readable (envVar "" "CURLY_VCS"))
-  where getDefaultVCS = try (return VCSB_None) $ do
+  where getDefaultVCS = try (return dummyBackend) $ do
           lns <- map words . lines <$> readProcess "/usr/lib/curly/default-vcs" [] ""
           case lns of
             ([h,p]:_) -> nativeBackend h (fromInteger $ read p)
-            _ -> return VCSB_None
+            _ -> return dummyBackend
             
 curlyPublisher :: String
 curlyPublisher = envVar "" "CURLY_PUBLISHER"

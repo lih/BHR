@@ -57,7 +57,7 @@ initCurly = do
   setLocaleEncoding utf8
   getDataFileName "proto/vc" >>= \p -> modifyIORef vcsProtoRoots (p:)
   getDataFileName "proto/repo" >>= \p -> modifyIORef repoConfig (\c -> c { repoProtoRoots = p:repoProtoRoots c })
-  trylogLevel Debug unit $ when (case curlyVCSBackend of VCSB_None -> False ; _ -> True) $ do
+  trylogLevel Debug unit $ do
     let conn = curlyVCSBackend
         getBranches pub = maybe zero unsafeExtractSigned <$> vcbLoad conn (BranchesKey pub)
         deepBranch' Nothing = return Nothing

@@ -72,8 +72,8 @@ vcsCmd = withDoc vcsDoc $ False <$ do
         for_ (lib^.flSource) $ \s -> do
           serveStrLn $ format "Committing source for library %s" (show (lib^.flID))
           withKeys $ \_ priv -> do
-            s' <- signValue priv s
-            vcbStore conn (SourceKey (lib^.flID)) s'
+            s' <- signValue priv ("source",stringBytes s)
+            vcbStore conn (AdditionalKey (lib^.flID) "source") s'
 
       serveStrLn $ format "Committing new libraries to the '%s' branch" branch
       modifyBranches $ \bs -> do
@@ -119,9 +119,13 @@ vcsCmd = withDoc vcsDoc $ False <$ do
       liftIO $ do
         writeString (root+name+".cyx") $ unlines [
           "#!/usr/bin/env curly",
-          intercalate "\n" [format "mount deps %s%s = source[deps %s] %s.cy"
-                            (show l) (foldMap (" "+) suf) (show l') (drop (length root) pref+foldMap ("/"+) suf)
-                           | (l,l',pref,suf) <- ls],
+          intercalate "\n" [format "mount deps %s%s = %s"
+                            (show l) (foldMap (" "+) suf)
+                            $ c'string $ case x of
+                              Just pref -> format "source[deps %s] %s.cy"
+                                           (show l') (drop (length root) pref+foldMap ("/"+) suf)
+                              Nothing -> format "library %s" (show l')
+                           | (l,suf,l',x) <- ls],
           format "mount root = source[deps %s] %s.cy" (show lid) name,
           "+default - interactive"
           ]
@@ -180,11 +184,11 @@ vcsCmd = withDoc vcsDoc $ False <$ do
         libID = searchID <+? (dirArg >*> readable)
         createFileDir f = createDirectoryIfMissing True (dropFileName f)
         getSource file lid = do
-          x <- vcbLoad conn (SourceKey lid)
+          x <- vcbLoad conn (AdditionalKey lid "source")
           case x of
             Just s -> liftIO $ do
               createFileDir file
-              writeString file (unsafeExtractSigned s)
+              writeBytes file (snd (unsafeExtractSigned s))
             Nothing -> serveStrLn $ format "Error: the source for library %s doesn't seem to exist" (show lid)
         getLibrary file lid = do
           x <- vcbLoad conn (LibraryKey lid)
@@ -199,7 +203,10 @@ vcsCmd = withDoc vcsDoc $ False <$ do
           getSource (pref+".cy") lid
           getLibrary (pref+".cyl") lid
           ctx <- liftIO $ fromMaybe zero . by (metadata.at "context") <$> readFormat (pref+".cyl")
-          let checkoutMod suf (Pure l) = let l' = read l in ((lid,l',pref,suf):) <$> checkout (pref+foldMap ("/"+) suf) l'
+          let checkoutMod suf (Pure l) = let l' = read l in
+                if l' /= builtinsLib^.flID 
+                then ((lid,suf,l',Just pref):) <$> checkout (pref+foldMap ("/"+) suf) l'
+                else pure [(lid,suf,l',Nothing)]
               checkoutMod suf (Join m) = do
                 map fold $ for (m^.ascList) $ \(d,m') -> do
                   checkoutMod (suf+[d]) m'
@@ -213,9 +220,10 @@ vcsCmd = withDoc vcsDoc $ False <$ do
                           zero
         getAll _ Nothing = return zero
         cachedCommit c def = do
-          let commitFile = curlyCommitDir </> show (Zesty c)+".index"
+          let commitFile = cacheFileName curlyCommitDir (show (Zesty c)) "index"
           x <- liftIO $ try (return Nothing) (map (Just . unCompressed) $ readFormat commitFile)
-          maybe (def <*= liftIO . writeSerial commitFile . Compressed) return x
+          maybe (do liftIO $ createFileDirectory commitFile
+                    def <*= liftIO . writeSerial commitFile . Compressed) return x
           
         searchID = docAtom >>= \d -> do
           guard (has t'Join d)

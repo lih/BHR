@@ -1,4 +1,4 @@
 #!/bin/bash
 case "$1" in
-    get) curl -s "https://$2/$3";;
+    get) curl -s "https://$2/${3:0:2}/${3:2}";;
 esac

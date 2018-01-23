@@ -14,14 +14,14 @@ module Curly.Core(
   -- * Conditional output
   LogLevel(..),envLogLevel,logLine,trylogLevel,trylog,liftIOLog,cyDebug,
   -- * Misc
-  B64Chunk(..),PortNumber,watchFile,connectTo,(*+)
+  B64Chunk(..),PortNumber,watchFile,connectTo,(*+),cacheFileName,createFileDirectory
   ) where
 
 import Definitive
 import Language.Format
 import Curly.Core.Documentation
 import Control.DeepSeq
-import IO.Filesystem ((</>))
+import IO.Filesystem ((</>),dropFileName)
 import IO.Network.Socket (PortNumber,connect,getAddrInfo)
 import System.Directory (createDirectoryIfMissing)
 import System.Environment (lookupEnv)
@@ -257,6 +257,15 @@ connectTo h p = trylog (error $ format "Couldn't connect to host %s:%p" h p) $ d
 -- | Inclusive-or for `Map`s
 (*+) :: (Ord k,Semigroup m) => Map k m -> Map k m -> Map k m
 a *+ b = a*b+a+b
+
+cacheFileName :: String     -- ^ A base directory
+                 -> String  -- ^ A file name
+                 -> String  -- ^ An extension
+                 -> String
+cacheFileName base (c0:c1:cs@(_:_)) ext = base</>[c0,c1]</>cs+"."+ext
+cacheFileName base x ext = base</>x+"."+ext
+createFileDirectory :: FilePath -> IO ()
+createFileDirectory p = createDirectoryIfMissing True (dropFileName p)
 
 {- | The class of Curly identifiers, used mainly to simplify type signatures. -}
 class (Ord s,Show s,NFData s) => Identifier s where
