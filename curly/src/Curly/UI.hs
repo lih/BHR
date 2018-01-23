@@ -96,7 +96,7 @@ cacheCurly (src,cache) a ms = by thunk $ do
                 ser = serialize f
                 lid = LibraryID (hashlazy ser)
                 canPath = cacheFileName curlyCacheDir (show lid) "cyl"
-            createFileDirectory canPath
+            traverse_ createFileDirectory [canPath,cacheName]
             trylog unit $ do
               writeBytes canPath ser
               modifyPermissions canPath (set (each.executePerm) True)
