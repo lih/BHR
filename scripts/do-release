@@ -1,0 +1,8 @@
+#!/bin/bash
+git clone . -b release stack.rel
+( cd stack.rel
+  git pull origin master
+  git push )
+rm -rf stack.rel
+
+			
