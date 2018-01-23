@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 case "$1" in
-    get) curl -s "http://$2/${3:0:2}/${3:2}";;
+    get) suf="${3#??}"; curl -s "http://$2/${3%$suf}/$suf.blob";;
 esac

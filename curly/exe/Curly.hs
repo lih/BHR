@@ -73,9 +73,10 @@ initCurly = do
             Nothing -> do error "Could not reconstruct the commit chain for commit"
         getAll Nothing = return zero
         cachedCommit c def = do
-          let commitFile = curlyCommitDir </> show (Zesty c)+".index"
+          let commitFile = cacheFileName curlyCommitDir (show (Zesty c)) "index"
           x <- liftIO $ try (return Nothing) (map (Just . unCompressed) $ readFormat commitFile)
-          maybe (def <*= liftIO . writeSerial commitFile . Compressed) return x
+          maybe (do createFileDirectory commitFile
+                    def <*= liftIO . writeSerial commitFile . Compressed) return x
         
         getLs _ = do
           ks <- getKeyStore
