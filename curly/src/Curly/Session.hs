@@ -133,6 +133,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
     let ?curlyPlex = plex in case pkt of
       CompleteRequest lst ln -> withMountain $ do
         w <- getSession wd
+        pats <- getSession patterns
         ks <- getKeyStore
         clientKeyNames <- unsafeInterleaveIO getClientKeys <&> map (by l'1)
         let completePath path = [s' | Join (ModDir n) <- localContext^??atMs (subPath w path)
@@ -169,6 +170,8 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["key","del","client",k] -> completeClientKeyName k
           ["key","del","server",k] -> completeKeyName k
           ("key":_) -> []
+          ["format",k] -> completeWord [p | (p,Pure _) <- pats^.ascList] k
+          ("format":_:p) -> completePath (init p)
           ["vcs",c] -> completeWord ["list","get","commit","checkout","branch"] c
           ["vcs","list",k] -> completeKeyName k
           ["vcs","list",k,b] -> completeBranchName k b

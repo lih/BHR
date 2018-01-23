@@ -3,7 +3,9 @@ module Curly.Core.Documentation(
   -- * The Documentation format
   DocNode(..),Documentation,Documented(..),
   docNodeAttrs,docNodeSubs,
-  docTag,docTag',nodoc,mkDoc,docAtom,docLine,evalDoc,
+  docTag,docTag',nodoc,mkDoc,docAtom,docLine,
+  DocParams,
+  evalDoc,evalDocWithPatterns,
   -- * Rendering documentation
   -- ** Styles
   TagStyle(..),TermColor(..),TagDisplay(..),Style,defaultStyle,
@@ -43,14 +45,22 @@ instance Documented Int where
   document n = docTag' "int" [Pure (show n)]
 
 type DocParams = Forest (Map String) Documentation
+evalDocWithPatterns :: DocParams -> DocParams -> Documentation -> Maybe Documentation
+evalDocWithPatterns pats vars = eval
+  where eval (Pure x) = return (Pure x)
+        eval (Join (DocTag "$" [] xs)) = do
+          xs' <- traverse eval xs
+          path <- for xs' $ \x -> x^?t'Pure
+          Join vars^?at path.t'Just.t'Pure
+        eval (Join (DocTag "pattern" [] xs)) = do
+          xs' <- traverse eval xs
+          path <- for xs' $ \x -> x^?t'Pure
+          pat <- Join pats^?at path.t'Just.t'Pure
+          eval pat
+        eval (Join (DocTag "or" [] xs)) = foldMap eval xs
+        eval (Join (DocTag t as xs)) = Join . DocTag t as <$> traverse eval xs
 evalDoc :: DocParams -> Documentation -> Maybe Documentation
-evalDoc _ (Pure x) = return (Pure x)
-evalDoc m (Join (DocTag "$" [] xs)) = do
-  xs' <- traverse (evalDoc m) xs
-  path <- for xs' $ \x -> x^?t'Pure
-  Join m^?at path.t'Just.t'Pure
-evalDoc m (Join (DocTag "or" [] xs)) = foldMap (evalDoc m) xs
-evalDoc m (Join (DocTag t as xs)) = Join . DocTag t as <$> traverse (evalDoc m) xs
+evalDoc = evalDocWithPatterns zero
 
 nodoc = Join (DocTag "nodoc" [] [])
 mkDoc d = Join . DocTag "doc" [] $ fromMaybe [] $ matches Just (between spc spc (sepBy' docAtom spc)) d
@@ -208,7 +218,7 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),(BeginP,zero,0))) & \(_,_,t) 
             boolSt u (tell $ setUnderlined trm True)
             boolSt it (tell $ setItalic trm True)
             indent
-            maybe unit (\pre -> addPrefix pre >> (l'2.l'2.tagPrefix =- Nothing)) p
+            maybe unit (\pre -> tell pre >> (l'2.l'2.tagPrefix =- Nothing)) p
         styleEnd = do
           (isSet,TagStyle (fg,bg) bl bo u it _ _) <- getl l'2
           when isSet $ do
@@ -218,7 +228,6 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),(BeginP,zero,0))) & \(_,_,t) 
             boolSt it (tell $ setItalic trm False)
             maybe unit (const (tell $ restoreDefaultColors trm)) (fg+bg)
 
-        addPrefix p = tell p
         indent = do
           st <- getl l'1
           pref <- getl (l'2.l'2.tagPrefix)

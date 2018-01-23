@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo #-}
 module Curly.Session.Commands(
   -- * Sessions
-  SessionState,wd,this,style,
+  SessionState,wd,this,style,patterns,
   withSessionState,withStyle,getSession,
 
   -- * Commands
@@ -61,6 +61,7 @@ commands = [
       ("how",howCmd),
       ("what",whatCmd),
       ("whence",whenceCmd),
+      ("pattern",patternCmd),
       ("format",formatCmd),
       ("compareTypes",compareTypesCmd),
       ("showInstances",showInstancesCmd),
