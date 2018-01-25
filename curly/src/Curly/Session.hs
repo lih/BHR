@@ -136,11 +136,24 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
         pats <- getSession patterns
         ks <- getKeyStore
         clientKeyNames <- unsafeInterleaveIO getClientKeys <&> map (by l'1)
-        let completePath path = [s' | Join (ModDir n) <- localContext^??atMs (subPath w path)
-                                    , (s',_) <- n
-                                    , lst`isPrefix`s']
+        let completePath base onlyDirs p =
+              case matches Just (liftA2 (\p b -> if b || empty p then p+[""] else p)
+                                 (symPath "")
+                                 (option' False (True <$ single '.'))) p of
+                Just path -> let i = init path ; lst = last path
+                             in [showSymPath (i + s'')
+                                | Join (ModDir n) <- localContext^??atMs (subPath base i)
+                                , (s',sub) <- n
+                                , lst`isPrefix`s'
+                                , s'' <- if has t'Join sub
+                                         then [[s'],[s',""]]
+                                         else if not onlyDirs
+                                              then [[s']] else []]
+                Nothing -> []
+            completeAbsPath _ ('.':p) = map ('.':) $ completePath [] True p
+            completeAbsPath b p = completePath b True p
             completeWord l s = [s' | s' <- l, s`isPrefix`s']
-            completeCommand = completeWord commandNames
+            completeCommand = completeWord (commandNames + ["import","define","type","family"])
             completeKeyName = completeWord (keys ks)
             completeClientKeyName = completeWord clientKeyNames
             completeBranchName k = completeWord brancheNames
@@ -171,7 +184,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["key","del","server",k] -> completeKeyName k
           ("key":_) -> []
           ["format",k] -> completeWord [p | (p,Pure _) <- pats^.ascList] k
-          ("format":_:p) -> completePath (init p)
+          ["format",_,p] -> completePath w False p
           ["vcs",c] -> completeWord ["list","get","commit","checkout","branch"] c
           ["vcs","list",k] -> completeKeyName k
           ["vcs","list",k,b] -> completeBranchName k b
@@ -181,13 +194,15 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["vcs","branch",_,c,u] | c`elem`["fork","link"] -> completeKeyName u
           ["vcs","branch",_,c,u,b] | c`elem`["fork","link"] -> completeBranchName u b
           ["vcs","commit",b] -> completeBranchName curlyPublisher b
-          ("vcs":"commit":_:p) -> completePath (init p)
+          ["vcs","commit",_,p] -> completePath w False p
           ("vcs":_) -> []
           ["configure",p] -> completeWord [show n+":"+s | (n,s) <- curlyFiles ?curlyConfig^.ascList] p
           ["repository",cmd] -> completeWord ["list","add","contents","browse"] cmd
           ("repository":_) -> []
           ["compareTypes",x] -> completeWord ["shape","constraints"] x
-          (_:t) -> completePath (init t)
+          ["cd",p] -> completeAbsPath w p
+          ("import":t) -> completePath [] False (last t)
+          (_:t) -> completePath w False (last t)
         return True
       EndOfTransmission -> return False
       BannerRequest b -> True <$ do

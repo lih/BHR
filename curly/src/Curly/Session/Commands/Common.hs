@@ -123,5 +123,8 @@ type Command = (Documentation,OpParser IO Bool)
 
 withDoc d m = (mkDoc d,m)
 
+dirArg :: (MonadParser s m p, ParseStream c s, TokenPayload c ~ Char, Monad m) => p String
 dirArg = many1' $ noneOf " \t\n(){}"
-dirArgs = sepBy1' dirArg nbhsp
+absPath :: (?sessionState :: IORef SessionState, MonadParser s m p, ParseStream c s, TokenPayload c ~ Char, Monad m, MonadIO p)
+           => String -> p [String]
+absPath lim = liftA2 subPath (getSession wd) (symPath lim)

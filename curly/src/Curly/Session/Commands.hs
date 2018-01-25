@@ -95,9 +95,9 @@ compareTypesCmd = withDoc compareTypesDoc $ False <$ do
   nbsp
   shapeCmp <- (True <$ several "shape") <+? (False <$ several "constraints")
   nbsp
-  a <- exprT =<< tom space
+  a <- exprT =<< tom AnySpaces
   nbsp
-  b <- exprT =<< tom hspace
+  b <- exprT =<< tom HorizSpaces
   serveStrLn $ if shapeCmp then show (compare a b) else show (compareConstrainedness a b)
 
 showInstancesDoc = "{section {title Show Instances} Shows all the instances of the current execution context}"
@@ -116,7 +116,7 @@ subTag t = t'Join.docNodeSubs.traverse.sat (isTag t)
 
 helpDoc = "{section {title Show Help} Show the help for the given function, or all of them.}"
 helpCmd = withDoc helpDoc $ False <$ do
-  args <- many' (nbhsp >> dirArg)
+  args <- many' (nbhspace >> dirArg)
   term <- liftIO setupTermFromEnv
   liftIOWarn $ case args of
     [] -> withStyle $ do
@@ -138,7 +138,7 @@ configDoc = unlines [
   "  {line If many configurations are available, the first one whose name matches the selector is edited.}}}"
   ]
 configCmd = withDoc configDoc $ False <$ do
-  sel <- option' 0 ((nbhsp >> many1' (noneOf "\n")) >*> number)
+  sel <- option' 0 ((nbhspace >> many1' (noneOf "\n")) >*> number)
   case lookup sel (curlyFiles ?curlyConfig) of
     Just file | ?access >= Admin -> liftIOWarn (readBytes file >>= ?edit "" (0,0) >>= maybe unit (writeBytes file))
               | otherwise -> serveStrLn "Error: You are not allowed to access the instance configuration"
@@ -167,13 +167,13 @@ interactiveSession ack = while sessionLine
           case ln of
             Just _ -> return False
             Nothing -> guard (empty ws) >> cmdLine
-        parseCmd = hspc >> do
-          e <- optimized =<< accessorExpr hspace
-          lookingAt (hspc >> eol)
+        parseCmd = hspace >> do
+          e <- optimized =<< accessorExpr HorizSpaces
+          lookingAt (hspace >> eol)
           serveHow e
           return False
         cmdLine = do
           s <- remaining
-          cmd <- hspc >> many1' (satisfy (\c -> not (isSpace c || c=='\'')))
-          maybe (runStreamState (put s) >> parseCmd) snd (foldMap snd commands^.at cmd) <* hspc <* (eol+eoi)
+          cmd <- hspace >> many1' (satisfy (\c -> not (isSpace c || c=='\'')))
+          maybe (runStreamState (put s) >> parseCmd) snd (foldMap snd commands^.at cmd) <* hspace <* (eol+eoi)
 

@@ -291,5 +291,6 @@ dataFiles = [
   "applications/curly-uri.desktop",
   "applications/curly-source.desktop",
   "applications/curly-library.desktop",
-  "applications/curly-context.desktop"
+  "applications/curly-context.desktop",
+  "make/curly.mk"
   ]

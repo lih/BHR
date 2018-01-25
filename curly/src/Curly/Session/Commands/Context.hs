@@ -23,7 +23,7 @@ cleanCmd = withDoc cleanDoc $ False <$ liftIO (do sequence_ [clean c | (_,Source
             _ -> unit
 metaDoc = "{section {title Show Metadata} Show the metadata associated with the given path}"
 metaCmd = withDoc metaDoc $ fill False $ withMountain $ do
-  path <- many' (nbhsp >> dirArg)
+  path <- many' (nbhspace >> dirArg)
   let mod = ?mountain >>= \fl -> mapF (\m -> ModDir (m^.ascList)) (Join (fl^.flLibrary.metadata.iso (\(Metadata m) -> m) Metadata))
   serveStrLn $ maybe "" showMetaDir (mod^?atMs path)
 
@@ -32,7 +32,7 @@ reloadCmd = withDoc reloadDoc (False <$ reloadMountain)
 
 fixDoc = "{section {title Fix Error} Runs an editing session for fixing the last error.}"
 fixCmd = withDoc fixDoc $ False <$ do
-  i <- option' 1 (nbhsp >> number)
+  i <- option' 1 (nbhspace >> number)
   (s,ws) <- getSession warnings
   case (s,drop (i-1) ws) of
     (Just s, Warning (l,c) _:_) -> liftIOWarn $ editSource s (l,c) reloadMountain

@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, ScopedTypeVariables #-}
 module Curly.UI.Options (
   -- * The global mode of operation
   CurlyPlex(..),mounts,targets,mountainCache,jitContext,newCurlyPlex,
@@ -11,7 +11,7 @@ module Curly.UI.Options (
   TargetParams,confServer,confPrelude,confBanner,confInstance,confThreads,defaultConf,getConf,withPrelude,
 
   -- * Misc
-  curlyOpts,inputSource,curlyFileName,noCurlySuf,visible,nbsp,spc
+  curlyOpts,inputSource,curlyFileName,noCurlySuf,visible,symPath,showSymPath
   ) where
 
 import Definitive
@@ -191,16 +191,16 @@ curlyOpts = [
           return (ListServer t tpl)
           
         translate = do
-          n <- visible "@=" <* spc
-          s <- option' hostSystem (single '@' >> spc >> visible "="
+          n <- visible "@=" <* hspace
+          s <- option' hostSystem (single '@' >> hspace >> visible "="
                                   >>= \s -> maybe zero return (knownSystems^.at s))
           let splitPath ('.':t) = "":splitPath t
               splitPath ('-':t) = "":splitPath t
               splitPath (c:t)   = let ~(h:t') = splitPath t in (c:h):t'
               splitPath [] = [""]
           p <- option' (splitPath n) $ do
-            between spc spc $ single '=' 
-            sepBy1' (visible "") nbsp
+            between hspace hspace $ single '=' 
+            symPath ""
           return (Translate n s p)
 
 grid :: String -> [[String]] -> String
@@ -226,33 +226,36 @@ readServer s = matches Just (
   (option' 25465 (single ':' >> number))
   (single '/' >> remaining)) s
 
-isSpc = (`elem`": \t")
-nbsp,spc :: (ParseStream Char s,Monad m) => ParserT s m ()
-nbsp = skipMany1' (satisfy isSpc)
-spc = option' () nbsp 
-visible :: (ParseStream Char s,Monad m) => [Char] -> ParserT s m String
-visible lim = many1' (satisfy (not . \c -> isSpc c || c=='\n' || c`elem`lim))
+visible :: (MonadParser s m p, ParseStream c s,Monad m ,TokenPayload c ~ Char) => [Char] -> p String
+visible lim = many1' ((single '\\' >> token) <+? satisfy (not . \c -> c==' ' || c=='\t' || c=='\n' || c`elem`lim))
+
+symPath :: (MonadParser s m p, ParseStream c s,Monad m, TokenPayload c ~ Char) => String -> p [String]
+symPath lim = sepBy' (visible ('.':lim)) (single '.')
+showSymPath :: [String] -> String
+showSymPath p = intercalate "." (map (foldMap quote) p)
+  where quote '.' = "\\."
+        quote c = [c]
 
 inputSource base = do
-  p <- sepBy' (visible "=") nbsp
-  between spc spc (several "=")
+  p <- symPath "="
+  between hspace hspace (several "=")
   (p,) <$> (src <+? rsc <+? lib <+? search <+? blts)
   where src = do
           like "source"
           sub <- option' [] (between (single '[') (single ']')
-                             $ between spc spc
-                             $ sepBy' (visible "]") nbsp)
-          nbsp
+                             $ between hspace hspace
+                             $ symPath "]")
+          nbhspace
           n <- visible ""
           let defaultCache = fromMaybe (n+".cache") (noCurlySuf n <&> (+".cyl"))
-          m <- option' defaultCache (nbsp >> visible "")
+          m <- option' defaultCache (nbhspace >> visible "")
           return (Source sub (base</>n) (base</>m))
         rsc = do
           like "resource"
-          n <- nbsp >> visible ""
-          m <- option' (n+".cache") (nbsp >> visible "")
+          n <- nbhspace >> visible ""
+          m <- option' (n+".cache") (nbhspace >> visible "")
           return (Resource (base</>n) (base</>m))
-        search = like "package" >> nbsp >> do
+        search = like "package" >> nbhspace >> do
           let tag x l = Join (DocTag x [] l)
           tpl <- (docAtom <*= guard . has t'Join)
                  <+? (visible "" <&> \x -> tag "=" [tag "$" [Pure "name"],Pure x])
@@ -260,7 +263,7 @@ inputSource base = do
                     <&> \ls -> fromMaybe (error $ format "Could not find package matching %s" (pretty tpl))
                                $ find (\(_,d) -> nonempty (showTemplate d tpl)) ls <&> fst
           return (Library $ sid^.thunk)
-        lib = like "library" >> nbsp >> (fileLib <+? map Library readable)
+        lib = like "library" >> nbhspace >> (fileLib <+? map Library readable)
           where fileLib = single '@' >> map LibraryFile (visible "")
         blts = Library (builtinsLib^.flID) <$ like "builtins"
         

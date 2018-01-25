@@ -20,15 +20,15 @@ import Control.Exception hiding (throw)
 import Crypto.Hash.SHA256 (hashlazy)
 import Curly.Core
 import Curly.Core.Library
-import Curly.Core.Parser hiding (nbsp,spc)
+import Curly.Core.Parser
 import Curly.Core.Security
 import Curly.Core.Annotated
 import Curly.UI.Options
 import Data.IORef 
 import Data.List (sortBy)
 import IO.Filesystem hiding ((</>))
-import Language.Format hiding (space)
-import Language.Syntax.CmdArgs
+import Language.Format
+import Language.Syntax.CmdArgs hiding (hspace)
 import System.IO (IOMode(..),withFile)
 import System.Posix.Files (createSymbolicLink,removeLink)
 import IO.Time
@@ -98,8 +98,11 @@ cacheResource (src,cache) a bs = by thunk $ do
   where bval = B_Bytes bs
         sym = mkSymbol (pureIdent "value",Pure (Builtin (builtinType bval) bval))
         lib = fileLibrary (zero
-                           & set symbols (singleton "value" (undefLeaf "" & set leafVal sym & set leafType (builtinType bval)))
-                           & setExports (Pure "value")) Nothing
+                           & set symbols (singleton "value" (undefLeaf ""
+                                                             & set leafVal sym
+                                                             & set leafType (builtinType bval)
+                                                             & set leafPos (SourceRange (Just sourceName) (0,0,0) (0,0,0))))
+                           & setExports (Pure "value")) (Just sourceName)
   
         cacheName = cache+a^.relPath+".cyl"
         sourceName = src+a^.relPath
@@ -230,7 +233,7 @@ readCurlyConfig cliargs = fold <$> traverse (fileArgs [] <|> return . map (Nothi
 
                 delDefault | file`isKeyIn`cliFiles = fromKList <#> fromKList
                            | otherwise = warp (at "command".i'isJust) not . fromKList <#> fromKList
-                configFile s = fold <$> sepBy' (localOpt condDesc <+? condClause) (skipMany' (nbsp+eol))
+                configFile s = fold <$> sepBy' (localOpt condDesc <+? condClause) (skipMany' (nbhspace+eol))
                   where clause = localOpt (foldl1' (<+?) [cmd n arg | Option _ ns arg _ <- curlyOpts, n <- ns])
                                  <+? include
                                  <+? localOpt echo
@@ -238,30 +241,30 @@ readCurlyConfig cliargs = fold <$> traverse (fileArgs [] <|> return . map (Nothi
                                  <+? [] <$ many1' (satisfy (/='\n'))
                         condDesc = do
                           cond <- single '?' >> visible ""
-                          desc <- skipMany' nbsp >> many' (do x <- fill Nothing eol <+? map Just token
-                                                              maybe zero return x)
+                          desc <- skipMany' nbhspace >> many' (do x <- fill Nothing eol <+? map Just token
+                                                                  maybe zero return x)
                           return [FlagDescription cond desc]
                         localOpt = map2 (Just s,)
                         condClause = (<+? clause) $ do
                           single '+'
                           (exc,inc) <- delDefault . partitionEithers <$> sepBy1' (option' Right (Left <$ single '!') <*> visible ",") (single ',')
                           let cond = Conditional inc exc
-                          spc >> condClause <&> map (second cond)
+                          hspace >> condClause <&> map (second cond)
                         base = init $ dropFileName s
                         include = do
-                          several "include" >> nbsp
-                          p <- sepBy' (visible "=") nbsp <* spc <* single '=' <* spc
+                          several "include" >> nbhspace
+                          p <- sepBy' (visible "=") nbhspace <* hspace <* single '=' <* hspace
                           ts <- lift . fileArgs (mnt+p) =<< map (base</>) (visible "")
                           return (ts <&> l'2.t'Mount %~ ((p+) <#> t'Source.l'1 %~ (p+)))
-                        echo = several ">" >> pure . Target . Echo base<$>option' "" (nbsp >> many' (satisfy (/='\n')))
-                        exe = single '%' >> nbsp >> foldl1' (<+?) [cmdLine f | Option _ ["execute"] (ReqArg f _) _ <- curlyOpts]
+                        echo = several ">" >> pure . Target . Echo base<$>option' "" (nbhspace >> many' (satisfy (/='\n')))
+                        exe = single '%' >> nbhspace >> foldl1' (<+?) [cmdLine f | Option _ ["execute"] (ReqArg f _) _ <- curlyOpts]
                         inp = several "mount" 
                         tgt = several "target" + single '-'
-                        cmd "mount" _ = inp >> nbsp >> pure . uncurry Mount<$>inputSource base
-                        cmd n (NoArg x) = tgt >> nbsp >> x <$ several n
-                        cmd n (ReqArg f _) = tgt >> nbsp >> several n >> nbsp >> cmdLine f
-                        cmd n (OptArg f _) = tgt >> nbsp >> several n >> nbsp >> option' (f Nothing) (cmdLine (f . Just))
-                        cmdLine f = map adjustTgt . f . intercalate " "<$>sepBy1' (visible "") nbsp
+                        cmd "mount" _ = inp >> nbhspace >> pure . uncurry Mount<$>inputSource base
+                        cmd n (NoArg x) = tgt >> nbhspace >> x <$ several n
+                        cmd n (ReqArg f _) = tgt >> nbhspace >> several n >> nbhspace >> cmdLine f
+                        cmd n (OptArg f _) = tgt >> nbhspace >> several n >> nbhspace >> option' (f Nothing) (cmdLine (f . Just))
+                        cmdLine f = map adjustTgt . f . intercalate " "<$>sepBy1' (visible "") nbhspace
                         adjustTgt = t'Target.targetFilepaths %~ (base</>)
 
 withCurlyPlex :: MonadIO m => CurlyConfig -> ((?curlyPlex :: CurlyPlex) => m a) -> m a

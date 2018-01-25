@@ -39,7 +39,7 @@ vcsDoc = unlines [
   where li = format "{li %s}"
         ul l = format "{ul %s}" (intercalate " " l)
 vcsCmd = withDoc vcsDoc $ False <$ do
-  cmd <- expected "keyword, either 'commit', 'list' or 'get-source'" (nbhsp >> dirArg)
+  cmd <- expected "keyword, either 'commit', 'list' or 'get-source'" (nbhspace >> dirArg)
   u <- lookup curlyPublisher <$> getKeyStore
   let withKeys k = case u of
         Just (_,pub,Just priv,_,_) -> k pub priv
@@ -61,8 +61,8 @@ vcsCmd = withDoc vcsDoc $ False <$ do
   case cmd of
     "commit" -> withMountain $ do
       guardWarn "Cannot commit without admin access" (?access >= Admin)
-      branch <- expected "branch name" (nbhsp >> dirArg)
-      pathtail <- many' (nbhsp >> dirArg) <* hspc <* lookingAt (eol+eoi)
+      branch <- expected "branch name" (nbhspace >> dirArg)
+      pathtail <- many' (nbhspace >> dirArg) <* hspace <* lookingAt (eol+eoi)
       path <- getSession wd <&> (`subPath`pathtail)
       let libs = ?mountain ^?? atMs path.traverse
 
@@ -85,10 +85,10 @@ vcsCmd = withDoc vcsDoc $ False <$ do
         return (insert branch (Right commid) bs)
         
     "list" -> do
-      keyid <- expected "key name" (nbhsp >> dirArg)
-      branch <- option' Nothing (Just <$> (nbhsp >> dirArg))
+      keyid <- expected "key name" (nbhspace >> dirArg)
+      branch <- option' Nothing (Just <$> (nbhspace >> dirArg))
       template <- option' Nothing (Just <$> docLine "template" [])
-      lookingAt (hspc >> (eol+eoi))
+      lookingAt (hspace >> (eol+eoi))
       key <- lookup keyid <$> getKeyStore
       case map (by l'2) key of
         Nothing -> serveStrLn $ format "Error: Unknown key %s" keyid
@@ -104,17 +104,17 @@ vcsCmd = withDoc vcsDoc $ False <$ do
 
     "get" -> do
       guardWarn "You must have almighty access to retrieve arbitrary files" (?access >= Almighty)
-      getLib <- expected "'source' or 'library'" (nbhsp >> (fill True (several "library")
+      getLib <- expected "'source' or 'library'" (nbhspace >> (fill True (several "library")
                                                             <+? fill False (several "source")))
-      file <- expected "file name" (nbhsp >> dirArg)
-      lid <- expected "library ID" (nbhsp >> libID)
+      file <- expected "file name" (nbhspace >> dirArg)
+      lid <- expected "library ID" (nbhspace >> libID)
       (if getLib then getLibrary else getSource) file lid
                   
     "checkout" -> do
       guardWarn "Checkouts can only be performed with almighty access" (?access >= Almighty)
-      (root,name) <- splitFileName <$> expected "file prefix" (nbhsp >> dirArg)
+      (root,name) <- splitFileName <$> expected "file prefix" (nbhspace >> dirArg)
       let pref = root+name
-      lid <- expected "library ID" (nbhsp >> libID)
+      lid <- expected "library ID" (nbhspace >> libID)
       ls <- checkout pref lid
       liftIO $ do
         writeString (root+name+".cyx") $ unlines [
@@ -133,9 +133,9 @@ vcsCmd = withDoc vcsDoc $ False <$ do
 
     "branch" -> do
       guardWarn "Cannot modify a branch without almighty access" (?access >= Almighty)
-      branch <- expected "branch name" (nbhsp >> dirArg)
+      branch <- expected "branch name" (nbhspace >> dirArg)
       let branchFilter = do
-            filterP <- expected "'keep' or 'drop'" (nbhsp >> (fill id (several "keep")
+            filterP <- expected "'keep' or 'drop'" (nbhspace >> (fill id (several "keep")
                                                              <+? fill not (several "drop")))
             let libPred = (dirArg >*> readable) <&> \l ls -> [x | x@(l',_) <- ls, filterP (l==l')]
                 tplAtom = docAtom <*= \x -> guard (has t'Join x)
@@ -144,17 +144,17 @@ vcsCmd = withDoc vcsDoc $ False <$ do
                   return $ \ls -> [x | x@(_,m) <- ls, filterP (nonempty (showTemplate m tpl))]
                 groupPred = do
                   op <- fill "<=" (several "minimum") <+? fill ">=" (several "maximum")
-                  cmptpl <- nbhsp >> docAtom
-                  nbhsp >> several "by"
-                  gtpl <- nbhsp >> tplAtom
+                  cmptpl <- nbhspace >> docAtom
+                  nbhspace >> several "by"
+                  gtpl <- nbhspace >> tplAtom
                   let minTpl m1 m2 | nonempty (do v <- showTemplate (snd m1) cmptpl
                                                   showTemplate (snd m2) (Join (DocTag op [] [Pure v,cmptpl]))) = m1
                                    | otherwise = m2
                   return $ \ls -> let groups = c'map $ composing (\x@(_,m) -> mat (showTemplate m gtpl) %~ (x:)) ls zero
                                   in mlookup Nothing groups + fold [select (filterP . (fst (foldl1' minTpl l)==) . fst) l
                                                                    | (Just _,l) <- groups^.ascList]
-            pred <- expected "filter predicate" (nbhsp >> (libPred <+? singlePred <+? groupPred))
-            lookingAt (hspc >> (eol+eoi))
+            pred <- expected "filter predicate" (nbhspace >> (libPred <+? singlePred <+? groupPred))
+            lookingAt (hspace >> (eol+eoi))
             modifyBranches $ \bs -> do
               mh <- deepBranch' (lookup branch bs)
               index <- getAll branch mh
@@ -165,9 +165,9 @@ vcsCmd = withDoc vcsDoc $ False <$ do
               vcbStore conn (CommitKey commid) c
               return (insert branch (Right commid) bs)
           branchFork = do
-            isLink <- nbhsp >> (fill False (several "fork") <+? fill True (several "link"))
-            user <- expected "key id" (nbhsp >> dirArg)
-            srcBranch <- expected "branch name" (nbhsp >> dirArg)
+            isLink <- nbhspace >> (fill False (several "fork") <+? fill True (several "link"))
+            user <- expected "key id" (nbhspace >> dirArg)
+            srcBranch <- expected "branch name" (nbhspace >> dirArg)
             map (lookup user) getKeyStore >>= \x -> case x of
               Nothing -> do serveStrLn $ format "Error: unknown user %s" user
                             zero

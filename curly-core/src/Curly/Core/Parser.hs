@@ -5,7 +5,7 @@
 module Curly.Core.Parser (
   -- * Expressions and operators
   OpMap,OpChar(..),OpParser,Warning(..),CurlyParserException(..),showWarning,l'library,
-  Spaces,parseCurly,currentPos,hspace,space,spc,hspc,nbsp,nbhsp,
+  Spaces(..),parseCurly,currentPos,spc,nbsp,
   expr,accessorExpr,tom,atom,
 
   -- * Basic blocks for warning generation  
@@ -21,7 +21,7 @@ import Curly.Core.Documentation
 import Curly.Core.Library
 import IO.Filesystem
 import Data.Char (isAlpha)
-import Language.Format hiding (space)
+import Language.Format hiding (space,hspace)
 import Control.Exception
 import Data.Typeable (Typeable)
 
@@ -88,7 +88,14 @@ mkStream = OpStream "" . mk ('\0',0,0,0)
 type OpMap_Val = ((Int,Bool),String)
 type OpMap = Cofree (Map Char) (Maybe OpMap_Val)
 type OpParser m = ParserT OpStream (RWST Void [Warning] (Int,OpMap,(Map String (NameExpr GlobalID),Library)) m)
-type Spaces = forall s m c. (Monad m,ParseStream c s, TokenPayload c ~ Char) => ParserT s m ()
+data Spaces = HorizSpaces | AnySpaces
+
+parseSpaces :: (Monad m,ParseStream c s, TokenPayload c ~ Char) => Spaces -> ParserT s m ()
+parseSpaces HorizSpaces = hspc
+parseSpaces AnySpaces = spc
+parseNBSpaces :: (Monad m,ParseStream c s, TokenPayload c ~ Char) => Spaces -> ParserT s m ()
+parseNBSpaces HorizSpaces = nbhsp
+parseNBSpaces AnySpaces = nbsp
 
 instance Lens1 a a (Cofree f a) (Cofree f a) where
   l'1 k (Step x f) = k x <&> \x' -> Step x' f
@@ -137,7 +144,8 @@ mkRange p p' = SourceRange Nothing p p'
 mkLet (Left (s,v)) = maybe id (flip mkApply) v . mkAbstract s
 mkLet (Right t) = \e -> foldl1' mkApply (t+[e])
 
-space, spc, hspc, nbsp, nbhsp, hspace :: Spaces
+space, spc, hspc, nbsp, nbhsp, hspace 
+  :: (Monad m,ParseStream c s, TokenPayload c ~ Char) => ParserT s m ()
 space = hspace + (eol >> skipMany' ("#" >> skipMany' (satisfy (/='\n')) >> eol))
 hspace = void $ oneOf [' ', '\t']
 spc = skipMany' space
@@ -180,7 +188,7 @@ mkSymIn :: Semantic e i (String,Maybe (NameExpr GlobalID)) => Map String (NameEx
 mkSymIn m = \n -> mkSymbol (n,lookup n m)
 
 tom, expr, accessorExpr :: Monad m => Spaces -> OpParser m SourceExpr
-expr sp = foldl1' mkApply<$>sepBy1' (tom sp) (skipMany1' sp) 
+expr sp = foldl1' mkApply<$>sepBy1' (tom sp) (parseNBSpaces sp) 
 accessorExpr sp = expr sp <*= \e -> defAccessors (map fst (toList e))
 
 completing :: Monad m => OpParser Id a -> OpParser m [(String,a)]
@@ -204,7 +212,7 @@ tom sp = do
                 pref <- opPref
                 case opmap^.at '_' of
                   Just tl -> flip fix pref $ \mkSuf (d,e) ->
-                    (skipMany' _sp >> suffix (liftA2 (&&) p (<=d)) (e:) tl >>= mkSuf)
+                    (parseSpaces _sp >> suffix (liftA2 (&&) p (<=d)) (e:) tl >>= mkSuf)
                     <+? return (d,e)
                   _ -> return pref
               opPref = (tokParam opmap >>= suffix (>=0) id) <+? map ((maxBound :: Int,) . mkSymbol . Just) atom
@@ -228,7 +236,7 @@ tom sp = do
             tl <- param m '_'
             guard (any (maybe False (p . fst . fst)) tl)
             let exprSuf tl@(Step _ tlm) | empty tlm = zero
-                                        | otherwise = between spc spc (operation space (>=0))
+                                        | otherwise = between spc spc (operation AnySpaces (>=0))
                                                       >>= \(_,e) -> suffix p (mod . (e:)) tl
             case tl :: OpMap of
               Step (Just ((d,isR),n)) m' | p d -> do
@@ -256,15 +264,15 @@ tom sp = do
 
 atom :: Monad m => OpParser m SourceExpr
 atom = withPostfix
-       =<< wrapCurly (expected "lambda-expression" lambda) <+? wrapRound (expr space) <+? (expected "symbol" close)
+       =<< wrapCurly (expected "lambda-expression" lambda) <+? wrapRound (expr AnySpaces) <+? (expected "symbol" close)
   where
     close = liftA2 (&) (liftA2 mkSymIn (lift $ getl l'typeMap) name <+? string '"' <+? string '\'')
             $ option' id $ wrapRound $ do
-      sepBy1' (tom space) nbsp <&> \args e -> foldl' mkApply e args
+      sepBy1' (tom AnySpaces) nbsp <&> \args e -> foldl' mkApply e args
     withPostfix s = foldl' (\e n -> mkApply (mkSymbol ('.':n,Nothing)) e) s
                     <$> many' (single '.' >> many1' letter)
     string c = between (single c) (single c) $ mkConcat . g . foldr f ("",[]) <$> many' stringExpr
-      where stringExpr = map Left (single '$' >> wrapCurly (expr space))
+      where stringExpr = map Left (single '$' >> wrapCurly (expr AnySpaces))
                          <+? map Right (single '\\' >> unquote<$>token <+? satisfy (/=c))
             unquote 'n' = '\n'
             unquote 't' = '\t'
@@ -282,7 +290,7 @@ atom = withPostfix
       old <- lift get
       args <- fold <$> sepBy1' lambdaArg nbsp
       _ <- floating ":"
-      e <- expr space
+      e <- expr AnySpaces
       lift (put old)
       return $ foldr mkLet e args
 
@@ -297,7 +305,7 @@ lambdaArg = letBinding + funPrefix + do
           old <- lift get
           args <- fold <$> many' (nbsp >> lambdaArg)
           _ <- floating (opKeyword "=")
-          e <- expr space
+          e <- expr AnySpaces
           lift (put old)
           register n
           return [Left (n,Just (foldr mkLet e args))]
@@ -306,7 +314,7 @@ lambdaArg = letBinding + funPrefix + do
           lift $ l'typeMap =~ insert ctor (typeExpr ctt) . insert dtor (typeExpr dtt)
           register ctor ; register dtor
           return []
-        funPrefix = wrapRound $ pure . Right<$>sepBy1' (tom space) nbsp
+        funPrefix = wrapRound $ pure . Right<$>sepBy1' (tom AnySpaces) nbsp
 
 typeExpr :: Type GlobalID -> NameExpr GlobalID
 typeExpr t = mkAbstract (pureIdent "#0") (mkSymbol (pureIdent "#0",Pure (Argument 0))) & from i'NameNode.t'Join.annType %- t
@@ -331,7 +339,7 @@ curlyFile = do
           mods <- ("#!/lib/symbol!#" <+? "symbol") >> swaying (modTree`sepBy'`nbhsp) <* (eol+eoi)
           mods' <- traverse resolve mods
           pre <- currentPos
-          e <- floating (expr space)
+          e <- floating (expr AnySpaces)
           post <- currentPos
           lift $ l'library =~ compose [
             addImport (fold mods'),
@@ -382,7 +390,7 @@ curlyLine = swaying (foldr1 (<+?) [defLine,descLine,typeLine,classLine,comment,i
           args <- fold <$> many' (nbsp >> lambdaArg)
           _ <- floating (opKeyword "=")
           pre <- currentPos
-          e <- expr hspace
+          e <- expr HorizSpaces
           post <- currentPos
           lift (put old)
           register sym
@@ -449,7 +457,7 @@ defRigidSymbols args = compose [defTypeSym a False NoRange (rigidTypeFun a) expr
 
 typeSum :: Monad m => OpParser m (SourcePos,Library -> Type GlobalID,SourcePos)
 typeSum = do
-  let typeNode = (fill Nothing delim <+? map Just (tom hspace)) >>= maybe zero pure
+  let typeNode = (fill Nothing delim <+? map Just (tom HorizSpaces)) >>= maybe zero pure
       delim = between hspc nbsp ("and"<+?oneOf (c'string "&|"))
   pre <- currentPos
   exprs <- sepBy1' (foldl1' mkApply <$> sepBy1' typeNode nbhsp) delim

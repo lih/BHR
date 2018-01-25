@@ -24,7 +24,7 @@ module Language.Parser (
   remaining,eoi,
 
   -- ** Specialized utilities
-  readable,number,digit,letter,alNum,quotedString,space,spaces,eol,
+  readable,number,digit,letter,alNum,quotedString,space,nbspace,hspace,nbhspace,eol,
   
   -- * Useful combinators
   many,many1,sepBy,sepBy1,skipMany,skipMany1,
@@ -244,12 +244,18 @@ quotedString d = between (single d) (single d) (many ch)
         unquote 'n' = '\n'
         unquote 't' = '\t'
         unquote c = c
--- |A single space
-space :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p Char
-space = satisfy isSpace
--- |Many spaces
-spaces :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p String
-spaces = many1' space
+-- | Zero or more spaces
+space :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p ()
+space = option' () nbspace
+-- | One or more spaces
+nbspace :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p ()
+nbspace = skipMany1' (satisfy (\x -> x==' ' || x=='\t' || x=='\n'))
+-- | Zero or more horizontal spaces (no newlines)
+hspace :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p ()
+hspace = option' () nbhspace
+-- | One or more horizontal spaces (no newlines)
+nbhspace :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p ()
+nbhspace = skipMany1' (satisfy (\x -> x==' ' || x=='\t'))
 
 infixl 1 `sepBy`,`sepBy1`
 

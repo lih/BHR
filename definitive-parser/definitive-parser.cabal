@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                definitive-parser
-version:             2.4
+version:             2.5
 -- synopsis:            
 -- description:         
 license:             MIT

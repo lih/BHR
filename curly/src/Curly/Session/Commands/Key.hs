@@ -28,7 +28,7 @@ keyDoc = unlines [
   "}"
   ]
 keyCmd = withDoc keyDoc $ False <$ do
-  x <- expected "key command" (nbhsp >> dirArg)
+  x <- expected "key command" (nbhspace >> dirArg)
   let setKey name v = do
         ks <- getKeyStore
         if name`isKeyIn`ks then serveStrLn (format "Error: the key '%s' already exists" name) >> zero
@@ -55,50 +55,50 @@ keyCmd = withDoc keyDoc $ False <$ do
         | (name,(f,_,priv,_,all)) <- m^.ascList]
         +[(name,"client ",fp,priv,mlookup fp fpAllowed) | (name,fp,priv) <- kl]
     "gen" -> do
-      isDistant <- option' True (nbhsp >> (False<$several "client" <+? True<$several "server"))
-      name <- expected "key name" (nbhsp >> dirArg)
+      isDistant <- option' True (nbhspace >> (False<$several "client" <+? True<$several "server"))
+      name <- expected "key name" (nbhspace >> dirArg)
       if isDistant then
         if ?access>=Almighty then genPrivateKey >>= \k -> modifyKeyStore (insert name (let pub = publicKey k in (fingerprint pub,pub,Just k,zero,zero)))
         else serveStrLn "Error: you are not authorized to create server keys"
         else liftIOWarn $ clientKeyGen True name
     "del" -> do
-      isDistant <- option' True (nbhsp >> (False<$several "client" <+? True<$several "server"))
-      name <- expected "key name" (nbhsp >> dirArg)
+      isDistant <- option' True (nbhspace >> (False<$several "client" <+? True<$several "server"))
+      name <- expected "key name" (nbhspace >> dirArg)
       if isDistant then
         if ?access>=Almighty then modifyKeyStore (delete name)
         else serveStrLn "Error: you are not authorized to delete server keys"
         else liftIOWarn $ clientKeyGen False name
     "set" -> do
-      name <- expected "key name" (nbhsp >> dirArg)
-      ph:pt <- expected "metadata path" (many1' (nbhsp >> dirArg <*= \a -> guard (a/="=")))
-      expected "keyword '='" (nbhsp >> single '=')
-      value <- expected "value" (nbhsp >> many1' (noneOf "\n"))
+      name <- expected "key name" (nbhspace >> dirArg)
+      ph:pt <- expected "metadata path" (many1' (nbhspace >> dirArg <*= \a -> guard (a/="=")))
+      expected "keyword '='" (nbhspace >> single '=')
+      value <- expected "value" (nbhspace >> many1' (noneOf "\n"))
       if ?access >= Almighty
         then modifyKeyStore $ at name.t'Just.l'4.mat ph %~ insert pt (Pure value)
         else serveStrLn "Error: you are not authorized to set key metadata"
     "meta" -> do
-      name <- expected "key name" (nbhsp >> dirArg)
-      path <- many' (nbhsp >> dirArg)
+      name <- expected "key name" (nbhspace >> dirArg)
+      path <- many' (nbhspace >> dirArg)
       mm <- getKeyStore <&> \ks -> ks^?at name.t'Just.l'4.getter (\(Metadata m) -> Join m).at path.t'Just
       maybe unit (serveStrLn . showMetaDir . mapF (\m -> ModDir (m^.ascList))) mm
     "grant" -> do
-      tp <- expected "access type" (nbhsp >> (dirArg >*> readable))
-      name <- expected "key name" (nbhsp >> dirArg)
+      tp <- expected "access type" (nbhspace >> (dirArg >*> readable))
+      name <- expected "key name" (nbhspace >> dirArg)
       if ?access >= Admin && tp <= ?access then do
         modifyKeyStore $ at name %~ map (l'5.at (getConf confInstance).sat (\x -> fold x <= ?access)
                                          %- case tp of Deny -> Nothing ; _ -> Just tp)
         else serveStrLn "Error: you are not authorized to grant these permissions"
     "export" -> do
-      name <- expected "key name" (nbhsp >> dirArg)
-      proof <- option' False (nbhsp >> True<$several "proof")
+      name <- expected "key name" (nbhspace >> dirArg)
+      proof <- option' False (nbhspace >> True<$several "proof")
       v <- lookup name <$> getKeyStore
       case v of
         Just (_,pub,priv,meta,_) -> serveStrLn (show (Zesty (pub,if proof && ?access >= Almighty then map (,meta) priv else Nothing)))
         Nothing -> serveStrLn ("Error: Unknown key '"+name+"'")
     "import" -> do
-      name <- expected "key name" (nbhsp >> dirArg)
+      name <- expected "key name" (nbhspace >> dirArg)
       try (serveStrLn "Error: Invalid key") $ expected "client key name or raw key export" $ do
-        nbhsp
+        nbhspace
         Zesty (pub,priv) <- (single '#' >> dirArg) >*> readable
                             <+? Zesty . (,Nothing) <$> do
                               name' <- dirArg

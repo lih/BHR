@@ -15,7 +15,7 @@ whereCmd,whyCmd,whenceCmd,whatCmd,howCmd,formatCmd,patternCmd :: Interactive Com
 
 viewCmd doc onExpr onPath showV = withDoc doc . fill False $ (several "'s" >> viewSym) <+? viewPath
   where viewPath = nbsp >> do
-          path <- liftA2 subPath (getSession wd) dirArgs
+          path <- absPath ""
           withMountain $ case localContext^?atMs path of
             Just (Pure (_,v)) -> liftIOWarn $ showV path v
             _ -> onPath path
@@ -59,7 +59,7 @@ serveHow v | envLogLevel>=Verbose = serveStrLn (pretty (map withSym (semantic v)
         withSym (s,_) = VerboseVar s Nothing
 howCmd = viewCmd howDoc onExpr (const zero) $ \_ (by leafVal -> v) -> serveHow v
   where onExpr = do
-          e <- optimized =<< accessorExpr hspace
+          e <- optimized =<< accessorExpr HorizSpaces
           serveHow e
           
 whatDoc = unlines [
@@ -70,7 +70,7 @@ whatDoc = unlines [
 whatCmd = viewCmd whatDoc onExpr (const zero) $ \_ (by leafVal -> v) -> serveWhat v
   where serveWhat v = serveStrLn (show (exprType v))
         onExpr = do
-          e <- optimized =<< accessorExpr hspace
+          e <- optimized =<< accessorExpr HorizSpaces
           serveWhat e
 
 rangeFile :: Traversal' SourceRange String
@@ -92,9 +92,9 @@ whereCmd = viewCmd whereDoc zero onPath $ \path (by leafPos -> r) -> case r of
 
 formatDoc = "{section {title Formatted Query} {p {em Usage:} format PATTERN PATH} {p Show the function at PATH according to the pattern PAT}}"
 formatCmd = withDoc formatDoc . fill False $ do
-  pat <- nbhsp >> ((docAtom <*= guard . has t'Join) <+? map (docTag' "pattern" . pure . Pure) dirArg)
+  pat <- nbhspace >> ((docAtom <*= guard . has t'Join) <+? map (docTag' "pattern" . pure . Pure) dirArg)
   
-  path <- liftA2 subPath (getSession wd) (many' (nbhsp >> dirArg))
+  path <- nbhspace >> absPath ""
   withMountain $ let ctx = fold $ c'list $ localContext^??atMs path in do
     let params (n,v) = let Join p = composing (uncurry insert) [
                              (["type"],Pure $ document (exprType (v^.leafVal))),
@@ -106,7 +106,7 @@ formatCmd = withDoc formatDoc . fill False $ do
     withStyle $ withPatterns $ serveStrLn (docString ?terminal ?style (document (map (\v -> fromMaybe (nodoc (format "Unmatched pattern %s" (show pat))) (evalDocWithPatterns ?patterns (params v) pat)) ctx)))
     
 patternCmd = withDoc "{section {title Define Patterns} {p {em Usage:} pattern PATH = PATTERN} {p Defines a new query pattern accessible with \\{pattern PATH\\}}}" . fill False $ do
-  ph:pt <- many1' (nbhsp >> dirArg <*= guard . (/="="))
-  between nbhsp nbhsp (several "=")
+  ph:pt <- many1' (nbhspace >> dirArg <*= guard . (/="="))
+  between nbhspace nbhspace (several "=")
   pat <- docLine "pat" []
   liftIO $ runAtomic ?sessionState (patterns.at ph.l'Just (Join zero).at pt =- Just (Pure pat))

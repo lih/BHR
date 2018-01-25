@@ -6,15 +6,11 @@ import Curly.Core.Library
 import Curly.UI
 import Curly.Core.Parser
 import Data.IORef 
-import Language.Format hiding (space)
+import Language.Format
 import Curly.Session.Commands.Common
 import Curly.Core.Documentation
 import Curly.Style (setupTermFromEnv)
-
-lsPath :: (?sessionState :: IORef SessionState) => OpParser IO [String]
-lsPath = do
-  args <- many' (nbhsp >> dirArg)
-  getSession wd <&> (`subPath`args)
+import Curly.UI.Options (symPath)
 
 lsCmd,wdCmd,cdCmd,treeCmd :: Interactive Command
 lsDoc = unlines [
@@ -23,7 +19,7 @@ lsDoc = unlines [
   ,"{p List the contents of the working directory, or those of the relative path given on the command-line.}}"
   ]
 lsCmd = withDoc lsDoc $ False <$ do
-  p <- lsPath
+  p <- hspace >> absPath ""
   withMountain $ serveStrLn $
     if has (atMs p.t'Pure) localContext
     then "Error: "+showPath p+" is a function"
@@ -36,7 +32,7 @@ treeDoc = unlines [
   ,"{p Recursively list the contents of the working directory, or those of the relative path given on the command-line.}}"
   ]
 treeCmd = withDoc treeDoc $ False <$ do
-  p <- lsPath
+  p <- hspace >> absPath ""
   term <- liftIO setupTermFromEnv
   withStyle $ withMountain $ serveStrLn . docString term ?style . document . map fst . Join . fold . c'list $ (localContext^??atMs p.t'Join)
 
@@ -49,12 +45,14 @@ cdDoc = unlines [
   ]
 cdCmd = withDoc cdDoc (fill False $ withargs <+? noarg)
   where noarg = liftIO (modifyIORef ?sessionState (wd %- []))
-        withargs = nbhsp >> do
-          oldpath <- getSession wd
-          dirs <- dirArgs
+        inRoot m = do
+          old <- liftIO $ runAtomic ?sessionState (wd <~ \x -> ([],x))
+          m <* liftIO (modifyIORef ?sessionState (set wd old))
+        withargs = nbhspace >> do
+          isAbs <- option' False (True <$ single '.')
+          newpath <- (if isAbs then inRoot else id) (absPath "")
           withMountain $ do
-            let newpath = subPath oldpath dirs
-                m = c'list (localContext^??atMs newpath)
+            let m = c'list (localContext^??atMs newpath)
             liftIOWarn $ if nonempty (fold $ c'list (m^??each.t'Join))
                          then modifyIORef ?sessionState (wd %- newpath)
                          else serveStrLn $ if has (each.t'Pure) m
