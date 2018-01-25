@@ -10,8 +10,8 @@ function C.curly.init() {
             COMP_DESCRIPTIONS["curly:$short"]="$desc"; fi
         if [ "${long:+x}" = x ]; then
             COMP_DESCRIPTIONS["curly:$long"]="$desc"; fi
-    done < <(/usr/bin/curly -h | tail -n +2 | sed -rn 's/^\s+(-[^-])?\s+(--\S+)\s+(\S+)\s+(.*\S)\s*$/\1|\2|\3|\4/p')
-    IFS=', ' CURLY_SYSTEMS=( $(/usr/bin/curly -h | sed -n 's/^Known systems: //p') ) IFS="$IFSBAK"
+    done < <(CURLY_VCS=dummy /usr/bin/curly -h | tail -n +2 | sed -rn 's/^\s+(-[^-])?\s+(--\S+)\s+(\S+)\s+(.*\S)\s*$/\1|\2|\3|\4/p')
+    IFS=', ' CURLY_SYSTEMS=( $(CURLY_VCS=dummy /usr/bin/curly -h | sed -n 's/^Known systems: //p') ) IFS="$IFSBAK"
 }
 function C.curly.flags() {
     C.curly.init
@@ -30,6 +30,7 @@ function CF.cyscript() {
         local hd
 	read -r hd < "$1"
         [[ "$hd" == '#!/usr/bin/curly'*
+	|| "$hd" == '#!/usr/bin/env curly'*
         || "$hd" == "#!/lib/cyl!#"* 
         || "$hd" == "module"*
         || "$hd" == "symbol"* ]]
@@ -93,8 +94,13 @@ function C.curly.isHash() {
     local arg="$1" ; shift
     : ${CURLY_LIBCACHE:=$HOME/.curly/libraries}
     if C.leaf; then
-        IFSBAK="$IFS" IFS=$'\n' SUGGESTIONS=( $({ /usr/bin/curly -l'l"{$ synopsis}{or " (v{$ version})" ""}"'; for i in $(ls "$CURLY_LIBCACHE" 2> /dev/null); do hash="${i%.cyl}"; head="$(head -1 "$CURLY_LIBCACHE/$i")"; echo "${head/##!*!#/$hash}"; done; } \
-						    | sort -u | sed -rn "s/^($arg\\S+)\\s*(.*)\$/\\1 -- \\2/p") ) IFS="$IFSBAK"
+        IFSBAK="$IFS" IFS=$'\n' \
+	      SUGGESTIONS=( $({ /usr/bin/curly -l'l"{$ synopsis}{or " (v{$ version})" ""}"'
+				for i in $(ls "$CURLY_LIBCACHE" 2> /dev/null); do
+				    hash="${i%.cyl}"; head="$(head -1 "$CURLY_LIBCACHE/$i")"
+				    echo "${head/##!*!#/$hash}"
+				done; } \
+				  | sort -u | sed -rn "s/^($arg\\S+)\\s*(.*)\$/\\1 -- \\2/p") ) IFS="$IFSBAK"
     else
         SUGGESTIONS=( "$arg -- " )
     fi
@@ -137,7 +143,7 @@ function C.curly.arg() {
             for ((i=0;i<${#compFlags[@]};i++)); do
                 compFlags[i]+=" -- ${compFlagDescs[${compFlags[i]}]}"
             done
-        } < <(/usr/bin/curly "${CURLY_COMP_SCRIPTS[@]}" -h)
+        } < <(CURLY_VCS=dummy /usr/bin/curly "${CURLY_COMP_SCRIPTS[@]}" -h)
 	C.alt C.rawWordOf "${#compFlags[@]}" "${compFlags[@]}" "$@"
     fi
     C.alt C.curly.flags flag 6 -h --help -v --version -i --interactive "$@"
@@ -147,7 +153,7 @@ function C.curly.arg() {
     C.alt C.curly.flags opt 2 -d --dump C.curly.library "$@"
     C.alt C.curly.flags opt 2 -t --translate C.curly.translate "$@"
     C.alt C.curly.flags opt 1 --banner C.fileIn -r . "$@"
-    C.alt C.curly.flags opt 5 --prelude --prelude+ --instance -e --execute C.any "$@"
+    C.alt C.curly.flags opt 7 -p -P --prelude --prelude+ --instance -e --execute C.any "$@"
     C.alt C.curly.flags opt 1 --at C.curly.server "$@"
     C.alt C.describing "Curly script, source or library" C.capture word SCRIPT C.fileIn CF.cyscript . C.curly.withScript C.describing "" "$@"
     C.alt C.suffixed "@" C.wordOf 1 '' C.curly.server "$@"

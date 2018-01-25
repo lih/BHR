@@ -38,6 +38,7 @@ t'Target k (Target t) = Target<$>k t
 t'Target _ x = pure x
 
 data InputSource = Source [String] String String
+                 | Resource String String
                  | Library LibraryID
                  | LibraryFile String
                  deriving (Eq,Ord)
@@ -45,6 +46,7 @@ instance Show InputSource where
   show (Source p s c) = "source"+showSub+" "+s+" "+c
     where showSub | empty p = ""
                   | otherwise = "["+intercalate " " p+"] "
+  show (Resource p c) = "resource "+p+" "+c
   show (Library i) = "library "+show i
   show (LibraryFile f) = "library @"+f
 instance FormatArg InputSource where argClass _ = 'I'
@@ -234,7 +236,7 @@ visible lim = many1' (satisfy (not . \c -> isSpc c || c=='\n' || c`elem`lim))
 inputSource base = do
   p <- sepBy' (visible "=") nbsp
   between spc spc (several "=")
-  (p,) <$> (src <+? lib <+? search <+? blts)
+  (p,) <$> (src <+? rsc <+? lib <+? search <+? blts)
   where src = do
           like "source"
           sub <- option' [] (between (single '[') (single ']')
@@ -245,6 +247,11 @@ inputSource base = do
           let defaultCache = fromMaybe (n+".cache") (noCurlySuf n <&> (+".cyl"))
           m <- option' defaultCache (nbsp >> visible "")
           return (Source sub (base</>n) (base</>m))
+        rsc = do
+          like "resource"
+          n <- nbsp >> visible ""
+          m <- option' (n+".cache") (nbsp >> visible "")
+          return (Resource (base</>n) (base</>m))
         search = like "package" >> nbsp >> do
           let tag x l = Join (DocTag x [] l)
           tpl <- (docAtom <*= guard . has t'Join)

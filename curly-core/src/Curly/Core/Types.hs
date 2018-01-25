@@ -444,6 +444,7 @@ builtinType b = (zero :: Type s) & i'typeRel %~ case b of
 
   (B_Number _)    -> ln' [] intT
   (B_String _)    -> ln' [] stringT
+  (B_Bytes _)     -> ln' [] stringT
   B_Unit          -> ln' [] unitT
   B_FileDesc _    -> ln' [] fileT
 

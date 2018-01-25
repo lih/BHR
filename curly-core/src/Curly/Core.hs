@@ -306,6 +306,8 @@ data Builtin = B_Undefined
              | B_StringLength
              | B_AddString | B_ShowInt
 
+             | B_Bytes Bytes
+
              | B_MkArray
              | B_ArrayLength
              | B_ArrayAt

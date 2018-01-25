@@ -62,7 +62,7 @@ evalDocWithPatterns pats vars = eval
 evalDoc :: DocParams -> Documentation -> Maybe Documentation
 evalDoc = evalDocWithPatterns zero
 
-nodoc = Join (DocTag "nodoc" [] [])
+nodoc msg = Join (DocTag "nodoc" [] [Pure msg])
 mkDoc d = Join . DocTag "doc" [] $ fromMaybe [] $ matches Just (between spc spc (sepBy' docAtom spc)) d
 spc :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => ParserT s m ()
 spc = skipMany' (oneOf " \t\n")
@@ -211,14 +211,15 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),(BeginP,zero,0))) & \(_,_,t) 
           unless isSet $ do
             l'2.l'1 =- True
             maybe unit setDisplay bl
+            indent
+            maybe unit (\pre -> tell pre >> (l'2.l'2.tagPrefix =- Nothing)) p
             tell (restoreDefaultColors trm)
             maybe unit (tell . setForegroundColor trm) cf
             maybe unit (tell . setBackgroundColor trm) cb
             boolSt bo (tell $ setBold trm True)
             boolSt u (tell $ setUnderlined trm True)
             boolSt it (tell $ setItalic trm True)
-            indent
-            maybe unit (\pre -> tell pre >> (l'2.l'2.tagPrefix =- Nothing)) p
+            
         styleEnd = do
           (isSet,TagStyle (fg,bg) bl bo u it _ _) <- getl l'2
           when isSet $ do

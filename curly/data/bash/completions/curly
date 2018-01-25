@@ -2,10 +2,12 @@
 function C.curly() {
     local -a CURLY_COMP_SCRIPTS=( )
     local which_curly="$(which "${COMP_PROGRAM/icy/curly}")"
-    case "$which_curly" in
-	/usr/bin/*) ;;
-	*) CURLY_COMP_SCRIPTS=( "$which_curly" );;
-    esac
+    if file "$which_curly"  | grep -q text; then
+	CURLY_COMP_SCRIPTS+=( "$which_curly" )
+    fi
+    if file .curly | grep -q text; then
+	CURLY_COMP_SCRIPTS+=( .curly )
+    fi
     C.repeat C.curly.arg
 }
 C.curly "$@"

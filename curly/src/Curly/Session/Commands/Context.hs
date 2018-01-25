@@ -14,7 +14,8 @@ import Curly.Session.Commands.Common
 cleanCmd,metaCmd,reloadCmd,fixCmd :: Interactive Command
 
 cleanDoc = "{section {title Clean Cache} Removes all cache files}"
-cleanCmd = withDoc cleanDoc $ False <$ liftIO (sequence_ [clean c | (_,Source _ _ c) <- ?curlyPlex^.mounts])
+cleanCmd = withDoc cleanDoc $ False <$ liftIO (do sequence_ [clean c | (_,Source _ _ c) <- ?curlyPlex^.mounts]
+                                                  sequence_ [clean c | (_,Resource _ c) <- ?curlyPlex^.mounts])
   where clean c = do
           x <- getFile c
           forl_ (descendant.fileAttrs.relPath) x $ \p -> case c+p of

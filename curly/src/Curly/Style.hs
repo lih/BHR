@@ -1,5 +1,5 @@
 module Curly.Style(
-  -- * Writing documentation out
+  -- * Posix terminals for more entertaining documentation rendering
   POSIXTerm,setupTerm,setupTermFromEnv) where
  
 import Definitive

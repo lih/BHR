@@ -12,39 +12,51 @@ import Control.Concurrent.MVar (putMVar,takeMVar,newEmptyMVar,MVar)
 import Control.Exception (AsyncException(..),Exception(..),bracket_)
 import Curly.Core
 import Curly.Core.Library
+import Curly.Core.Parser
 import Curly.Core.Peers
+import Curly.Core.Security
 import Curly.Core.VCS
 import Curly.Core.VCS.Diff (patch)
-import Curly.Core.Security
 import Curly.Session
 import Curly.System
 import Curly.System.Base
 import Curly.UI
 import Curly.UI.Options hiding (nbsp,spc)
-import Curly.Core.Parser
 import Data.IORef
 import GHC.Conc (threadDelay)
 import GHC.IO.Encoding (utf8,setLocaleEncoding)
 import IO.Filesystem
-import IO.Time (currentTime)
 import IO.Network.Socket
+import IO.Time (currentTime)
 import Language.Format
-import System.Environment (getArgs)
-import System.Process (readProcess)
-import System.IO (withFile,IOMode(..))
 import Paths_curly
+import System.Directory (doesFileExist)
+import System.Environment (getArgs)
+import System.IO (withFile,IOMode(..))
+import System.Process (readProcess)
 
 main :: IO ()
 main = cli "curly" $ do
   initCurly
   
   args <- parseCurlyArgs <$> getArgs
-  let ?commandLineScripts = [s | Left s <- args]
-  withCurlyConfig args $ withCurlyPlex ?curlyConfig $ do
+  additional <- liftA2 (+)
+                (existingFiles [curlyUserDir</>"default.curly"])
+                (if any (has t'1) args then pure [] else existingFiles [".curly"])
+  
+  let fullArgs = map Left additional + args
+
+  let ?commandLineScripts = [s | Left s <- fullArgs]
+  withCurlyConfig fullArgs $ withCurlyPlex ?curlyConfig $ do
     let uninhibited = not ( any (has t'Help) (?curlyPlex^.targets)
                             || all (has t'setting) (?curlyPlex^.targets) )
         tgts = try [Help] (guard uninhibited >> ?curlyPlex^.targets)
     runTargets tgts
+
+existingFiles :: [String] -> IO [String]
+existingFiles fs = do
+  exs <- traverse doesFileExist fs
+  return (fold (zipWith (\ex f -> fill f (guard ex)) exs fs))
 
 data TargetType = ForkTgt (MVar ())
                 | IOTgt (IO ())

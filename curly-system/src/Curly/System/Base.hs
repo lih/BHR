@@ -317,6 +317,12 @@ assemblyBuiltin encodeWord (B_String s) = Just $ do
     tell $ encodeWord (fromIntegral (length s))
     for_ s $ tell . binaryCode (Just 1,1)
   globalBuiltin global_constant (toValue str)
+assemblyBuiltin encodeWord (B_Bytes bs) = Just $ do
+  str <- inSection DataSection $ getCounter <* do
+    tell $ encodeWord 1
+    tell $ encodeWord (fromIntegral (bytesSize bs))
+    tell $ bytesCode' bs
+  globalBuiltin global_constant (toValue str)
 assemblyBuiltin _ B_MkArray = Just $ getOrDefineBuiltin0 TextSection "mkArray" $ do
   [size] <- builtinArgs 1
   tmpReg <-- size

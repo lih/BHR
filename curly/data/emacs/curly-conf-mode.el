@@ -18,7 +18,7 @@
      (1 font-lock-function-name-face)
      (3 font-lock-keyword-face)
      (4 font-lock-builtin-face))
-   '("^\\(\\(\\+\\S-*\\s-+\\)*\\)\\(mount\\)\\s-+\\([^=]*\\)=\\s-*\\(source\\|library\\|builtins\\|package\\)"
+   '("^\\(\\(\\+\\S-*\\s-+\\)*\\)\\(mount\\)\\s-+\\([^=]*\\)=\\s-*\\(\\(?:re\\)?source\\|library\\|builtins\\|package\\)"
      (1 font-lock-function-name-face)
      (3 font-lock-keyword-face)
      (4 font-lock-variable-name-face)

@@ -22,6 +22,7 @@ import Curly.Core
 import Curly.Core.Library
 import Curly.Core.Parser hiding (nbsp,spc)
 import Curly.Core.Security
+import Curly.Core.Annotated
 import Curly.UI.Options
 import Data.IORef 
 import Data.List (sortBy)
@@ -43,25 +44,68 @@ reloadMountain = liftIOLog $ do
     getl l'2
   liftIO $ traverse_ ($m) callbacks
 
-sourceFile :: (?mountain :: Mountain) => [String] -> (String,String) -> File -> Module FileLibrary
-sourceFile base dirs x =
-  let ?mountain = fromMaybe zero (?mountain^?atMs base)
-  in let inc (File a s (Just _)) = Pure $ warp flLibrary rename lib
-           where n' = snd (curlyFileName (takeFileName (a^.relPath)))
-                 lib = cacheCurly dirs a s
-                 rename = warp exports f
-                   where f (Pure (GlobalID _ l,v)) = Pure (GlobalID n' l,v)
-                         f y = y
-         inc (Directory m) = Join (ModDir (m^.ascList & map snd . sortBy (comparing fst) . \l -> l <&> \(s,e) ->
-                                             let (n,s') = curlyFileName s in (n,(s',inc e))))
-         inc _ = zero
-         modDir (Directory m) = Directory (m&ascList %~ \l -> [(s',modDir f) | (s,f) <- l
-                                                              , s' <- pure $ case f of
-                                                              File _ _ _ -> fromMaybe s (noCurlySuf s)
-                                                              _ -> s])
-         modDir (File a b t) = File (a&relPath %~ \x -> fromMaybe x (noCurlySuf x)) b t
-    in inc (modDir x)
+makeFileModule :: (FileAttrs -> Bytes -> Maybe String -> (String,FileLibrary))
+                  -> (String -> String)
+                  -> File -> Module FileLibrary
+makeFileModule getLib transformFileName x =
+  let inc (File a s (Just bs)) = Pure $ warp flLibrary rename lib
+        where (n',lib) = getLib a bs s
+              rename = warp exports f
+                where f (Pure (GlobalID _ l,v)) = Pure (GlobalID n' l,v)
+                      f y = y
+      inc (Directory m) = Join (ModDir (m^.ascList & map snd . sortBy (comparing fst) . \l -> l <&> \(s,e) ->
+                                          let (n,s') = curlyFileName s in (n,(s',inc e))))
+      inc _ = zero
+      modDir (Directory m) = Directory (m&ascList %~ \l -> [(case f of
+                                                                File _ _ _ -> transformFileName s
+                                                                _ -> s,
+                                                             modDir f)
+                                                           | (s,f) <- l])
+      modDir (File a b t) = File (a&relPath %~ transformFileName) b t
+  in inc (modDir x)
 
+sourceFile :: (?mountain :: Mountain) => [String] -> (String,String) -> File -> Module FileLibrary
+sourceFile base dirs =
+  let ?mountain = fromMaybe zero (?mountain^?atMs base)
+  in makeFileModule
+     (\a _ s -> (snd (curlyFileName (takeFileName (a^.relPath))),
+                 cacheCurly dirs a s))
+     (\x -> fromMaybe x (noCurlySuf x))
+
+resourceFile :: (String,String) -> File -> Module FileLibrary
+resourceFile dirs = makeFileModule
+                    (\a bs _ -> (takeFileName (a^.relPath)
+                                ,cacheResource dirs a bs))
+                    id
+
+cacheResource :: (String,String) -> FileAttrs -> Bytes -> FileLibrary
+cacheResource (src,cache) a bs = by thunk $ do
+  isInvalid <- (>) (a^.lastMod) <$> modTime cacheName
+  if isInvalid
+    then do
+    let canPath = cacheFileName curlyCacheDir (show (lib^.flID)) "cyl"
+    createFileDirectory cacheName ; createFileDirectory canPath
+    writeBytes canPath (lib^.flBytes)
+    modifyPermissions canPath (set (each.executePerm) True)
+    trylog unit $ removeLink cacheName
+    createSymbolicLink canPath cacheName
+    return lib
+    else do
+    ser <- slurpBytes cacheName
+    return
+      $ maybe (error $ format "%s: Invalid library file format" cacheName) (\l -> rawLibrary False l ser Nothing)
+      $ matches Just datum ser
+  where bval = B_Bytes bs
+        sym = mkSymbol (pureIdent "value",Pure (Builtin (builtinType bval) bval))
+        lib = fileLibrary (zero
+                           & set symbols (singleton "value" (undefLeaf "" & set leafVal sym & set leafType (builtinType bval)))
+                           & setExports (Pure "value")) Nothing
+  
+        cacheName = cache+a^.relPath+".cyl"
+        sourceName = src+a^.relPath
+        
+        
+                    
 cacheCurly :: (?mountain :: Mountain) => (String,String) -> FileAttrs -> Maybe String -> FileLibrary
 cacheCurly (src,cache) a ms = by thunk $ do
   let filename d e = case a^.relPath of
@@ -125,7 +169,8 @@ slurpBytes x = yb chunk <$> withFile x ReadMode (\h -> readHChunk h <*= \c -> c`
 
 mountain :: (?curlyPlex :: CurlyPlex) => IO Mountain
 mountain = mfix $ \c -> let ?mountain = c in do
-  let ren n = t'Pure.flLibrary.exports.t'Pure.l'1 %- pureIdent n
+  -- let ren n = t'Pure.flLibrary.exports.t'Pure.l'1 %- pureIdent n
+  let ren _ m = m
   mnts <- for (?curlyPlex^.mounts) $ \(p,src) -> do
     mod <- case src of
       Library l -> return $ Pure (fromMaybe (error $ "Could not find library "+show l) (findLib l))
@@ -135,6 +180,7 @@ mountain = mfix $ \c -> let ?mountain = c in do
                   $ matches Just datum ser
         return $ Pure $ rawLibrary False lib ser Nothing
       Source b s c -> getFile s <&> \f -> sourceFile b (s,c) f
+      Resource s c -> resourceFile (s,c) <$> getFile s
     return (atMs p %- ren (last p) mod)
   return $ compose mnts (Join zero)
 
@@ -142,6 +188,7 @@ watchSources :: (?curlyPlex :: CurlyPlex) => IO ()
 watchSources = do
   sequence_ [watchFile s reloadMountain | (_,Source _ s _) <- ?curlyPlex^.mounts]
   sequence_ [watchFile f reloadMountain | (_,LibraryFile f) <- ?curlyPlex^.mounts]
+  sequence_ [watchFile f reloadMountain | (_,Resource f _) <- ?curlyPlex^.mounts]
 
 parseCurlyArgs :: [String] -> [String :+: [CurlyOpt]]
 parseCurlyArgs args = fromMaybe [] $ matches Just (tokenize (map2 Right curlyOpts) naked) args

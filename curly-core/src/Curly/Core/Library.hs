@@ -6,7 +6,7 @@ module Curly.Core.Library(
   atM,atMs,fromPList,
   -- ** Leaves
   ModLeaf,SourcePos,SourceRange(..),
-  undefLeaf,leafVal,leafDoc,leafPos,leafType,leafIsMethod,
+  undefLeaf,undefSymLeaf,leafVal,leafDoc,leafPos,leafType,leafIsMethod,
   -- * Libraries
   GlobalID(..),
   LibraryID(..),isLibData,
@@ -277,7 +277,8 @@ type LibRep s = (Metadata,Module s
 scoped :: Iso' Library (LibRep GlobalID)
 scoped = iso f g
   where f (Library syn i s es is e) = (syn,map fst i,map2 toExpr s,es,map2 toExpr (filterInsts is),instDeps,map fst e)
-          where toSym (s,Pure sym) = (s,Just sym)
+          where toSym (s@(GlobalID _ (Just _)),Pure (Builtin _ (B_Bytes _))) = (s,Nothing)
+                toSym (s,Pure sym) = (s,Just sym)
                 toSym (s,_) = (s,Nothing)
                   
                 toExpr = map toSym . c'Expression . semantic
@@ -285,8 +286,8 @@ scoped = iso f g
                 instDeps = c'set $ fromKList [k | (Just k,_) <- toList is]
         g (syn,i',s',es,is',isd,e') = Library syn i s es is e
           where symVal (GlobalID _ (Just (s,l))) = fromMaybe (error $ "Couldn't find library "+show l) (findLib l)
-                                                   ^.flLibrary.symbols.at s.l'Just undefLeaf
-                symVal (GlobalID i Nothing) = s^.at i.l'Just undefLeaf
+                                                   ^.flLibrary.symbols.at s.l'Just (undefSymLeaf s (Just l))
+                symVal (GlobalID i Nothing) = s^.at i.l'Just (undefLeaf (format "Undefined local symbol %s" i))
                 fromSym (s,Just sym) = (s,Pure sym)
                 fromSym (s,Nothing) = (s,Join (symVal s^.leafVal))
                 fromExpr = withType . map (_rawNameExpr . semantic . c'Expression . map fromSym)
@@ -353,14 +354,17 @@ flSource :: Lens' FileLibrary (Maybe String)
 flSource = lens _flSource (\x y -> x { _flSource = y })
 
 type Mountain = Module FileLibrary
-mapIdents :: (String -> GlobalID -> GlobalID) -> (GlobalID -> GlobalID) -> Context -> Context
-mapIdents sw f = mapC "" 
+withPrevIdents :: String -> Module a -> Module (String,a)
+withPrevIdents p (Pure a) = Pure (p,a)
+withPrevIdents _ (Join (ModDir d)) = Join (ModDir [(s,withPrevIdents s x) | (s,x) <- d])
+mapIdents :: (String -> GlobalID -> GlobalID) -> (GlobalID -> GlobalID) -> String -> Context -> Context
+mapIdents sw f = mapC
   where mapDE = warp (leafType.ff'idents) f . warp leafVal mapE
         mapE = warp (from i'NameNode) (map (first f)) . warp (t'exprType.ff'idents) f
         mapC _ (Join (ModDir m)) = Join . ModDir $ warp each (\(s,e) -> (s,mapC s e)) m
         mapC s (Pure (i,e)) = Pure (sw s (f i),mapDE e)
 context :: Mountain -> Context
-context m = m >>= \fl -> mapIdents (\s (GlobalID _ l) -> GlobalID s l) (setId (fl^.flID)) (fl^.flLibrary.exports)
+context m = withPrevIdents "" m >>= \(n,fl) -> mapIdents (\s (GlobalID _ l) -> GlobalID s l) (setId (fl^.flID)) n (fl^.flLibrary.exports)
   where setId i (GlobalID n Nothing) = GlobalID n (Just (n,i))
         setId _ x = x
 localContext :: (?mountain :: Mountain) => Context
@@ -368,8 +372,11 @@ localContext = context ?mountain
                     
 undefSym :: NameExpr GlobalID
 undefSym = mkSymbol (pureIdent "undefined",Pure (Builtin (builtinType B_Undefined) B_Undefined))
-undefLeaf :: LeafExpr GlobalID
-undefLeaf = ModLeaf nodoc NoRange zero False undefSym
+undefLeaf :: String -> LeafExpr GlobalID
+undefLeaf msg = ModLeaf (nodoc msg) NoRange zero False undefSym
+undefSymLeaf :: String -> Maybe LibraryID -> LeafExpr GlobalID
+undefSymLeaf s ml = undefLeaf (format "Undocumented symbol %s%s" s (case ml of Just l -> format " in %s" (show l)
+                                                                               Nothing -> ""))
 
 addImport :: Context -> Library -> Library
 addImport imp = warp imports (+imp) . warp symbols (fromAList (map2 snd newSyms)+)
@@ -379,13 +386,13 @@ addImport imp = warp imports (+imp) . warp symbols (fromAList (map2 snd newSyms)
 resolve :: Library -> Module String -> Context
 resolve l e = map go e
   where go n = (fromMaybe (pureIdent n) (l^.externalSyms.at n),
-                fromMaybe undefLeaf (l^.symbols.at n))
+                fromMaybe (undefSymLeaf n Nothing) (l^.symbols.at n))
 addExport :: Module String -> Library -> Library
 addExport e l = l & exports %~ (+resolve l e)
 setExports :: Module String -> Library -> Library
 setExports e l = l & exports %- resolve l e
 defSymbol :: Semantic e String (String,Maybe (NameExpr GlobalID)) => String -> SourceRange -> Maybe (Type GlobalID) -> Bool -> e -> Library -> Library
-defSymbol s r t isM e l = l & symbols.at s.l'Just undefLeaf %~ set leafType tp . set leafVal e' . set leafPos r . set leafIsMethod isM
+defSymbol s r t isM e l = l & symbols.at s.l'Just (undefSymLeaf s Nothing) %~ set leafType tp . set leafVal e' . set leafPos r . set leafIsMethod isM
   where e' = optExprIn l e 
         tp = fromMaybe (exprType e') t
 
@@ -404,7 +411,7 @@ optExprIn :: Semantic e String (String,Maybe (NameExpr GlobalID)) => Library -> 
 optExprIn l e = optimize (pureIdent . pretty) (solveConstraints (map (\(_,lf) -> (lf^.leafType,lf^.leafVal)) (l^.implicits)) (exprIn l e))
 
 descSymbol :: String -> Documentation -> Library -> Library
-descSymbol s d l = l & symbols.at s.l'Just undefLeaf.leafDoc %- d
+descSymbol s d l = l & symbols.at s.l'Just (undefSymLeaf s Nothing).leafDoc %- d
 
 libSymbol :: Library -> GlobalID -> Maybe (LeafExpr GlobalID)
 libSymbol l (GlobalID i Nothing) = l^.symbols.at i
@@ -424,7 +431,7 @@ builtinsLib = let blib = zero
         safeLast _ (h:t) = safeLast h t
         builtinsMod = fromPList (map2 Pure allBuiltins) 
         allBuiltins = [
-          (["undefined"],(pureIdent "undefined",undefLeaf)),
+          (["undefined"],(pureIdent "undefined",(undefLeaf "Undefined value"))),
           (["seq"],mkBLeaf "seq" B_Seq seqDoc),
           (["unit"],mkBLeaf "unit" B_Unit unitDoc),
           (["file","open"],mkBLeaf "open" B_Open openDoc),
@@ -455,7 +462,7 @@ builtinsLib = let blib = zero
           (["syntax","mkExprSym"],mkBLeaf "mkExprSym" B_ExprSym mkExprSymDoc),
           (["syntax","exprInd"],mkBLeaf "exprInd" B_ExprInd exprIndDoc)
           ]
-            where mkBLeaf n b d = (pureIdent n,undefLeaf & leafVal %- mkSymbol (pureIdent n,Pure (Builtin (builtinType b) b)) & leafDoc %- mkDoc d)
+            where mkBLeaf n b d = (pureIdent n,undefLeaf "" & leafVal %- mkSymbol (pureIdent n,Pure (Builtin (builtinType b) b)) & leafDoc %- mkDoc d)
                   seqDoc = unlines [
                     "{section {title Sequence Expressions}",
                     "  {p {em Usage:} seq x y}",

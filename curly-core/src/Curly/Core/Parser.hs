@@ -440,7 +440,7 @@ defAccessors syms = do
         exprType $ exprIn l (e :: SourceExpr)
       lift (l'library =~ mod)
 
-defTypeSym n isM rng tp e = symbols.at n.l'Just undefLeaf %~
+defTypeSym n isM rng tp e = symbols.at n.l'Just (undefSymLeaf n Nothing) %~
                             set leafVal (set t'exprType tp (_rawNameExpr e))
                             . set leafPos rng
                             . set leafType tp . set leafIsMethod isM

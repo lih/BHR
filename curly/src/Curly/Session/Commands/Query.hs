@@ -103,7 +103,7 @@ formatCmd = withDoc formatDoc . fill False $ do
                              (["strictness"],Pure $ document (snd $ exprStrictness $ v^.leafVal))
                              ] zero
                        in p
-    withStyle $ withPatterns $ serveStrLn (docString ?terminal ?style (document (map (\v -> fromMaybe nodoc (evalDocWithPatterns ?patterns (params v) pat)) ctx)))
+    withStyle $ withPatterns $ serveStrLn (docString ?terminal ?style (document (map (\v -> fromMaybe (nodoc (format "Unmatched pattern %s" (show pat))) (evalDocWithPatterns ?patterns (params v) pat)) ctx)))
     
 patternCmd = withDoc "{section {title Define Patterns} {p {em Usage:} pattern PATH = PATTERN} {p Defines a new query pattern accessible with \\{pattern PATH\\}}}" . fill False $ do
   ph:pt <- many1' (nbhsp >> dirArg <*= guard . (/="="))
