@@ -146,7 +146,10 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
                                 , (s',sub) <- n
                                 , lst`isPrefix`s'
                                 , s'' <- if has t'Join sub
-                                         then [[s'],[s',""]]
+                                         then if not onlyDirs
+                                                 || has (t'Join.iso (\(ModDir d) -> d) ModDir .each.l'2.t'Join) sub
+                                              then [[s'],[s',""]]
+                                              else [[s']]
                                          else if not onlyDirs
                                               then [[s']] else []]
                 Nothing -> []

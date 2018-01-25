@@ -240,22 +240,23 @@ inputSource base = do
   p <- symPath "="
   between hspace hspace (several "=")
   (p,) <$> (src <+? rsc <+? lib <+? search <+? blts)
-  where src = do
+  where sep = nbhspace <+? between hspace hspace (single ':')
+        src = do
           like "source"
           sub <- option' [] (between (single '[') (single ']')
                              $ between hspace hspace
                              $ symPath "]")
-          nbhspace
-          n <- visible ""
+          sep
+          n <- visible ":"
           let defaultCache = fromMaybe (n+".cache") (noCurlySuf n <&> (+".cyl"))
-          m <- option' defaultCache (nbhspace >> visible "")
+          m <- option' defaultCache (sep >> visible "")
           return (Source sub (base</>n) (base</>m))
         rsc = do
           like "resource"
-          n <- nbhspace >> visible ""
-          m <- option' (n+".cache") (nbhspace >> visible "")
+          n <- sep >> visible ":"
+          m <- option' (n+".cache") (sep >> visible "")
           return (Resource (base</>n) (base</>m))
-        search = like "package" >> nbhspace >> do
+        search = like "package" >> sep >> do
           let tag x l = Join (DocTag x [] l)
           tpl <- (docAtom <*= guard . has t'Join)
                  <+? (visible "" <&> \x -> tag "=" [tag "$" [Pure "name"],Pure x])
@@ -263,7 +264,7 @@ inputSource base = do
                     <&> \ls -> fromMaybe (error $ format "Could not find package matching %s" (pretty tpl))
                                $ find (\(_,d) -> nonempty (showTemplate d tpl)) ls <&> fst
           return (Library $ sid^.thunk)
-        lib = like "library" >> nbhspace >> (fileLib <+? map Library readable)
+        lib = like "library" >> sep >> (fileLib <+? map Library readable)
           where fileLib = single '@' >> map LibraryFile (visible "")
         blts = Library (builtinsLib^.flID) <$ like "builtins"
         
