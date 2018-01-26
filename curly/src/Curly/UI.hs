@@ -238,6 +238,7 @@ readCurlyConfig cliargs = fold <$> traverse (fileArgs [] <|> return . map (Nothi
                                  <+? include
                                  <+? localOpt echo
                                  <+? localOpt exe
+                                 <+? localOpt flag
                                  <+? [] <$ many1' (satisfy (/='\n'))
                         condDesc = do
                           cond <- single '?' >> visible ""
@@ -258,6 +259,7 @@ readCurlyConfig cliargs = fold <$> traverse (fileArgs [] <|> return . map (Nothi
                           return (ts <&> l'2.t'Mount %~ ((p+) <#> t'Source.l'1 %~ (p+)))
                         echo = several ">" >> pure . Target . Echo base<$>option' "" (nbhspace >> many' (satisfy (/='\n')))
                         exe = single '%' >> nbhspace >> foldl1' (<+?) [cmdLine f | Option _ ["execute"] (ReqArg f _) _ <- curlyOpts]
+                        flag = several "flag" >> nbhspace >> pure . Flag <$> visible ""
                         inp = several "mount" 
                         tgt = several "target" + single '-'
                         cmd "mount" _ = inp >> nbhspace >> pure . uncurry Mount<$>inputSource base
@@ -279,13 +281,20 @@ curlyPlex args = do
   return ret
   where addOpt (Mount p s) = mounts %~ (+[(p,s)])
         addOpt (Target t) = targets %~ (+[t])
-        addOpt (Conditional inc exc o) | (nonempty (inc*flags) || empty inc) && empty (exc*flags) = addOpt o
+        addOpt (Conditional inc exc o) | isValidCond flags inc exc = addOpt o
         addOpt _ = id
-        flags = touch "command"
-                $ (if all (has t'setting) [t | (Nothing,Target t) <- args]
-                      && not (or [True | (_,Flag _) <- args])
-                   then touch "default" else id)
-                $ (c'set.fromKList) [f | (_,Flag f) <- args]
+        isValidCond flags inc exc = (nonempty (inc*flags) || empty inc) && empty (exc*flags)
+        allFlags cur | cur==next = cur
+                     | otherwise = allFlags next
+          where next = composing addFlag (snd<$>args) cur
+                addFlag (Flag f) = touch f
+                addFlag (Conditional inc exc o) | isValidCond cur inc exc = addFlag o
+                addFlag _ = id
+        flags = allFlags (touch "command"
+                          $ (if all (has t'setting) [t | (Nothing,Target t) <- args]
+                                && not (or [True | (_,Flag _) <- args])
+                             then touch "default" else id)
+                          $ (c'set.fromKList) [f | (_,Flag f) <- args])
 
 curlyFiles :: CurlyConfig -> Map Int FilePath
 curlyFiles args = fromAList $ zip [0..] $ toList $ c'set $ fromKList [s | (Just s,_) <- args]
