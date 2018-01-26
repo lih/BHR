@@ -249,13 +249,17 @@ runTarget (ShowLib l) = ioTgt $ do
     Right i -> case findLib i of
        Just x -> print (x^.flLibrary)
        Nothing -> putStrLn $ "Couldn't find library "+show i
-runTarget (Translate f sys path) = ioTgt $ withMountain $ case localContext^?atMs path of
-  Just (Pure (_,e)) -> do
-    let prog = specializeStandalone sys e
-    createDirectoryIfMissing True (dropFileName f)
-    withFile f WriteMode $ \h -> writeHBytes h prog
-    modifyPermissions f (_sysProgPerms sys)
-  _ -> putStrLn $ "Error: the path "+show path+" doesn't seem to point to a function in the default context"
+runTarget (Translate f sys path) = ioTgt $ do
+  runAtomic (?curlyPlex^.mountainCache) $ do l'2 =~ (doBuild:)
+  withMountain $ doBuild ?mountain
+  where doBuild m = let ?mountain = m in case localContext^?atMs path of
+          Just (Pure (_,e)) -> do
+            let prog = specializeStandalone sys e
+            createDirectoryIfMissing True (dropFileName f)
+            withFile f WriteMode $ \h -> writeHBytes h prog
+            modifyPermissions f (_sysProgPerms sys)
+          _ -> putStrLn $ "Error: the path "+show path+" doesn't seem to point to a function in the default context"
+  
 runTarget (DumpDataFile Nothing) = ioTgt $ traverse_ putStrLn dataFiles
 runTarget (DumpDataFile (Just f)) = ioTgt $ do
   fn <- getDataFileName f

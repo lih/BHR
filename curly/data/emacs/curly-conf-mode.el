@@ -11,13 +11,13 @@
    '("^\\(\\(\\+\\S-*\\s-+\\)*\\)\\(>\\|echo\\)\\(.*\\)$"
      (1 font-lock-function-name-face)
      (3 font-lock-keyword-face)
-     (4 font-lock-string-face))
+     (4 font-lock-constant-face))
    '("^\\(\\?\\S-*\\)\\s-+\\(.*\\)$"
      (1 font-lock-function-name-face)
      (2 font-lock-doc-face))
    '("^\\(\\(\\+\\S-*\\s-+\\)*\\)\\(%.*\\)$"
      (1 font-lock-function-name-face)
-     (3 font-lock-keyword-face))
+     (3 font-lock-string-face))
    '("^\\(\\(\\+\\S-*\\s-+\\)*\\)\\(target\\|-\\)\\s-+\\(interactive\\|prelude\\+?\\|banner\\|instance\\|at\\|run\\|serve\\|translate\\|execute\\|list\\|dump\\)"
      (1 font-lock-function-name-face)
      (3 font-lock-keyword-face)
@@ -27,6 +27,15 @@
      (3 font-lock-keyword-face)
      (4 font-lock-variable-name-face)
      (5 font-lock-builtin-face))
+   '("^\\(\\(\\+\\S-*\\s-+\\)*\\)\\(prelude\\)\\s-*$"
+     (1 font-lock-function-name-face)
+     (3 font-lock-keyword-face)
+     ("." (let ((start (point)) end)
+	    (setq end (save-excursion (search-forward-regexp "^end prelude") (beginning-of-line) (point)))
+	    (add-text-properties start end '(font-lock-multiline t))
+	    end) nil
+      (0 font-lock-string-face t)))
+   '("^end prelude" (0 font-lock-keyword-face))
    '("^#.*$" . font-lock-comment-face)
    '("^.*$" . font-lock-warning-face)))
 

@@ -133,10 +133,10 @@ configDoc = unlines [
   ]
 configCmd = withDoc configDoc $ False <$ do
   sel <- option' 0 ((nbhspace >> many1' (noneOf "\n")) >*> number)
-  case lookup sel (curlyFiles ?curlyConfig) of
-    Just file | ?access >= Admin -> liftIOWarn (readBytes file >>= ?edit "" (0,0) >>= maybe unit (writeBytes file))
-              | otherwise -> serveStrLn "Error: You are not allowed to access the instance configuration"
-    _ -> serveStrLn $ format "Error: Couldn't find configuration file number '%d'" sel
+  case drop sel (curlyFiles ?curlyConfig) of
+    file:_ | ?access >= Admin -> liftIOWarn (readBytes file >>= ?edit "" (0,0) >>= maybe unit (writeBytes file))
+           | otherwise -> serveStrLn "Error: You are not allowed to access the instance configuration"
+    [] -> serveStrLn $ format "Error: Couldn't find configuration file number '%d'" sel
 
 killDoc = unlines [
   "{section {title Kill Instance Server}",

@@ -239,6 +239,7 @@ readCurlyConfig cliargs = fold <$> traverse (fileArgs [] <|> return . map (Nothi
                                  <+? localOpt echo
                                  <+? localOpt exe
                                  <+? localOpt flag
+                                 <+? localOpt longPrelude
                                  <+? [] <$ many1' (satisfy (/='\n'))
                         condDesc = do
                           cond <- single '?' >> visible ""
@@ -260,6 +261,12 @@ readCurlyConfig cliargs = fold <$> traverse (fileArgs [] <|> return . map (Nothi
                         echo = several ">" >> pure . Target . Echo base<$>option' "" (nbhspace >> many' (satisfy (/='\n')))
                         exe = single '%' >> nbhspace >> foldl1' (<+?) [cmdLine f | Option _ ["execute"] (ReqArg f _) _ <- curlyOpts]
                         flag = several "flag" >> nbhspace >> pure . Flag <$> visible ""
+                        longPrelude = do
+                          several "prelude" >> hspace >> eol
+                          let getLines x = (x <$ lookingAt (several "end prelude"))
+                                           <+? (do l <- many' (satisfy (/='\n')) <* eol
+                                                   getLines (l:x))
+                          map (Target . AddPrelude) . reverse <$> getLines []
                         inp = several "mount" 
                         tgt = several "target" + single '-'
                         cmd "mount" _ = inp >> nbhspace >> pure . uncurry Mount<$>inputSource base
@@ -296,8 +303,10 @@ curlyPlex args = do
                              then touch "default" else id)
                           $ (c'set.fromKList) [f | (_,Flag f) <- args])
 
-curlyFiles :: CurlyConfig -> Map Int FilePath
-curlyFiles args = fromAList $ zip [0..] $ toList $ c'set $ fromKList [s | (Just s,_) <- args]
+curlyFiles :: CurlyConfig -> [FilePath]
+curlyFiles args = foldr go (const []) [s | (Just s,_) <- args] (c'set zero)
+  where go f fs visited | isKeyIn f visited = fs visited
+                        | otherwise = f:fs (touch f visited)
 
 sourceLibs :: (?mountain::Mountain, ?curlyPlex :: CurlyPlex) => [([String],FileLibrary)]
 sourceLibs = symList $ fromPList [(p,sourceFile b (f,c) (getFile f^.thunk)) | (p,Source b f c) <- ?curlyPlex^.mounts]

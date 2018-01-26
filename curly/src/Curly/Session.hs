@@ -199,7 +199,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["vcs","commit",b] -> completeBranchName curlyPublisher b
           ["vcs","commit",_,p] -> completeAbsPath w False p
           ("vcs":_) -> []
-          ["configure",p] -> completeWord [show n+":"+s | (n,s) <- curlyFiles ?curlyConfig^.ascList] p
+          ["configure",p] -> completeWord [show n+":"+s | (n,s) <- zip [0..] (curlyFiles ?curlyConfig)] p
           ["repository",cmd] -> completeWord ["list","add","contents","browse"] cmd
           ("repository":_) -> []
           ["compareTypes",x] -> completeWord ["shape","constraints"] x
