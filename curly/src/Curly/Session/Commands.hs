@@ -37,19 +37,10 @@ import Curly.Session.Commands.VCS
 
 commands :: Interactive [(String,[(String,Command)])]
 commands = [
-  ("Control",[
-      ("key",keyCmd),
-      ("clean",cleanCmd),
-      ("configure",configCmd),
-      ("fix",fixCmd),
-      ("repository",repoCmd),
-      ("vcs",vcsCmd),
-      ("quit",quitCmd),
-      ("kill-server",killCmd)]),
-
   ("Navigation",[
       ("cd",cdCmd),
       ("ls",lsCmd),
+      ("edit",editCmd),
       ("tree",treeCmd),
       ("wd",wdCmd)]),
 
@@ -57,20 +48,23 @@ commands = [
       ("help",helpCmd),
       ("meta",metaCmd),
       ("style",styleCmd),
-      ("why",whyCmd),
-      ("how",howCmd),
-      ("what",whatCmd),
-      ("whence",whenceCmd),
       ("pattern",patternCmd),
-      ("format",formatCmd),
+      ("show",showCmd),
       ("compareTypes",compareTypesCmd),
-      ("showInstances",showInstancesCmd),
-      ("where",whereCmd)]),
-
-  ("Utilities",[
+      ("instances",showInstancesCmd)]),
+  
+  ("Control",[
+      ("key",keyCmd),
+      ("clean",cleanCmd),
       ("reload",reloadCmd),
-      ("run",runCmd)])
-  ]
+      ("configure",configCmd),
+      ("run",runCmd),
+      ("fix",fixCmd),
+      ("repository",repoCmd),
+      ("vcs",vcsCmd),
+      ("quit",quitCmd),
+      ("kill-server",killCmd)])]
+
 commandNames :: [String]
 commandNames = let
   ?sessionState = undefined
@@ -170,7 +164,7 @@ interactiveSession ack = while sessionLine
         parseCmd = hspace >> do
           e <- optimized =<< accessorExpr HorizSpaces
           lookingAt (hspace >> eol)
-          serveHow e
+          serveStrLn (showImpl e)
           return False
         cmdLine = do
           s <- remaining

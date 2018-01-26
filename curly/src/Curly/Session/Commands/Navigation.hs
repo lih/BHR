@@ -45,12 +45,8 @@ cdDoc = unlines [
   ]
 cdCmd = withDoc cdDoc (fill False $ withargs <+? noarg)
   where noarg = liftIO (modifyIORef ?sessionState (wd %- []))
-        inRoot m = do
-          old <- liftIO $ runAtomic ?sessionState (wd <~ \x -> ([],x))
-          m <* liftIO (modifyIORef ?sessionState (set wd old))
         withargs = nbhspace >> do
-          isAbs <- option' False (True <$ single '.')
-          newpath <- (if isAbs then inRoot else id) (absPath "")
+          newpath <- absPath ""
           withMountain $ do
             let m = c'list (localContext^??atMs newpath)
             liftIOWarn $ if nonempty (fold $ c'list (m^??each.t'Join))

@@ -153,8 +153,8 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
                                          else if not onlyDirs
                                               then [[s']] else []]
                 Nothing -> []
-            completeAbsPath _ ('.':p) = map ('.':) $ completePath [] True p
-            completeAbsPath b p = completePath b True p
+            completeAbsPath _ x ('.':p) = map ('.':) $ completePath [] x p
+            completeAbsPath b x p = completePath b x p
             completeWord l s = [s' | s' <- l, s`isPrefix`s']
             completeCommand = completeWord (commandNames + ["import","define","type","family"])
             completeKeyName = completeWord (keys ks)
@@ -186,8 +186,8 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["key","del","client",k] -> completeClientKeyName k
           ["key","del","server",k] -> completeKeyName k
           ("key":_) -> []
-          ["format",k] -> completeWord [p | (p,Pure _) <- pats^.ascList] k
-          ["format",_,p] -> completePath w False p
+          ["show",p] -> completeAbsPath w False p
+          ["show",_,k] -> completeWord [p | (p,Pure _) <- pats^.ascList] k
           ["vcs",c] -> completeWord ["list","get","commit","checkout","branch"] c
           ["vcs","list",k] -> completeKeyName k
           ["vcs","list",k,b] -> completeBranchName k b
@@ -197,15 +197,15 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["vcs","branch",_,c,u] | c`elem`["fork","link"] -> completeKeyName u
           ["vcs","branch",_,c,u,b] | c`elem`["fork","link"] -> completeBranchName u b
           ["vcs","commit",b] -> completeBranchName curlyPublisher b
-          ["vcs","commit",_,p] -> completePath w False p
+          ["vcs","commit",_,p] -> completeAbsPath w False p
           ("vcs":_) -> []
           ["configure",p] -> completeWord [show n+":"+s | (n,s) <- curlyFiles ?curlyConfig^.ascList] p
           ["repository",cmd] -> completeWord ["list","add","contents","browse"] cmd
           ("repository":_) -> []
           ["compareTypes",x] -> completeWord ["shape","constraints"] x
-          ["cd",p] -> completeAbsPath w p
-          ("import":t) -> completePath [] False (last t)
-          (_:t) -> completePath w False (last t)
+          ["cd",p] -> completeAbsPath w True p
+          ("import":t) -> completeAbsPath [] False (last t)
+          (_:t) -> completeAbsPath w False (last t)
         return True
       EndOfTransmission -> return False
       BannerRequest b -> True <$ do

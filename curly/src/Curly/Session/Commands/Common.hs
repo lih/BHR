@@ -127,4 +127,5 @@ dirArg :: (MonadParser s m p, ParseStream c s, TokenPayload c ~ Char, Monad m) =
 dirArg = many1' $ noneOf " \t\n(){}"
 absPath :: (?sessionState :: IORef SessionState, MonadParser s m p, ParseStream c s, TokenPayload c ~ Char, Monad m, MonadIO p)
            => String -> p [String]
-absPath lim = liftA2 subPath (getSession wd) (symPath lim)
+absPath lim = (single '.' >> symPath lim)
+              <+? (liftA2 subPath (getSession wd) (symPath lim))
