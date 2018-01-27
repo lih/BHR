@@ -1,0 +1,6 @@
+#!/bin/sh
+cmd1='(setq org-agenda-files (list (expand-file-name "curly.org" default-directory)))'
+cmd2='(org-todo-list)'
+cmd3='(delete-other-windows)'
+
+emacs -nw --eval "$cmd1" --eval "$cmd2" --eval "$cmd3"
