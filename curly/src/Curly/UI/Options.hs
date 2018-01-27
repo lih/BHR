@@ -262,7 +262,7 @@ inputSource base = do
                  <+? (visible "" <&> \x -> tag "=" [tag "$" [Pure "name"],Pure x])
           let sid = availableLibs
                     <&> \ls -> fromMaybe (error $ format "Could not find package matching %s" (pretty tpl))
-                               $ find (\(_,d) -> nonempty (showTemplate d tpl)) ls <&> fst
+                               $ find (\(_,d) -> nonempty (showDummyTemplate d tpl)) ls <&> fst
           return (Library $ sid^.thunk)
         lib = like "library" >> sep >> (fileLib <+? map Library readable)
           where fileLib = single '@' >> map LibraryFile (visible "")

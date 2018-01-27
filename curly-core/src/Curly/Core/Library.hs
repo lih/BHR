@@ -19,7 +19,7 @@ module Curly.Core.Library(
   FileLibrary,flLibrary,flID,flBytes,flFromSource,flSource,
   rawLibrary,fileLibrary,  
   -- * Repositories
-  Template,defaultTemplate,showTemplate,
+  Template,defaultTemplate,showTemplate,showDummyTemplate,
   RepoConfig(..),repoConfig,Repository(..),repositories,findLib,availableLibs, 
   -- * Miscellaneous
   Compressed(..),envVar,curlyCacheDir,noCurlySuf
@@ -615,46 +615,12 @@ nslookup :: String -> PortNumber -> Maybe AddrInfo
 nslookup = curry $ cached $ \(s,p) -> convert $ thunk $^ getAddrInfo Nothing (Just s) (Just (show p))
 
 type Template = Documentation
-defaultTemplate = docTag' "$*" []
+defaultTemplate = docTag' "$" [Pure "name"]
 
-showTemplate :: Metadata -> Template -> Maybe String
-showTemplate _ (Pure x) = return x
-showTemplate (Metadata m) (Join (DocTag "$*" [] x)) = do
-  v <- traverse (showTemplate (Metadata m)) x
-  show . Metadata <$> (Join m^?at v.t'Just.t'Join)
-showTemplate (Metadata m) (Join (DocTag "$" [] x)) = do
-  (vh:vt) <- traverse (showTemplate (Metadata m)) x
-  m^?at vh.t'Just.at vt.t'Just.t'Pure
-showTemplate m (Join (DocTag "if" [] (p:vs))) = showTemplate m p >> map fold (traverse (showTemplate m) vs)
-showTemplate m (Join (DocTag "not" [] vs)) = maybe (return "") (const zero) (traverse_ (showTemplate m) vs)
-showTemplate m (Join (DocTag "and" [] vs)) = last . ("":) <$> traverse (showTemplate m) vs
-showTemplate m (Join (DocTag "or" [] vs)) = foldMap (showTemplate m) vs
-showTemplate m (Join (DocTag cmd [] [a,b]))
-  | cmd`elem`["<",">","<=",">="] = do
-      [a',b'] <- traverse (showTemplate m) [a,b]
-      let valList = many' (map Left number <+? map Right (many1' (satisfy (not . inRange '0' '9'))))
-          toOp "<" = (<)
-          toOp ">" = (>)
-          toOp "<=" = (<=)
-          toOp ">=" = (>=)
-          toOp _ = undefined
-      [a'',b''] <- traverse (matches Just valList) [a',b']
-      guard (toOp cmd a'' b'')
-      return a'
-  | cmd == "=" = do
-      x <- showTemplate m a
-      p <- showTemplate m b
-      matches Just (wildcards p) x
-      return x
-showTemplate m (Join x) = fold <$> traverse (showTemplate m) x
-
-wildcards "*" = unit
-wildcards ('*':'*':t) = wildcards ('*':t)
-wildcards ('*':t@(c:_)) = do
-  skipMany1' (satisfy (/=c))`sepBy`many1' (single c)
-  wildcards t
-wildcards (c:t) = single c >> wildcards t
-wildcards [] = eoi
+showTemplate :: Terminal trm => trm -> Style -> DocPatterns -> Metadata -> Template -> Maybe String
+showTemplate trm stl pats (Metadata d) tpl = map (docString trm stl) (evalDocWithPatterns pats (map2 Pure d) tpl)
+showDummyTemplate :: Metadata -> Template -> Maybe String
+showDummyTemplate = showTemplate DummyTerminal defaultStyle zero 
 
 cacheName :: LibraryID -> String
 cacheName l = cacheFileName curlyCacheDir (show l) "cyl"

@@ -96,10 +96,10 @@ vcsCmd = withDoc vcsDoc $ False <$ do
           Nothing -> do
             m <- map (maybe zero unsafeExtractSigned) $ vcbLoad conn (BranchesKey pub)
             serveStrLn $ intercalate " " (keys m)
-          Just b -> do
+          Just b -> withStyle $ withPatterns $ do
             bs <- getAll b =<< deepBranch b pub
             forl_ (ascList.each) bs $ \(lid,m) -> do
-              for_ (maybe (Just $ show m) (showTemplate m) template) $ \s -> 
+              for_ (maybe (Just $ show m) (showTemplate ?terminal ?style ?patterns m) template) $ \s -> 
                 serveStrLn $ format "%s %s" (show lid) s
 
     "get" -> do
@@ -141,16 +141,16 @@ vcsCmd = withDoc vcsDoc $ False <$ do
                 tplAtom = docAtom <*= \x -> guard (has t'Join x)
                 singlePred = do
                   tpl <- tplAtom
-                  return $ \ls -> [x | x@(_,m) <- ls, filterP (nonempty (showTemplate m tpl))]
+                  return $ \ls -> [x | x@(_,m) <- ls, filterP (nonempty (showDummyTemplate m tpl))]
                 groupPred = do
                   op <- fill "<=" (several "minimum") <+? fill ">=" (several "maximum")
                   cmptpl <- nbhspace >> docAtom
                   nbhspace >> several "by"
                   gtpl <- nbhspace >> tplAtom
-                  let minTpl m1 m2 | nonempty (do v <- showTemplate (snd m1) cmptpl
-                                                  showTemplate (snd m2) (Join (DocTag op [] [Pure v,cmptpl]))) = m1
+                  let minTpl m1 m2 | nonempty (do v <- showDummyTemplate (snd m1) cmptpl
+                                                  showDummyTemplate (snd m2) (Join (DocTag op [] [Pure v,cmptpl]))) = m1
                                    | otherwise = m2
-                  return $ \ls -> let groups = c'map $ composing (\x@(_,m) -> mat (showTemplate m gtpl) %~ (x:)) ls zero
+                  return $ \ls -> let groups = c'map $ composing (\x@(_,m) -> mat (showDummyTemplate m gtpl) %~ (x:)) ls zero
                                   in mlookup Nothing groups + fold [select (filterP . (fst (foldl1' minTpl l)==) . fst) l
                                                                    | (Just _,l) <- groups^.ascList]
             pred <- expected "filter predicate" (nbhspace >> (libPred <+? singlePred <+? groupPred))
@@ -228,6 +228,6 @@ vcsCmd = withDoc vcsDoc $ False <$ do
         searchID = docAtom >>= \d -> do
           guard (has t'Join d)
           ls <- liftIO availableLibs
-          case fold [showTemplate m d >> return l | (l,m) <- ls] of
+          case fold [showDummyTemplate m d >> return l | (l,m) <- ls] of
             Just l -> return l
             Nothing -> guardWarn (format "Error: no library matches the search pattern %s" (show d)) False >> zero

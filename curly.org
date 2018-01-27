@@ -1,4 +1,4 @@
-* TODO Release Curly v1.0 [33%]
+* TODO Release Curly v1.0 [50%]
   :PROPERTIES:
   :COOKIE_DATA: todo recursive
   :END:      
@@ -15,16 +15,16 @@
     CLOSED: [2018-01-27 Sat 19:05]
 *** TODO Allow for the presence of additional sections in the future
 
-** TODO Streamline the UI
+** DONE Streamline the UI
 *** DONE Unify the syntaxes for symbol paths between command-line options, configuration files and source files
     CLOSED: [2018-01-27 Sat 19:17]
     
     '.' was chosen as a path separator for its ubiquity in other languages.
 
-*** TODO Make all formatting queries go through the documentation process
+*** DONE Make all formatting queries go through the documentation process
 **** DONE Use formatting queries to show parts of a module (with the 'show' function)
      CLOSED: [2018-01-27 Sat 19:16]
-**** TODO Use formatting queries to filter and prettify library listings
+**** DONE Use formatting queries to filter and prettify library listings
 
      See 'vcs list', 'repository contents' and other such features.
 
@@ -42,3 +42,6 @@
   This in order to provide a safe default publishing platform for any
   Curly programmer wishing to publish his/her work, rather than
   insisting they each find or host their own.
+
+* Extension: Formally-verified Curly
+** Proof-annotated variables

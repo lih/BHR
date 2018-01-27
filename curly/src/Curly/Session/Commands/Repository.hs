@@ -21,9 +21,9 @@ repoCmd = withDoc repoDoc $ False <$ (nbsp >>) (repoList <+? repoLibs <+? repoAd
           for_ repos $ \r -> serveStrLn $ format "  * %s" (show r)
         repoLibs = (opKeyword "contents" >>) $ do
           t <- option' defaultTemplate (docLine "template" [])
-          liftIOWarn $ do
+          liftIOWarn $ withStyle $ withPatterns $ do
             ls <- availableLibs
-            for_ [(l,d) | (l,Just d) <- map (second (`showTemplate`t)) ls] $ \(l,d) -> do
+            for_ [(l,d) | (l,Just d) <- map (second (\d -> showTemplate ?terminal ?style ?patterns d t)) ls] $ \(l,d) -> do
               serveStrLn $ format "%s %s" (show l) d
         repoAdd = do
           opKeyword "add"
@@ -34,7 +34,7 @@ repoCmd = withDoc repoDoc $ False <$ (nbsp >>) (repoList <+? repoLibs <+? repoAd
           opKeyword "browse"
           guardWarn "Error: you must have almighty acces to browse new libraries" (?access>=Almighty)
           nbsp
-          sel <- (\d libs -> [x | x@(_,m) <- libs, nonempty (showTemplate m d)]) <$> (docAtom <*= guard . has t'Join)
+          sel <- (\d libs -> [x | x@(_,m) <- libs, nonempty (showDummyTemplate m d)]) <$> (docAtom <*= guard . has t'Join)
                  <+? (\i -> select ((==i) . fst)) <$> (dirArg >*> readable)
           ls <- liftIO (map sel availableLibs)
           case ls of

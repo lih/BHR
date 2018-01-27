@@ -222,7 +222,7 @@ runTarget (Server LibServer) = forkTgt $ \_ -> do
 runTarget (ListServer LibServer t) = ioTgt $ showLibs =<< availableLibs 
   where showLibs l = traverse_ showLib [(l,d) | (l,Just d) <- map (second showT) l]
         showLib (l,d) = putStrLn (show l+" "+d)
-        showT d = maybe (Just $ show d) (showTemplate d) t
+        showT d = maybe (Just $ show d) (showDummyTemplate d) t
 runTarget (ListServer InstanceServer _) = ioTgt $ do
   let (h,p) = case getConf confServer of
         Just (_,h,p) -> (h,p)
