@@ -55,7 +55,7 @@ editSource f (l,c) m = readBytes f >>= ?edit ".cy" (l,c) >>= maybe unit (\b -> w
 data SessionState = SessionState {
   _wd :: [String],
   _style :: Style,
-  _patterns :: DocParams,
+  _patterns :: DocPatterns,
   _this :: Library,
   _warnings :: (Maybe String,[Warning])
   }
@@ -67,7 +67,7 @@ style :: Lens' SessionState Style
 style = lens _style (\x y -> x { _style = y })
 warnings :: Lens' SessionState (Maybe String,[Warning])
 warnings = lens _warnings (\x y -> x { _warnings = y })
-patterns :: Lens' SessionState DocParams
+patterns :: Lens' SessionState DocPatterns
 patterns = lens _patterns (\x y -> x { _patterns = y })
 
 withSessionState :: (?curlyPlex :: CurlyPlex, MonadIO m) => ((?sessionState :: IORef SessionState) => m a) -> m a
@@ -89,7 +89,7 @@ withSessionLib ma = do
  
 withStyle :: (?sessionState :: IORef SessionState,MonadIO m) => ((?style :: Style) => m a) -> m a
 withStyle m = getSession style >>= \s -> let ?style = s in m
-withPatterns :: (?sessionState :: IORef SessionState,MonadIO m) => ((?patterns :: DocParams) => m a) -> m a
+withPatterns :: (?sessionState :: IORef SessionState,MonadIO m) => ((?patterns :: DocPatterns) => m a) -> m a
 withPatterns m = getSession patterns >>= \ps -> let ?patterns = ps in m
 getSession :: (?sessionState :: IORef SessionState,MonadIO m) => Lens' SessionState a -> m a
 getSession l = liftIO (readIORef ?sessionState <&> by l)

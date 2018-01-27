@@ -187,7 +187,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["key","del","server",k] -> completeKeyName k
           ("key":_) -> []
           ["show",p] -> completeAbsPath w False p
-          ["show",_,k] -> completeWord [p | (p,Pure _) <- pats^.ascList] k
+          ["show",_,k] -> completeWord (keys pats) k
           ["vcs",c] -> completeWord ["list","get","commit","checkout","branch"] c
           ["vcs","list",k] -> completeKeyName k
           ["vcs","list",k,b] -> completeBranchName k b
@@ -204,6 +204,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ("repository":_) -> []
           ["compareTypes",x] -> completeWord ["shape","constraints"] x
           ["cd",p] -> completeAbsPath w True p
+          ["ls",p] -> completeAbsPath w True p
           ("import":t) -> completeAbsPath [] False (last t)
           (_:t) -> completeAbsPath w False (last t)
         return True

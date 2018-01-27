@@ -57,9 +57,9 @@ showDoc = "{section {title Formatted Query} {p {em Usage:} show PATH PATTERN} {p
 showCmd = withDoc showDoc . fill False $ do
   path <- (nbhspace >> ((several "{}" >> getSession wd) <+? absPath ""))
           <+? getSession wd
-  pat <- option' (docTag' "pattern" [Pure "default"])
-         (nbhspace >> ((docAtom <*= guard . has t'Join) <+? map (docTag' "pattern" . pure . Pure) dirArg))
-  withMountain $ let ctx = fold $ c'list $ localContext^??atMs path in do
+  pat <- option' (docTag' "call" [Pure "default"])
+         (nbhspace >> ((docAtom <*= guard . has t'Join) <+? map (docTag' "call" . pure . Pure) dirArg))
+  withMountain $ let ctx = fold $ c'list $ localContext^??atMs path in withPatterns $ do
     let params (n,v) = let Join p = composing (uncurry insert) [
                              (["type"],Pure $ document (exprType (v^.leafVal))),
                              (["name"],Pure $ Pure $ identName n),
@@ -68,10 +68,18 @@ showCmd = withDoc showDoc . fill False $ do
                              (["strictness"],Pure $ document (snd $ exprStrictness $ v^.leafVal))
                              ] zero
                        in p
-    withStyle $ withPatterns $ serveStrLn (docString ?terminal ?style (document (map (\v -> fromMaybe (nodoc (format "Unmatched pattern %s" (show pat))) (evalDocWithPatterns ?patterns (params v) pat)) ctx)))
+        l'void :: Lens Void Void a a
+        l'void = lens (\_ -> undefined :: Void) (\x _ -> x)
+        applyFilter (Pure v) = case evalDocWithPatterns ?patterns (params v) pat of
+          Just d -> Pure d
+          Nothing -> Join (ModDir [])
+        applyFilter (Join (ModDir l)) = Join (ModDir (select
+                                                      (has (l'2.(t'Pure.l'void .+ t'Join.i'ModDir.traverse.l'void)))
+                                                      (map2 applyFilter l)))
+    withStyle $ serveStrLn (docString ?terminal ?style (document (applyFilter ctx)))
     
 patternCmd = withDoc "{section {title Define Formatting Patterns} {p {em Usage:} pattern PATH = PATTERN} {p Defines a new query pattern accessible with \\{pattern PATH\\}}}" . fill False $ do
   ph:pt <- many1' (nbhspace >> dirArg <*= guard . (/="="))
   between nbhspace nbhspace (several "=")
   pat <- docLine "pat" []
-  liftIO $ runAtomic ?sessionState (patterns.at ph.l'Just (Join zero).at pt =- Just (Pure pat))
+  liftIO $ runAtomic ?sessionState (patterns.at ph =- Just (pt,pat))

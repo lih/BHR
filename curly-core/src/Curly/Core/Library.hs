@@ -2,7 +2,7 @@
 module Curly.Core.Library(
   -- * Modules
   -- ** Nodes 
-  ModDir(..),Module,Mountain,Context,context,localContext,
+  ModDir(..),i'ModDir,Module,Mountain,Context,context,localContext,
   atM,atMs,fromPList,
   -- ** Leaves
   ModLeaf,SourcePos,SourceRange(..),
@@ -59,6 +59,8 @@ instance Format a => Format (Chunked a) where
 
 newtype ModDir s a = ModDir [(s,a)]
                       deriving (Semigroup,Monoid,Show)
+i'ModDir :: Iso [(s,a)] [(s',a')] (ModDir s a) (ModDir s' a')
+i'ModDir = iso (\(ModDir m) -> m) ModDir 
 type Module a = Free (ModDir String) a
 instance Documented a => Documented (Module a) where
   document (Join (ModDir l)) = docTag' "ul" (map (docTag "li" [("class","modVal")] . pure . doc') l)

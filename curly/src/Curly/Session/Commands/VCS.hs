@@ -117,19 +117,19 @@ vcsCmd = withDoc vcsDoc $ False <$ do
       lid <- expected "library ID" (nbhspace >> libID)
       ls <- checkout pref lid
       liftIO $ do
-        writeString (root+name+".cyx") $ unlines [
+        writeString (root+".curly") $ unlines [
           "#!/usr/bin/env curly",
-          intercalate "\n" [format "mount deps %s%s = %s"
-                            (show l) (foldMap (" "+) suf)
+          intercalate "\n" [format "mount deps.%s%s = %s"
+                            (show l) (foldMap ("."+) suf)
                             $ c'string $ case x of
-                              Just pref -> format "source[deps %s] %s.cy"
+                              Just pref -> format "source[deps.%s] %s.cy"
                                            (show l') (drop (length root) pref+foldMap ("/"+) suf)
                               Nothing -> format "library %s" (show l')
                            | (l,suf,l',x) <- ls],
-          format "mount root = source[deps %s] %s.cy" (show lid) name,
+          format "mount root = source[deps.%s] %s.cy" (show lid) name,
           "+default - interactive"
           ]
-        modifyPermissions (pref+".cyx") (set (each.executePerm) True)
+        modifyPermissions (root+".curly") (set (each.executePerm) True)
 
     "branch" -> do
       guardWarn "Cannot modify a branch without almighty access" (?access >= Almighty)

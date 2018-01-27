@@ -4,7 +4,7 @@ module Curly.Core.Documentation(
   DocNode(..),Documentation,Documented(..),
   docNodeAttrs,docNodeSubs,
   docTag,docTag',nodoc,mkDoc,docAtom,docLine,
-  DocParams,
+  DocParams,DocPatterns,
   evalDoc,evalDocWithPatterns,
   -- * Rendering documentation
   -- ** Styles
@@ -45,20 +45,65 @@ instance Documented Int where
   document n = docTag' "int" [Pure (show n)]
 
 type DocParams = Forest (Map String) Documentation
-evalDocWithPatterns :: DocParams -> DocParams -> Documentation -> Maybe Documentation
-evalDocWithPatterns pats vars = eval
-  where eval (Pure x) = return (Pure x)
-        eval (Join (DocTag "$" [] xs)) = do
-          xs' <- traverse eval xs
-          path <- for xs' $ \x -> x^?t'Pure
-          Join vars^?at path.t'Just.t'Pure
-        eval (Join (DocTag "pattern" [] xs)) = do
-          xs' <- traverse eval xs
-          path <- for xs' $ \x -> x^?t'Pure
-          pat <- Join pats^?at path.t'Just.t'Pure
-          eval pat
-        eval (Join (DocTag "or" [] xs)) = foldMap eval xs
-        eval (Join (DocTag t as xs)) = Join . DocTag t as <$> traverse eval xs
+type DocPatterns = Map String ([String],Documentation)
+evalDocWithPatterns :: DocPatterns -> DocParams -> Documentation -> Maybe Documentation
+evalDocWithPatterns pats vars = eval vars
+  where eval vars = eval'
+          where 
+            eval' (Pure x) = return (Pure x)
+            eval' (Join (DocTag "$" [] xs)) = do
+              xs' <- traverse eval' xs
+              path <- for xs' $ \x -> x^?t'Pure
+              Join vars^?at path.t'Just.t'Pure
+            eval' (Join (DocTag "or" [] xs)) = foldMap eval' xs
+            eval' (Join (DocTag "when" [] [x,y])) = eval' x >> eval' y
+            eval' (Join (DocTag "unless" [] [x,y])) = maybe (Just ()) (const Nothing) (eval' x) >> eval' y
+            eval' (Join (DocTag op [] [ea,eb]))
+              | op`elem`["<",">","<=",">="] = do
+                let valList = many' (map Left number <+? map Right (many1' (satisfy (not . inRange '0' '9'))))
+                    liftOp cmp x@(Pure a) (Pure b) = x <$ do
+                      [a',b'] <- traverse (matches Just valList) [a,b]
+                      guard (cmp a' b')
+                    liftOp cmp x@(Join (DocTag a _ xs)) (Join (DocTag b _ ys)) = x <$ do
+                      guard (a==b)
+                      sequence_ (zipWith (liftOp cmp) xs ys)
+                    liftOp _ _ _ = Nothing
+                    toCmp "<" = (<)
+                    toCmp ">" = (>)
+                    toCmp "<=" = (<=)
+                    toCmp ">=" = (>=)
+                    toCmp _ = undefined
+                join $ liftA2 (liftOp (toCmp op)) (eval' ea) (eval' eb)
+              | op=="=" = do
+                let cmp (Pure a) (Pure b) = Pure a <$ matches Just (wildcards b) a
+                    cmp (Join (DocTag a _ xs)) (Join (DocTag b _ ys)) = do
+                      guard (a==b)
+                      zs <- sequence (zipWith cmp xs ys)
+                      return (Join $ DocTag a [] zs)
+                    cmp _ _ = Nothing
+                join $ liftA2 cmp (eval' ea) (eval' eb)
+            eval' x@(Join (DocTag "call" _ xs@(_:_))) = do
+              p:args <- traverse eval' xs
+              p <- p^?t'Pure
+              (pargs,pat) <- pats^.at p
+              callTag args pargs pat
+            eval' (Join (DocTag t as xs)) = do
+              xs' <- traverse eval' xs
+              case pats^.at t of
+                Just (pargs,pat) -> callTag xs' pargs pat
+                Nothing -> return (Join $ DocTag t as xs')
+            callTag args pargs pat = do
+              let vars' = compose (zipWith (\n v -> insert n (Pure v)) pargs args) vars
+              eval vars' pat
+
+        wildcards "*" = unit
+        wildcards ('*':'*':t) = wildcards ('*':t)
+        wildcards ('*':t@(c:_)) = do
+          skipMany1' (satisfy (/=c))`sepBy`many1' (single c)
+          wildcards t
+        wildcards (c:t) = single c >> wildcards t
+        wildcards [] = eoi
+        
 evalDoc :: DocParams -> Documentation -> Maybe Documentation
 evalDoc = evalDocWithPatterns zero
 

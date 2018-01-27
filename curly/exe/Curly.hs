@@ -260,8 +260,7 @@ runTarget (Translate f sys path) = ioTgt $ do
             modifyPermissions f (_sysProgPerms sys)
           _ -> putStrLn $ "Error: the path "+show path+" doesn't seem to point to a function in the default context"
   
-runTarget (DumpDataFile Nothing) = ioTgt $ traverse_ putStrLn dataFiles
-runTarget (DumpDataFile (Just f)) = ioTgt $ do
+runTarget (DumpDataFile f) = ioTgt $ do
   fn <- getDataFileName f
   readBytes fn >>= writeHBytes stdout
 runTarget (SetServer _) = ioTgt unit
@@ -280,21 +279,3 @@ nextParams (AddBanner b) = confBanner %~ (+b+"\n")
 nextParams (SetInstance i) = confInstance %- i
 nextParams _ = id
 
-dataFiles = [
-  "proto/vc/http","proto/vc/https",
-  "kate/highlight-curly.xml",
-  "emacs/curly-mode.el",
-  "emacs/curly-conf-mode.el",
-  "mime/curly.xml",
-  "bash/completions/curly",
-  "bash/completions/defcomp.curly-script.shf",
-  "bash/completions/curly.script.shf",
-  "bash/completions/curly.arg.shf",
-  "bash/completions/cyfile",
-  "bash/completions/curly.sh",
-  "applications/curly-uri.desktop",
-  "applications/curly-source.desktop",
-  "applications/curly-library.desktop",
-  "applications/curly-context.desktop",
-  "make/curly.mk"
-  ]

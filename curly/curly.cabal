@@ -17,23 +17,25 @@ cabal-version:       >=1.10
 
 data-dir: data
 data-files:
-  kate/highlight-curly.xml
-  emacs/curly-mode.el
-  emacs/curly-conf-mode.el
-  mime/curly.xml
-  bash/completions/curly
-  bash/completions/defcomp.curly-script.shf
-  bash/completions/curly.script.shf
-  bash/completions/curly.arg.shf
-  bash/completions/cyfile
-  bash/completions/curly.sh
-  applications/curly-uri.desktop
-  applications/curly-source.desktop
-  applications/curly-library.desktop
   applications/curly-context.desktop
+  applications/curly-library.desktop
+  applications/curly-source.desktop
+  applications/curly-uri.desktop
+  bash/completions/curly
+  bash/completions/curly.arg.shf
+  bash/completions/curly.script.shf
+  bash/completions/curly.sh
+  bash/completions/cyfile
+  bash/completions/defcomp.curly-script.shf
+  emacs/curly-conf-mode.el
+  emacs/curly-mode.el
+  install.sh
+  kate/highlight-curly.xml
+  list
+  make/curly.mk
+  mime/curly.xml
   proto/vc/http
   proto/vc/https
-  make/curly.mk
 
 library
   default-language:    Haskell2010
