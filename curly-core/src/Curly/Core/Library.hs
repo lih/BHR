@@ -464,7 +464,7 @@ builtinsLib = let blib = zero
           (["syntax","mkExprSym"],mkBLeaf "mkExprSym" B_ExprSym mkExprSymDoc),
           (["syntax","exprInd"],mkBLeaf "exprInd" B_ExprInd exprIndDoc)
           ]
-            where mkBLeaf n b d = (pureIdent n,undefLeaf "" & leafVal %- mkSymbol (pureIdent n,Pure (Builtin (builtinType b) b)) & leafDoc %- mkDoc d)
+            where mkBLeaf n b d = (pureIdent n,undefLeaf "" & leafVal %- mkSymbol (pureIdent n,Pure (Builtin (builtinType b) b)) & leafDoc %- mkDoc "leafDoc" d)
                   seqDoc = unlines [
                     "{section {title Sequence Expressions}",
                     "  {p {em Usage:} seq x y}",
@@ -615,7 +615,12 @@ nslookup :: String -> PortNumber -> Maybe AddrInfo
 nslookup = curry $ cached $ \(s,p) -> convert $ thunk $^ getAddrInfo Nothing (Just s) (Just (show p))
 
 type Template = Documentation
-defaultTemplate = docTag' "$" [Pure "name"]
+defaultTemplate = mkDoc "template"
+                  $ unlines [
+                    "{or \"{$ name}{or \" v{$ version}\" \"\"}: {$ synopsis}\"",
+                    "    {ln {$ synopsis}}",
+                    "    \"(data)\"}"
+                    ]
 
 showTemplate :: Terminal trm => trm -> Style -> DocPatterns -> Metadata -> Template -> Maybe String
 showTemplate trm stl pats (Metadata d) tpl = map (docString trm stl) (evalDocWithPatterns pats (map2 Pure d) tpl)

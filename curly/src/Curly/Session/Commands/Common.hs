@@ -121,7 +121,7 @@ type Interactive t = (?sessionState :: IORef SessionState
                      => t
 type Command = (Documentation,OpParser IO Bool)
 
-withDoc d m = (mkDoc d,m)
+withDoc d m = (mkDoc "cmdDoc" d,m)
 
 dirArg :: (MonadParser s m p, ParseStream c s, TokenPayload c ~ Char, Monad m) => p String
 dirArg = many1' $ noneOf " \t\n(){}"
