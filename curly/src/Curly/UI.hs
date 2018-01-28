@@ -99,7 +99,7 @@ cacheResource (src,cache) a bs = by thunk $ do
   where bval = B_Bytes bs
         sym = mkSymbol (pureIdent "value",Pure (Builtin (builtinType bval) bval))
         lib = fileLibrary (zero
-                           & set symbols (singleton "value" (undefLeaf ""
+                           & set symbols (singleton "value" (undefLeaf ("Data resource: "+(a^.relPath))
                                                              & set leafVal sym
                                                              & set leafType (builtinType bval)
                                                              & set leafPos (SourceRange (Just sourceName) (0,0,0) (0,0,0))))

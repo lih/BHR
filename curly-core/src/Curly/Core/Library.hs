@@ -428,12 +428,12 @@ builtinsLib = let blib = zero
   where Join meta = fromAList [(["synopsis"],Pure "The Curly Builtin Library")
                               ,(["author","name"],Pure "Marc Coiffier")
                               ,(["author","email"],Pure "marc@coiffier.net")
-                              ,(["version"],Pure "0.5")]
+                              ,(["version"],Pure "0.5.1")]
         safeLast x [] = x
         safeLast _ (h:t) = safeLast h t
         builtinsMod = fromPList (map2 Pure allBuiltins) 
         allBuiltins = [
-          (["undefined"],(pureIdent "undefined",(undefLeaf "Undefined value"))),
+          (["undefined"],(pureIdent "undefined",undefLeaf "The 'undefined' builtin")),
           (["seq"],mkBLeaf "seq" B_Seq seqDoc),
           (["unit"],mkBLeaf "unit" B_Unit unitDoc),
           (["file","open"],mkBLeaf "open" B_Open openDoc),

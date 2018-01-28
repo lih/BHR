@@ -259,7 +259,7 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),StyleState BeginP zero 0)) & 
             maybe unit (\i -> indentDepth =~ maybe id ((+) . length) (tstl^.tagPrefix) . (+i)) (s^.tagIndent)
             maybe unit setDisplay (s^.tagDisplay)
             case t of
-              "nodoc" -> doc' (Pure "Not documented.")
+              "nodoc" -> subDoc (Pure "Not documented:":subs)
               _ -> subDoc subs
             styleEnd
             getl (activeStyle.l'2.tagPrefix)
