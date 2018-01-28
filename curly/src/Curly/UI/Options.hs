@@ -11,7 +11,7 @@ module Curly.UI.Options (
   TargetParams,confServer,confPrelude,confBanner,confInstance,confThreads,defaultConf,getConf,withPrelude,
 
   -- * Misc
-  curlyOpts,inputSource,curlyFileName,noCurlySuf,visible,symPath,showSymPath
+  curlyOpts,packageID,inputSource,curlyFileName,noCurlySuf,visible,symPath,showSymPath
   ) where
 
 import Definitive
@@ -257,17 +257,21 @@ inputSource base = do
           m <- option' (n+".cache") (sep >> visible "")
           return (Resource (base</>n) (base</>m))
         search = like "package" >> sep >> do
-          let tag x l = Join (DocTag x [] l)
           tpl <- (docAtom <*= guard . has t'Join)
-                 <+? (visible "" <&> \x -> tag "=" [tag "$" [Pure "name"],Pure x])
-          let sid = availableLibs
-                    <&> \ls -> fromMaybe (error $ format "Could not find package matching %s" (pretty tpl))
-                               $ find (\(_,d) -> nonempty (showDummyTemplate d tpl)) ls <&> fst
-          return (Library $ sid^.thunk)
+                 <+? (visible "" <&> \x -> docTag' "=" [docTag' "$" [Pure "name"],Pure x])
+          return (Library $ packageID tpl^.thunk)
         lib = like "library" >> sep >> (fileLib <+? map Library readable)
           where fileLib = single '@' >> map LibraryFile (visible "")
         blts = Library (builtinsLib^.flID) <$ like "builtins"
-        
+
+packageID :: Template -> IO LibraryID
+packageID tpl = do
+  ls <- availableLibs
+  case [l | (l,d) <- ls
+          , nonempty (showDummyTemplate d tpl)] of
+    [l] -> return l
+    _ -> error $ format "Could not find package matching %s" (showRawDoc tpl)
+
 data CurlyPlex = CurlyPlex {
   _mounts :: [([String],InputSource)],
   _targets :: [Target],

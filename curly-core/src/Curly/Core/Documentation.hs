@@ -3,7 +3,7 @@ module Curly.Core.Documentation(
   -- * The Documentation format
   DocNode(..),Documentation,Documented(..),
   docNodeAttrs,docNodeSubs,
-  docTag,docTag',nodoc,mkDoc,docAtom,docLine,
+  docTag,docTag',nodoc,mkDoc,showRawDoc,docAtom,docLine,
   DocParams,DocPatterns,
   evalDoc,evalDocWithPatterns,
   -- * Rendering documentation
@@ -146,6 +146,14 @@ docAtom = tag <+? txt
 docLine :: (ParseToken c, ParseStream c s, TokenPayload c ~ Char, Monad m)
            => String -> [(String,String)] -> ParserT s m Documentation
 docLine n as = Join . DocTag n as <$> many1' (skipMany' (oneOf " \t") >> docAtom)
+showRawDoc :: Documentation -> String
+showRawDoc x = case x of
+  Join (DocTag t as xs) -> "{" + foldMap quoteChar t + foldMap showAttr as + foldMap showSub xs + "}"
+  Pure s -> foldMap quoteChar s
+  where quoteChar ' ' = "\\ "
+        quoteChar c = [c]
+        showAttr (x,v) = ":" + foldMap quoteChar x + "=" + foldMap quoteChar v
+        showSub x = " "+showRawDoc x
 
 data ShowState = BeginP | InP | EndP Bool
 data TagDisplay = Inline | Block Bool

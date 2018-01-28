@@ -4,7 +4,7 @@
 #endif
 module Curly.Core.Parser (
   -- * Expressions and operators
-  OpMap,OpChar(..),OpParser,Warning(..),CurlyParserException(..),showWarning,l'library,
+  OpMap,OpChar(..),OpParser,withParsedString,Warning(..),CurlyParserException(..),showWarning,l'library,
   Spaces(..),parseCurly,currentPos,spc,nbsp,
   expr,accessorExpr,tom,atom,
 
@@ -96,6 +96,13 @@ parseSpaces AnySpaces = spc
 parseNBSpaces :: (Monad m,ParseStream c s, TokenPayload c ~ Char) => Spaces -> ParserT s m ()
 parseNBSpaces HorizSpaces = nbhsp
 parseNBSpaces AnySpaces = nbsp
+
+withParsedString :: Monad m => OpParser m a -> OpParser m (String,a)
+withParsedString ma = do
+  h <- runStreamState (id <~ \(OpStream h l) -> (OpStream [] l,h))
+  a <- ma
+  h' <- runStreamState (id <~ \(OpStream h' l) -> (OpStream (h'+h) l,reverse h'))
+  return (h',a)
 
 instance Lens1 a a (Cofree f a) (Cofree f a) where
   l'1 k (Step x f) = k x <&> \x' -> Step x' f

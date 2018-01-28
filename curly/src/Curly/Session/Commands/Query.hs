@@ -55,29 +55,43 @@ editCmd = viewCmd editDoc zero onPath $ \path (by leafPos -> r) -> case r of
 
 showDoc = "{section {title Formatted Query} {p {em Usage:} show PATH PATTERN} {p Show the function at PATH according to the given pattern}}"
 showCmd = withDoc showDoc . fill False $ do
-  path <- (nbhspace >> ((several "{}" >> getSession wd) <+? absPath ""))
-          <+? getSession wd
+  epath <- map Right (nbhspace >> between (single '(') (single ')') (withParsedString (expr AnySpaces)))
+           <+? map Left ((nbhspace >> ((several "{}" >> getSession wd) <+? absPath ""))
+                         <+? (lookingAt (hspace >> eol) >> getSession wd))
   pat <- option' (docTag' "call" [Pure "default"])
          (nbhspace >> ((docAtom <*= guard . has t'Join) <+? map (docTag' "call" . pure . Pure) dirArg))
-  withMountain $ let ctx = fold $ c'list $ localContext^??atMs path in withPatterns $ do
-    let params (n,v) = let Join p = composing (uncurry insert) [
-                             (["type"],Pure $ document (exprType (v^.leafVal))),
-                             (["name"],Pure $ Pure $ identName n),
-                             (["doc"],Pure $ v^.leafDoc),
-                             (["impl"],Pure $ Pure $ showImpl (v^.leafVal)),
-                             (["strictness"],Pure $ document (snd $ exprStrictness $ v^.leafVal))
-                             ] zero
-                       in p
-        l'void :: Lens Void Void a a
-        l'void = lens (\_ -> undefined :: Void) (\x _ -> x)
-        applyFilter (Pure v) = case evalDocWithPatterns ?patterns (params v) pat of
-          Just d -> Pure d
-          Nothing -> Join (ModDir [])
-        applyFilter (Join (ModDir l)) = Join (ModDir (select
-                                                      (has (l'2.(t'Pure.l'void .+ t'Join.i'ModDir.traverse.l'void)))
-                                                      (map2 applyFilter l)))
-    withStyle $ serveStrLn (docString ?terminal ?style (document (applyFilter ctx)))
-    
+  withMountain $ withPatterns $ withStyle $ case epath of
+    Left path -> let ctx = fold $ c'list $ localContext^??atMs path in do
+      let params (n,v) = let Join p = composing (uncurry insert) [
+                               (["flavor"],Pure $ Pure "Symbol"),
+                               (["type"],Pure $ document (exprType (v^.leafVal))),
+                               (["name"],Pure $ Pure $ identName n),
+                               (["doc"],Pure $ v^.leafDoc),
+                               (["impl"],Pure $ Pure $ showImpl (v^.leafVal)),
+                               (["strictness"],Pure $ document (snd $ exprStrictness $ v^.leafVal))
+                               ] zero
+                         in p
+          l'void :: Lens Void Void a a
+          l'void = lens (\_ -> undefined :: Void) (\x _ -> x)
+          applyFilter (Pure v) = case evalDocWithPatterns ?patterns (params v) pat of
+            Just d -> Pure d
+            Nothing -> Join (ModDir [])
+          applyFilter (Join (ModDir l)) = Join (ModDir (select
+                                                        (has (l'2.(t'Pure.l'void .+ t'Join.i'ModDir.traverse.l'void)))
+                                                        (map2 applyFilter l)))
+      serveStrLn (docString ?terminal ?style (document (applyFilter ctx)))
+
+    Right (n,e) -> do
+      v <- optExprIn <$> getSession this <*> pure e
+      let Join params = composing (uncurry insert) [
+            (["flavor"],Pure $ Pure "Expression"),
+            (["name"],Pure $ Pure n),
+            (["type"],Pure $ document (exprType v)),
+            (["impl"],Pure $ Pure $ showImpl v),
+            (["strictness"],Pure $ document (snd $ exprStrictness v))
+            ] zero
+      serveStrLn (docString ?terminal ?style (fromMaybe (nodoc $ "Cannot show pattern "+showRawDoc pat)
+                                              (evalDocWithPatterns ?patterns params pat)))
 patternCmd = withDoc "{section {title Define Formatting Patterns} {p {em Usage:} pattern PATH = PATTERN} {p Defines a new query pattern accessible with \\{pattern PATH\\}}}" . fill False $ do
   ph:pt <- many1' (nbhspace >> dirArg <*= guard . (/="="))
   between nbhspace nbhspace (several "=")

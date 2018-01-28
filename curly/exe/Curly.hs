@@ -65,6 +65,12 @@ t'IOTgt :: Traversal' TargetType (IO ())
 t'IOTgt k (IOTgt m) = IOTgt<$>k m
 t'IOTgt _ x = return x
 
+forkValue :: IO a -> IO a
+forkValue ma = do
+  v <- newEmptyMVar
+  forkIO $ ma >>= putMVar v
+  return (takeMVar v^.thunk)
+
 initCurly = do
   setLocaleEncoding utf8
   getDataFileName "proto/vc" >>= \p -> modifyIORef vcsProtoRoots (p:)
@@ -94,8 +100,8 @@ initCurly = do
           ks <- getKeyStore
           now <- currentTime
           branches <- map fold $ for (ks^.ascList) $ \(l,(_,pub,_,_,_)) -> do
-            map (first (pub,)) . by ascList <$> getBranches pub
-          map ((now+15,) . by ascList . concat) $ for branches $ \((pub,b),h) -> getAll =<< deepBranch' (Just h)
+            map (first (pub,)) . by ascList <$> forkValue (getBranches pub)
+          map ((now+15,) . by ascList . concat) $ for branches $ \((pub,b),h) -> forkValue (getAll =<< deepBranch' (Just h))
         getL _ lid = fromMaybe zero <$> vcbLoad conn (LibraryKey lid)
     runAtomic repositories (modify (touch (CustomRepo "curly-vc://" getLs getL)))
 
@@ -260,6 +266,7 @@ runTarget (Translate f sys path) = ioTgt $ do
             modifyPermissions f (_sysProgPerms sys)
           _ -> putStrLn $ "Error: the path "+show path+" doesn't seem to point to a function in the default context"
   
+runTarget (DumpDataFile "builtins.cyl") = ioTgt $ writeHBytes stdout (builtinsLib^.flBytes)
 runTarget (DumpDataFile f) = ioTgt $ do
   fn <- getDataFileName f
   readBytes fn >>= writeHBytes stdout

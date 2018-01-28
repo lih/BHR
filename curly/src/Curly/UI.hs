@@ -23,6 +23,7 @@ import Curly.Core.Library
 import Curly.Core.Parser
 import Curly.Core.Security
 import Curly.Core.Annotated
+import Curly.Core.Documentation
 import Curly.UI.Options
 import Data.IORef 
 import Data.List (sortBy)
@@ -199,7 +200,15 @@ parseCurlyArgs args = fromMaybe [] $ matches Just (tokenize (map2 Right curlyOpt
         naked ('+':s) = Right [Flag s]
         naked ('@':s) = Right [Target (SetServer (readServer s))]
         naked (':':s) = Right [Target (SetInstance s)]
-        naked s = Left s
+        naked s = case matches Just url s of
+          Just t -> Right t
+          _ -> Left s
+        url = do
+          proto <- many1' (noneOf ":")
+          path <- single ':' >> remaining
+          let lid = packageID (docTag' "=" [docTag' "$" [Pure "name"],Pure path])^.thunk
+          (pure proto >*> (like "package" >> eoi)) >> return [Mount [path] (Library lid)]
+            
 
 type CurlyConfig = [(Maybe String,CurlyOpt)]
 
