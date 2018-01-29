@@ -161,6 +161,9 @@ vcbLoadP :: (Format a,MonadIO m) => VCSBackend -> (WithResponse a -> VCKey ()) -
 vcbLoadP b k = vcbLoad b k >>= maybe zero return
 
 data VCSBackend = forall m s. MonadVC m s => VCSB_Native String s (forall a. m a -> IO a)
+instance Semigroup VCSBackend where
+  VCSB_Native n conn run + VCSB_Native n' conn' run' =
+    VCSB_Native (n+" "+n') (conn,conn') (\(Combined_VC (Compose m)) -> run m >>= run')
 instance Eq VCSBackend where a == b = compare a b == EQ
 instance Ord VCSBackend where
   compare (VCSB_Native s _ _) (VCSB_Native s' _ _) = compare s s'
@@ -175,29 +178,24 @@ protoBackend pr p = VCSB_Native (pr+"://"+p) (pr,p) (\(Proto_VC io) -> io)
 instance Show VCSBackend where
   show (VCSB_Native s _ _) = s
 instance Read VCSBackend where
-  readsPrec _ = readsParser backend
+  readsPrec _ = readsParser (foldr1 (+) <$> sepBy1' backend nbspace)
     where backend = proto_native <+? proto_file <+? proto_arbitrary <+? fill dummyBackend (several "dummy")
           proto_native = do
             several "curly-vc://" <+? single '@'
             map (by thunk) $ liftA2 nativeBackend
-              (many1' (noneOf ":") <&> \x -> if x=="_" then "127.0.0.1" else x)
+              (many1' (noneOf ": \t\n") <&> \x -> if x=="_" then "127.0.0.1" else x)
               (option' 5402 (single ':' >> number))
           proto_file = do
             several "file://" <+? lookingAt (single '/')
-            fileBackend <$> remaining
+            fileBackend <$> many1' (noneOf " \t\n")
           proto_arbitrary = do
             proto <- many1' (satisfy (/=':'))
             several "://"
-            protoBackend proto <$> remaining
+            protoBackend proto <$> many1' (noneOf " \t\n")
               
 curlyVCSBackend :: VCSBackend
-curlyVCSBackend = fromMaybe (getDefaultVCS^.thunk) (matches Just readable (envVar "" "CURLY_VCS"))
-  where getDefaultVCS = try (return dummyBackend) $ do
-          lns <- map words . lines <$> readProcess "/usr/lib/curly/default-vcs" [] ""
-          case lns of
-            ([h,p]:_) -> nativeBackend h (fromInteger $ read p)
-            _ -> return dummyBackend
-            
+curlyVCSBackend = fromMaybe dummyBackend (matches Just readable (envVar "" "CURLY_VCS"))
+
 curlyPublisher :: String
 curlyPublisher = envVar "" "CURLY_PUBLISHER"
 

@@ -17,6 +17,7 @@ import Curly.Core.Peers
 import Curly.Core.Security
 import Curly.Core.VCS
 import Curly.Core.VCS.Diff (patch)
+import Curly.Session.Commands.Common (getDataFileName_ref)
 import Curly.Session
 import Curly.System
 import Curly.System.Base
@@ -73,6 +74,7 @@ forkValue ma = do
 
 initCurly = do
   setLocaleEncoding utf8
+  putMVar getDataFileName_ref getDataFileName
   getDataFileName "proto/vc" >>= \p -> modifyIORef vcsProtoRoots (p:)
   getDataFileName "proto/repo" >>= \p -> modifyIORef repoConfig (\c -> c { repoProtoRoots = p:repoProtoRoots c })
   trylogLevel Debug unit $ do

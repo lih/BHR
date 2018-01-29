@@ -324,3 +324,4 @@ sourceLibs = symList $ fromPList [(p,sourceFile b (f,c) (getFile f^.thunk)) | (p
 
 curlyHistoryFile :: String
 curlyHistoryFile = curlyUserDir </> "history"
+

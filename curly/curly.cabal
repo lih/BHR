@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                curly
-version:             0.58.6
+version:             0.58.6.1
 -- synopsis:            
 -- description:         
 license:             MIT
@@ -30,6 +30,7 @@ data-files:
   emacs/curly-conf-mode.el
   emacs/curly-mode.el
   install.sh
+  dns-lookup.sh
   kate/highlight-curly.xml
   list
   make/curly.mk

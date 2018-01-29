@@ -13,6 +13,8 @@ import Data.IORef
 import Language.Format hiding (space)
 import Control.Exception (fromException)
 import Control.DeepSeq (($!!))
+import System.Process (readProcess)
+import Control.Concurrent.MVar
 
 showPath l = intercalate "." (map (foldMap quote) l)
   where quote '.' = "\\."
@@ -129,3 +131,19 @@ absPath :: (?sessionState :: IORef SessionState, MonadParser s m p, ParseStream 
            => String -> p [String]
 absPath lim = (single '.' >> symPath lim)
               <+? (liftA2 subPath (getSession wd) (symPath lim))
+
+getDataFileName_ref :: MVar (String -> IO String)
+getDataFileName_ref = newEmptyMVar^.thunk
+
+data CurlyDNSQuery = DomainVC (WithResponse (String,PortNumber))
+                   | DomainKey String (WithResponse (Zesty PublicKey))
+dns_lookup :: (MonadIO m,Read a) => (WithResponse a -> CurlyDNSQuery) -> m (Maybe a)
+dns_lookup k = liftIO $ withMVar getDataFileName_ref $ \getDataFileName -> do
+  p <- getDataFileName "dns-lookup.sh"
+  let t = WithResponse
+  case k t of
+    DomainVC _ -> readProcess "sh" [p,"domain-vc"] "" <&> \s -> map (response t) (matches Just readable s)
+    DomainKey d _ -> readProcess "sh" [p,"domain-key",d] "" <&> \s -> map (response t) (matches Just readable s)
+
+  where response :: WithResponse a -> a -> a
+        response _ x = x

@@ -8,6 +8,7 @@ import Curly.UI.Options hiding (nbsp,spc)
 import Curly.Core.Parser
 import Language.Format hiding (space)
 import Curly.Session.Commands.Common
+import Curly.UI
 
 keyCmd :: Interactive Command
 
@@ -103,8 +104,9 @@ keyCmd = withDoc keyDoc $ False <$ do
                             <+? Zesty . (,Nothing) <$> do
                               name' <- dirArg
                               logLine Debug $ format "Asking client for key '%s'" name'
-                              mpub <- liftIO (clientKey name')
-                              maybe (serveStrLn (format "Error: unknown client key '%s'" name') >> zero) return mpub
+                              (maybe zero return =<< liftIO (clientKey name'))
+                                <+? (maybe zero (\(Zesty p) -> return p) =<< dns_lookup (DomainKey name'))
+                                <+? (serveStrLn (format "Error: unknown client key '%s'" name') >> zero)
         let keyType = maybe "claim" (const "proof") priv
         serveStrLn (format "Importing %s '%s'" keyType name)
         setKey name (fingerprint pub,pub,map fst priv,maybe zero snd priv,zero)
