@@ -262,7 +262,7 @@ inputSource base = do
           return (Library $ packageID tpl^.thunk)
         lib = like "library" >> sep >> (fileLib <+? map Library readable)
           where fileLib = single '@' >> map LibraryFile (visible "")
-        blts = Library (builtinsLib^.flID) <$ like "builtins"
+        blts = Library (head builtinLibs^.flID) <$ like "builtins"
 
 packageID :: Template -> IO LibraryID
 packageID tpl = do

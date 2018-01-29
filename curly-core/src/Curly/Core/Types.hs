@@ -228,10 +228,10 @@ instance Identifier s => Show (Type s) where
           arguments = let x = intercalate "," [format "(%d)%s" i (snd s) | (ps,s) <- pathList, (ArgumentRoot i,[]) <- keys ps]
                       in if empty x then "" else format "[%s] " x
           implicits = let x = intercalate "," [snd s | (ps,s) <- pathList, (ImplicitRoot _,[]) <- keys ps]
-                      in if empty x then "" else x+" ⇒ "
+                      in if empty x then "" else x+" => "
           body = fold [fromMaybe (snd s) (fst s) | (ps,s) <- pathList, (TypeRoot,[]) <- keys ps]
           context = let x = intercalate "," [snd s | (ps,s) <- pathList, (ContextRoot _,[]) <- keys ps]
-                    in if empty x then "" else " ⇐ "+x
+                    in if empty x then "" else " <= "+x
           subs = interleave ("\n  where ":repeat "\n        ") $ "":[
             format "%s = %s" short long
             | (_,(Just short,long)) <- pathList]

@@ -12,7 +12,7 @@ module Curly.UI(
   withMountain,reloadMountain,sourceFile,
 
   -- * Misc
-  watchSources,sourceLibs,builtinsLib
+  watchSources,sourceLibs,builtinLibs
   ) where
 
 import Control.DeepSeq (deepseq)

@@ -11,6 +11,7 @@ import qualified Crypto.Hash.SHA256 as SHA256
 import System.Process (readProcess, withCreateProcess)
 import qualified System.Process as Sys
 import Data.IORef
+import Control.Concurrent.MVar
 
 newtype Hash = Hash Chunk
              deriving (Eq,Ord)
@@ -98,14 +99,18 @@ instance MonadVC Proto_VC (String,String) where
       (return Nothing) =<< readIORef vcsProtoRoots
   runVC (Proto_VC io) = io
 
+data Client_Handle = Client_Handle (MVar ()) Handle
 newtype Client_VC a = Client_VC (IO a)
                   deriving (Functor,SemiApplicative,Unit,Applicative)
 instance Monad Client_VC where join = coerceJoin Client_VC
 instance MonadIO Client_VC where liftIO = Client_VC
-instance MonadVC Client_VC Handle where
-  vcStore conn k l = liftIO $ writeHSerial conn ((True,k WithResponse),l)
-  vcLoad conn k = liftIO $ try (return Nothing) $ runConnection Just False conn $ do
-    exchange (\r -> (False,k (pMaybe r))) >>= maybe zero pure
+instance MonadVC Client_VC Client_Handle where
+  vcStore (Client_Handle lock conn) k l = liftIO $ withMVar lock $ \_ -> 
+    writeHSerial conn ((True,k WithResponse),l)
+  vcLoad (Client_Handle lock conn) k = liftIO $ withMVar lock $ \_ ->
+    try (return Nothing)
+    $ runConnection Just False conn
+    $ exchange (\r -> (False,k (pMaybe r))) >>= maybe zero pure
   runVC (Client_VC io) = io
 
 newtype Combined_VC vc1 vc2 a = Combined_VC ((vc1 :.: vc2) a)
@@ -136,17 +141,17 @@ vcServer (VCSB_Native _ st run) = do
   (b,k) <- receive
   logLine Verbose ("Received request "+show (b,k))
   if b then case k of
-    LibraryKey lid _ -> receive >>= liftIO . run . vcStore st (LibraryKey lid)
-    AdditionalKey lid nm _ ->  receive >>= liftIO . run . vcStore st (AdditionalKey lid nm)
-    CommitKey h _ ->    receive >>= liftIO . run . vcStore st (CommitKey h)
-    BranchesKey pub _ -> receive >>= liftIO . run . vcStore st (BranchesKey pub)
-    OtherKey () -> return ()
+    LibraryKey lid _        -> receive >>= liftIO . run . vcStore st (LibraryKey lid)
+    AdditionalKey lid nm _  -> receive >>= liftIO . run . vcStore st (AdditionalKey lid nm)
+    CommitKey h _           -> receive >>= liftIO . run . vcStore st (CommitKey h)
+    BranchesKey pub _       -> receive >>= liftIO . run . vcStore st (BranchesKey pub)
+    OtherKey ()             -> return ()
     else case k of
-    LibraryKey lid t -> sending (maybeP t) =<< liftIO (run $ vcLoad st (LibraryKey lid))
-    AdditionalKey lid nm t -> sending (maybeP t) =<< liftIO (run $ vcLoad st (AdditionalKey lid nm))
-    CommitKey h t -> sending (maybeP t) =<< liftIO (run $ vcLoad st (CommitKey h))
-    BranchesKey pub t -> sending (maybeP t) =<< liftIO (run $ vcLoad st (BranchesKey pub))
-    OtherKey () -> return ()
+    LibraryKey lid t        -> sending (maybeP t) =<< liftIO (run $ vcLoad st (LibraryKey lid))
+    AdditionalKey lid nm t  -> sending (maybeP t) =<< liftIO (run $ vcLoad st (AdditionalKey lid nm))
+    CommitKey h t           -> sending (maybeP t) =<< liftIO (run $ vcLoad st (CommitKey h))
+    BranchesKey pub t       -> sending (maybeP t) =<< liftIO (run $ vcLoad st (BranchesKey pub))
+    OtherKey ()             -> return ()
 
 vcbStore :: (Serializable a,MonadIO m) => VCSBackend -> (WithResponse a -> VCKey ()) -> a -> m ()
 vcbStore (VCSB_Native _ st run) k a = liftIO (run (vcStore st k a))
@@ -163,7 +168,8 @@ dummyBackend = VCSB_Native "dummy" () (\(Dummy_VC io) -> io)
 nativeBackend :: MonadIO m => String -> PortNumber -> m VCSBackend
 nativeBackend h p = do
   conn <- liftIO (connectTo h p)
-  return (VCSB_Native ("curly-vc://"+h+":"+show p) conn (\(Client_VC io) -> io))
+  lock <- liftIO (newMVar ())
+  return (VCSB_Native ("curly-vc://"+h+":"+show p) (Client_Handle lock conn) (\(Client_VC io) -> io))
 fileBackend p = VCSB_Native ("file://"+p) p (\(File_VC io) -> io)
 protoBackend pr p = VCSB_Native (pr+"://"+p) (pr,p) (\(Proto_VC io) -> io)
 instance Show VCSBackend where

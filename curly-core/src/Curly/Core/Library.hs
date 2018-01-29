@@ -12,7 +12,7 @@ module Curly.Core.Library(
   LibraryID(..),isLibData,
   Metadata(..),Library,metadata,imports,exports,symbols,implicits,
   addImport,addExport,setExports,defSymbol,libSymbol,
-  exprIn,optExprIn,builtinsLib,
+  exprIn,optExprIn,builtinLibs,
   -- ** Documentation
   LeafExpr,DocNode(..),Documentation,docNodeAttrs,docNodeSubs,descSymbol,docAtom,docLine,mkDoc,
   -- * Files
@@ -42,7 +42,7 @@ import GHC.Conc (par)
 import Control.DeepSeq
 
 curlyLibVersion :: Int
-curlyLibVersion = 9
+curlyLibVersion = 10
 
 newtype Compressed a = Compressed { unCompressed :: a }
                      deriving (Show,Eq,Ord)
@@ -188,9 +188,11 @@ instance Identifier GlobalID where
 type Context = Module (GlobalID,LeafExpr GlobalID)
 newtype Metadata = Metadata (Forest (Map String) String)
                  deriving (Semigroup,Monoid,Serializable)
+i'Metadata :: Iso' (Forest (Map String) String) Metadata
+i'Metadata = iso Metadata (\(Metadata m) -> m)
 instance Format Metadata where datum = coerceDatum Metadata
 instance DataMap Metadata String (Free (Map String) String) where 
-  at i = iso (\(Metadata m) -> m) Metadata .at i
+  at i = from i'Metadata.at i
 instance Show Metadata where
   show (Metadata m) = showM m
     where showM m = format "{%s}" (intercalate " " [format "%s:%s" (show a) (showV v)
@@ -419,145 +421,148 @@ libSymbol :: Library -> GlobalID -> Maybe (LeafExpr GlobalID)
 libSymbol l (GlobalID i Nothing) = l^.symbols.at i
 libSymbol _ (GlobalID _ (Just (i,l))) = findLib l >>= \l -> l^.flLibrary.symbols.at i
 
-builtinsLib :: FileLibrary
-builtinsLib = let blib = zero
-                         & set symbols (fromAList [(foldl' (flip const) ph pt,v) | (ph:pt,(_,v)) <- allBuiltins])
-                         . set exports builtinsMod
-                         . set metadata (Metadata meta)
-              in rawLibrary False blib (serialize blib) Nothing
-  where Join meta = fromAList [(["synopsis"],Pure "The Curly Builtin Library")
-                              ,(["author","name"],Pure "Marc Coiffier")
-                              ,(["author","email"],Pure "marc@coiffier.net")
-                              ,(["version"],Pure "0.5.1")]
-        safeLast x [] = x
-        safeLast _ (h:t) = safeLast h t
-        builtinsMod = fromPList (map2 Pure allBuiltins) 
-        allBuiltins = [
-          (["undefined"],(pureIdent "undefined",undefLeaf "The 'undefined' builtin")),
-          (["seq"],mkBLeaf "seq" B_Seq seqDoc),
-          (["unit"],mkBLeaf "unit" B_Unit unitDoc),
-          (["file","open"],mkBLeaf "open" B_Open openDoc),
-          (["file","read"],mkBLeaf "read" B_Read readDoc),
-          (["file","write"],mkBLeaf "write" B_Write writeDoc),
-          (["file","close"],mkBLeaf "close" B_Close closeDoc),
-          (["file","stdin"],mkBLeaf "stdin" (B_FileDesc 0) stdinDoc),
-          (["file","stdout"],mkBLeaf "stdout" (B_FileDesc 1) stdoutDoc),
-          (["arithmetic","addInt"],mkBLeaf "addInt" B_AddInt addIntDoc),
-          (["arithmetic","subInt"],mkBLeaf "subInt" B_SubInt subIntDoc),
-          (["arithmetic","mulInt"],mkBLeaf "mulInt" B_MulInt mulIntDoc),
-          (["arithmetic","divInt"],mkBLeaf "divInt" B_DivInt divIntDoc),
-          (["arithmetic","cmpInt_lt"],mkBLeaf "cmpInt_lt" B_CmpInt_LT cmpInt_ltDoc),
-          (["arithmetic","cmpInt_eq"],mkBLeaf "cmpInt_eq" B_CmpInt_EQ cmpInt_eqDoc),
-          (["string","addString"],mkBLeaf "addString" B_AddString addStringDoc),
-          (["string","stringLength"],mkBLeaf "stringLength" B_StringLength stringLengthDoc),
-          (["string","showInt"],mkBLeaf "showInt" B_ShowInt showIntDoc),
-          (["array","mkArray"],mkBLeaf "mkArray" B_MkArray mkArrayDoc),
-          (["array","arrayLength"],mkBLeaf "arrayLength" B_ArrayLength arrayLengthDoc),
-          (["array","arrayAt"],mkBLeaf "arrayAt" B_ArrayAt arrayAtDoc),
-          (["array","arraySet"],mkBLeaf "arraySet" B_ArraySet arraySetDoc),
-          (["syntax","mkSyntaxNode"],mkBLeaf "mkSyntaxNode" B_SyntaxNode mkSyntaxNodeDoc),
-          (["syntax","mkSyntaxSym"],mkBLeaf "mkSyntaxSym" B_SyntaxSym mkSyntaxSymDoc),
-          (["syntax","mkSyntaxExpr"],mkBLeaf "mkSyntaxExpr" B_SyntaxExpr mkSyntaxExprDoc),
-          (["syntax","syntaxInd"],mkBLeaf "syntaxInd" B_SyntaxInd syntaxIndDoc),
-          (["syntax","mkExprLambda"],mkBLeaf "mkExprLambda" B_ExprLambda mkExprLambdaDoc),
-          (["syntax","mkExprApply"],mkBLeaf "mkExprApply" B_ExprApply mkExprApplyDoc),
-          (["syntax","mkExprSym"],mkBLeaf "mkExprSym" B_ExprSym mkExprSymDoc),
-          (["syntax","exprInd"],mkBLeaf "exprInd" B_ExprInd exprIndDoc)
-          ]
-            where mkBLeaf n b d = (pureIdent n,undefLeaf "" & leafVal %- mkSymbol (pureIdent n,Pure (Builtin (builtinType b) b)) & leafDoc %- mkDoc "leafDoc" d)
-                  seqDoc = unlines [
-                    "{section {title Sequence Expressions}",
-                    "  {p {em Usage:} seq x y}",
-                    "  {p Evaluates its two arguments in order.}}"
-                    ]
-                  unitDoc = unlines [
-                    "{section {title The Unit value}",
-                    "  {p Useful as a placeholder where values are irrelevant}}"
-                    ]
-                  openDoc = unlines [
-                    "{section {title Open File}",
-                    "{p {em Usage:} open name \\{file: ...\\}}",
-                    "{p Opens a file and passes the file descriptor to the continuation in the second argument}}"
-                    ]
-                  readDoc = unlines [
-                    "{section {title Read From File}",
-                    "{p {em Usage:} read file n \\{str: ...\\}}",
-                    "{p Reads a number of bytes from the given file and passes the resulting string to the continuation.}}"
-                    ]
-                  writeDoc = unlines [
-                    "{section {title Write To File}",
-                    "{p {em Usage:} write file str}",
-                    "{p Writes the given bytes to the given file.}}"
-                    ]
-                  closeDoc = unlines [
-                    "{section {title Close File}",
-                    "{p {em Usage:} close file}",
-                    "{p Closes a file.}}"
-                    ]
-                  stdoutDoc = unlines [
-                    "{section {title The Standard Output Descriptor}",
-                    "  {p You can pass this to the 'write' function to",
-                    "  print a message to the screen}}"
-                    ]
-                  stdinDoc = unlines [
-                    "{section {title The Standard Input Descriptor}",
-                    "  {p You can pass this to the 'read' function to",
-                    "  retrieve user-written text.}}"
-                    ]
-                  addIntDoc = unlines [
-                    "{section {title Add Integers}",
-                    "{p {em Usage:} addInt a b}",
-                    "{p Adds two integers.}}"
-                    ]
-                  subIntDoc = unlines [
-                    "{section {title Subtract Integers}",
-                    "{p {em Usage:} subInt a b}",
-                    "{p Subtracts two integers.}}"
-                    ]
-                  mulIntDoc = unlines [
-                    "{section {title Multiply Integers}",
-                    "{p {em Usage:} mulInt a b}",
-                    "{p Multiplies two integers.}}"
-                    ]
-                  divIntDoc = unlines [
-                    "{section {title Divide Integers}",
-                    "{p {em Usage:} divInt a b}",
-                    "{p Divides two integers.}}"
-                    ]
-                  cmpInt_ltDoc = unlines [
-                    "{section {title Compare Integers (lower than)}",
-                    "{p {em Usage:} cmpInt n m x y}",
-                    "{p Returns x when n<m, and y otherwise.}}"
-                    ]
-                  cmpInt_eqDoc = unlines [
-                    "{section {title Compare Integers (equality)}",
-                    "{p {em Usage:} cmpInt n m x y}",
-                    "{p Returns x when n=m, and y otherwise.}}"
-                    ]
-                  addStringDoc = unlines [
-                    "{section {title Add Strings}",
-                    "{p {em Usage:} addString a b}",
-                    "{p Adds two strings.}}"
-                    ]
-                  stringLengthDoc = unlines [
-                    "{section {title String Length}",
-                    "{p {em Usage:} stringLength s}",
-                    "{p Gets the length of a string.}}"
-                    ]
-                  showIntDoc = "{section {title Show Number} Produces a string representation of its argument}"
-                  mkArrayDoc = "{section {title Make Array} {p Usage: mkArray n {i: ...}} {p Creates an array of size n, populated by calling the given function on every index from 0 to n-1}}"
-                  arrayLengthDoc = "{section {title Get Array Length} {p Gets the length of an array.}}"
-                  arrayAtDoc = "{section {title Get Array Element} {p Usage: arrayAt arr i} {p Gets the element at index i in the array arr}}"
-                  arraySetDoc = "{section {title Set Array Element} {p Usage: arraySet arr i x k} {p Sets the element at index i, then evaluate k}}"
-                  mkSyntaxNodeDoc = ""
-                  mkSyntaxSymDoc = ""
-                  mkSyntaxExprDoc = ""
-                  syntaxIndDoc = ""
-                  mkExprLambdaDoc = ""
-                  mkExprApplyDoc = ""
-                  mkExprSymDoc = ""
-                  exprIndDoc = ""
-
+builtinLibs :: [FileLibrary]
+builtinLibs = map (\l -> rawLibrary False l (serialize l) Nothing)
+              [blib_1,blib_0]
+  where blib_1 = blib_0 & setMeta ["version"] "0.5.2"
+        setMeta (h:t) v = metadata.from i'Metadata.at h.l'Just zero.at t %- Just (Pure v)
+        blib_0 = zero
+                 & set symbols (fromAList [(foldl' (flip const) ph pt,v) | (ph:pt,(_,v)) <- allBuiltins])
+                 . set exports builtinsMod
+                 . set metadata (Metadata meta)
+          where Join meta = fromAList [(["synopsis"],Pure "The Curly Builtin Library")
+                                      ,(["author","name"],Pure "Marc Coiffier")
+                                      ,(["author","email"],Pure "marc@coiffier.net")
+                                      ,(["version"],Pure "0.5.1")]
+                safeLast x [] = x
+                safeLast _ (h:t) = safeLast h t
+                builtinsMod = fromPList (map2 Pure allBuiltins) 
+                allBuiltins = [
+                  (["undefined"],(pureIdent "undefined",undefLeaf "The 'undefined' builtin")),
+                  (["seq"],mkBLeaf "seq" B_Seq seqDoc),
+                  (["unit"],mkBLeaf "unit" B_Unit unitDoc),
+                  (["file","open"],mkBLeaf "open" B_Open openDoc),
+                  (["file","read"],mkBLeaf "read" B_Read readDoc),
+                  (["file","write"],mkBLeaf "write" B_Write writeDoc),
+                  (["file","close"],mkBLeaf "close" B_Close closeDoc),
+                  (["file","stdin"],mkBLeaf "stdin" (B_FileDesc 0) stdinDoc),
+                  (["file","stdout"],mkBLeaf "stdout" (B_FileDesc 1) stdoutDoc),
+                  (["arithmetic","addInt"],mkBLeaf "addInt" B_AddInt addIntDoc),
+                  (["arithmetic","subInt"],mkBLeaf "subInt" B_SubInt subIntDoc),
+                  (["arithmetic","mulInt"],mkBLeaf "mulInt" B_MulInt mulIntDoc),
+                  (["arithmetic","divInt"],mkBLeaf "divInt" B_DivInt divIntDoc),
+                  (["arithmetic","cmpInt_lt"],mkBLeaf "cmpInt_lt" B_CmpInt_LT cmpInt_ltDoc),
+                  (["arithmetic","cmpInt_eq"],mkBLeaf "cmpInt_eq" B_CmpInt_EQ cmpInt_eqDoc),
+                  (["string","addString"],mkBLeaf "addString" B_AddString addStringDoc),
+                  (["string","stringLength"],mkBLeaf "stringLength" B_StringLength stringLengthDoc),
+                  (["string","showInt"],mkBLeaf "showInt" B_ShowInt showIntDoc),
+                  (["array","mkArray"],mkBLeaf "mkArray" B_MkArray mkArrayDoc),
+                  (["array","arrayLength"],mkBLeaf "arrayLength" B_ArrayLength arrayLengthDoc),
+                  (["array","arrayAt"],mkBLeaf "arrayAt" B_ArrayAt arrayAtDoc),
+                  (["array","arraySet"],mkBLeaf "arraySet" B_ArraySet arraySetDoc),
+                  (["syntax","mkSyntaxNode"],mkBLeaf "mkSyntaxNode" B_SyntaxNode mkSyntaxNodeDoc),
+                  (["syntax","mkSyntaxSym"],mkBLeaf "mkSyntaxSym" B_SyntaxSym mkSyntaxSymDoc),
+                  (["syntax","mkSyntaxExpr"],mkBLeaf "mkSyntaxExpr" B_SyntaxExpr mkSyntaxExprDoc),
+                  (["syntax","syntaxInd"],mkBLeaf "syntaxInd" B_SyntaxInd syntaxIndDoc),
+                  (["syntax","mkExprLambda"],mkBLeaf "mkExprLambda" B_ExprLambda mkExprLambdaDoc),
+                  (["syntax","mkExprApply"],mkBLeaf "mkExprApply" B_ExprApply mkExprApplyDoc),
+                  (["syntax","mkExprSym"],mkBLeaf "mkExprSym" B_ExprSym mkExprSymDoc),
+                  (["syntax","exprInd"],mkBLeaf "exprInd" B_ExprInd exprIndDoc)
+                  ]
+                    where mkBLeaf n b d = (pureIdent n,undefLeaf "" & leafVal %- mkSymbol (pureIdent n,Pure (Builtin (builtinType b) b)) & leafDoc %- mkDoc "leafDoc" d)
+                          seqDoc = unlines [
+                            "{section {title Sequence Expressions}",
+                            "  {p {em Usage:} seq x y}",
+                            "  {p Evaluates its two arguments in order.}}"
+                            ]
+                          unitDoc = unlines [
+                            "{section {title The Unit value}",
+                            "  {p Useful as a placeholder where values are irrelevant}}"
+                            ]
+                          openDoc = unlines [
+                            "{section {title Open File}",
+                            "{p {em Usage:} open name \\{file: ...\\}}",
+                            "{p Opens a file and passes the file descriptor to the continuation in the second argument}}"
+                            ]
+                          readDoc = unlines [
+                            "{section {title Read From File}",
+                            "{p {em Usage:} read file n \\{str: ...\\}}",
+                            "{p Reads a number of bytes from the given file and passes the resulting string to the continuation.}}"
+                            ]
+                          writeDoc = unlines [
+                            "{section {title Write To File}",
+                            "{p {em Usage:} write file str}",
+                            "{p Writes the given bytes to the given file.}}"
+                            ]
+                          closeDoc = unlines [
+                            "{section {title Close File}",
+                            "{p {em Usage:} close file}",
+                            "{p Closes a file.}}"
+                            ]
+                          stdoutDoc = unlines [
+                            "{section {title The Standard Output Descriptor}",
+                            "  {p You can pass this to the 'write' function to",
+                            "  print a message to the screen}}"
+                            ]
+                          stdinDoc = unlines [
+                            "{section {title The Standard Input Descriptor}",
+                            "  {p You can pass this to the 'read' function to",
+                            "  retrieve user-written text.}}"
+                            ]
+                          addIntDoc = unlines [
+                            "{section {title Add Integers}",
+                            "{p {em Usage:} addInt a b}",
+                            "{p Adds two integers.}}"
+                            ]
+                          subIntDoc = unlines [
+                            "{section {title Subtract Integers}",
+                            "{p {em Usage:} subInt a b}",
+                            "{p Subtracts two integers.}}"
+                            ]
+                          mulIntDoc = unlines [
+                            "{section {title Multiply Integers}",
+                            "{p {em Usage:} mulInt a b}",
+                            "{p Multiplies two integers.}}"
+                            ]
+                          divIntDoc = unlines [
+                            "{section {title Divide Integers}",
+                            "{p {em Usage:} divInt a b}",
+                            "{p Divides two integers.}}"
+                            ]
+                          cmpInt_ltDoc = unlines [
+                            "{section {title Compare Integers (lower than)}",
+                            "{p {em Usage:} cmpInt n m x y}",
+                            "{p Returns x when n<m, and y otherwise.}}"
+                            ]
+                          cmpInt_eqDoc = unlines [
+                            "{section {title Compare Integers (equality)}",
+                            "{p {em Usage:} cmpInt n m x y}",
+                            "{p Returns x when n=m, and y otherwise.}}"
+                            ]
+                          addStringDoc = unlines [
+                            "{section {title Add Strings}",
+                            "{p {em Usage:} addString a b}",
+                            "{p Adds two strings.}}"
+                            ]
+                          stringLengthDoc = unlines [
+                            "{section {title String Length}",
+                            "{p {em Usage:} stringLength s}",
+                            "{p Gets the length of a string.}}"
+                            ]
+                          showIntDoc = "{section {title Show Number} Produces a string representation of its argument}"
+                          mkArrayDoc = "{section {title Make Array} {p Usage: mkArray n {i: ...}} {p Creates an array of size n, populated by calling the given function on every index from 0 to n-1}}"
+                          arrayLengthDoc = "{section {title Get Array Length} {p Gets the length of an array.}}"
+                          arrayAtDoc = "{section {title Get Array Element} {p Usage: arrayAt arr i} {p Gets the element at index i in the array arr}}"
+                          arraySetDoc = "{section {title Set Array Element} {p Usage: arraySet arr i x k} {p Sets the element at index i, then evaluate k}}"
+                          mkSyntaxNodeDoc = ""
+                          mkSyntaxSymDoc = ""
+                          mkSyntaxExprDoc = ""
+                          syntaxIndDoc = ""
+                          mkExprLambdaDoc = ""
+                          mkExprApplyDoc = ""
+                          mkExprSymDoc = ""
+                          exprIndDoc = ""
+        
 data RepoConfig = RepoConfig { repoProtoRoots :: [String] }
 data Repository = CustomRepo String (RepoConfig -> IO (Expires [(LibraryID,Metadata)])) (RepoConfig -> LibraryID -> IO Bytes)
                 | CurlyRepo String PortNumber
@@ -687,7 +692,7 @@ readCachedLibrary l = do
     return (registerLib $ FileLibrary f b l False Nothing)
 
 registerBuiltinsLib :: ()
-registerBuiltinsLib = by thunk $ void (yb thunk builtinsLib)
+registerBuiltinsLib = by thunk $ void (yb thunk (head builtinLibs))
 findLibrary :: Set Repository -> LibraryID -> IO (Maybe FileLibrary)
 findLibrary rs l = l`seq`registerBuiltinsLib`seq`fix $ \it -> do
   c <- readIORef libraryCache
@@ -702,7 +707,8 @@ findLibrary rs l = l`seq`registerBuiltinsLib`seq`fix $ \it -> do
           let rs' = rs - keysSet ls
           logLine Verbose $ format "Missing repositories when searching for library %s: [%s] (cached [%s])"
             (show l) (intercalate "," (map show rs')) (intercalate "," (map show (keysSet ls)))
-          if empty rs' then return Nothing
+          if empty rs'
+            then return (find (\fl -> l==fl^.flID) builtinLibs)
             else do
             for_ rs' (void . listRepository)
             it

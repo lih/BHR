@@ -266,7 +266,18 @@ runTarget (Translate f sys path) = ioTgt $ do
             modifyPermissions f (_sysProgPerms sys)
           _ -> putStrLn $ "Error: the path "+show path+" doesn't seem to point to a function in the default context"
   
-runTarget (DumpDataFile "builtins.cyl") = ioTgt $ writeHBytes stdout (builtinsLib^.flBytes)
+runTarget (DumpDataFile "builtins/ids") = ioTgt $ for_ (reverse builtinLibs) $ \l -> putStrLn (show (l^.flID))
+runTarget (DumpDataFile ('b':'u':'i':'l':'t':'i':'n':'s':'/':'v':x)) = ioTgt $ do
+  let (h,ext) = splitAt (length x-4) x
+  case ext of
+    ".cyl" -> writeHBytes stdout ((reverse builtinLibs!!(read h-1))^.flBytes)
+    _ -> error $ "No such builtin library: "+x
+runTarget (DumpDataFile "list") = ioTgt $ do
+  fn <- getDataFileName "list"
+  readBytes fn >>= writeHBytes stdout
+  putStrLn "builtins/ids"
+  for_ (zip [1..] builtinLibs) $ \(i,l) -> do
+    putStrLn $ "builtins/v"+show i
 runTarget (DumpDataFile f) = ioTgt $ do
   fn <- getDataFileName f
   readBytes fn >>= writeHBytes stdout
