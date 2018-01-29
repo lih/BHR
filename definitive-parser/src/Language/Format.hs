@@ -126,7 +126,7 @@ writeSerial :: Serializable a => String -> a -> IO ()
 writeSerial h a = ser`DeepSeq.deepseq`writeBytes h ser
   where ser = serialize a
 readHFormat :: Format a => Handle -> IO a
-readHFormat h = maybe (error "Coudn't parse format") return . matches Just datum =<< readHBytes h
+readHFormat h = maybe (error "Coudn't parse format") return . matches Just datum . DeepSeq.force =<< readHBytes h
 readFormat :: Format a => String -> IO a
 readFormat f = withFile f ReadMode $ readHFormat
 

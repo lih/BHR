@@ -423,8 +423,9 @@ libSymbol _ (GlobalID _ (Just (i,l))) = findLib l >>= \l -> l^.flLibrary.symbols
 
 builtinLibs :: [FileLibrary]
 builtinLibs = map (\l -> rawLibrary False l (serialize l) Nothing)
-              [blib_1,blib_0]
-  where blib_1 = blib_0 & setMeta ["version"] "0.5.2"
+              [blib_2,blib_1,blib_0]
+  where blib_2 = blib_1 & setMeta ["author","email"] "marc.coiffier@curly-lang.net"
+        blib_1 = blib_0 & setMeta ["version"] "0.5.2"
         setMeta (h:t) v = metadata.from i'Metadata.at h.l'Just zero.at t %- Just (Pure v)
         blib_0 = zero
                  & set symbols (fromAList [(foldl' (flip const) ph pt,v) | (ph:pt,(_,v)) <- allBuiltins])
