@@ -1,4 +1,4 @@
-# Revision history for curly-dht
+# Revision history for curly-gateway
 
 ## 0.1.0.0  -- YYYY-mm-dd
 

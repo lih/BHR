@@ -12,6 +12,7 @@ import System.Process (readProcess, withCreateProcess)
 import qualified System.Process as Sys
 import Data.IORef
 import Control.Concurrent.MVar
+import GHC.IO.Handle (hClose)
 
 newtype Hash = Hash Chunk
              deriving (Eq,Ord)
@@ -86,14 +87,14 @@ instance MonadIO Proto_VC where liftIO = Proto_VC
 instance MonadVC Proto_VC (String,String) where
   vcStore (proto,path) k v = liftIO $ do
     foldr (\dir tryNext ->
-            try tryNext
+            trylog tryNext
             $ withCreateProcess (Sys.proc "sh" [dir+"/"+proto,"put",path,keyName k]) { Sys.std_in = Sys.CreatePipe }
-            $ \(Just i) _ _ _ -> writeHSerial i v)
+            $ \(Just i) _ _ ph -> writeHSerial i v >> hClose i >> void (Sys.waitForProcess ph))
       unit =<< readIORef vcsProtoRoots
     
   vcLoad (proto,path) k = liftIO $ do
     foldr (\dir tryNext ->
-            try tryNext
+            trylog tryNext
             $ withCreateProcess (Sys.proc "sh" [dir+"/"+proto,"get",path,keyName k]) { Sys.std_out = Sys.CreatePipe }
             $ \_ (Just o) _ _ -> try (return Nothing) (Just <$> readHFormat o))
       (return Nothing) =<< readIORef vcsProtoRoots

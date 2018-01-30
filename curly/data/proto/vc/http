@@ -1,4 +1,5 @@
 #!/bin/sh
 case "$1" in
-    get) suf="${3#??}"; curl -s "http://$2/${3%$suf}/$suf.blob";;
+    get) suf="${3#??}"; curl -s "http://$2/${3%$suf}/$suf.blob" -H "Connection: close";;
+    put) suf="${3#??}"; curl -s -X PUT -H "Content-Type: application/octet-stream" --data-binary @- "http://$2/${3%$suf}/$suf.blob";;
 esac

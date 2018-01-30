@@ -37,6 +37,8 @@ import Foreign.Storable (peek,poke)
 import Foreign.Marshal.Alloc (alloca)
 import qualified GHC.Generics as Gen
 
+instance ParseToken Word8 where tokenPayload c = c
+
 class Serializable t where
   encode :: t -> Builder
   default encode :: (Gen.Generic t, GenSerializable (Gen.Rep t)) => t -> Builder
