@@ -193,17 +193,7 @@ instance Read VCSBackend where
             proto <- many1' (satisfy (/=':'))
             several "://"
             protoBackend proto <$> many1' (noneOf " \t\n")
-              
-curlyVCSBackend :: VCSBackend
-curlyVCSBackend = fromMaybe dummyBackend (matches Just readable (envVar "" "CURLY_VCS"))
 
 curlyPublisher :: String
 curlyPublisher = envVar "" "CURLY_PUBLISHER"
 
-getVCSBranches :: MonadIO m => String -> m Branches
-getVCSBranches name = do
-  u <- lookup name <$> getKeyStore
-  case (curlyVCSBackend,u) of
-    (VCSB_Native _ st run,Just (_,pub,_,_,_)) -> liftIO $ do
-      map (maybe zero unsafeExtractSigned) $ run $ vcLoad st (BranchesKey pub)
-    _ -> return zero

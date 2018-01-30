@@ -1,7 +1,7 @@
 {-# LANGUAGE ViewPatterns,TypeFamilies #-}
 module Curly.UI(
   -- * Variables
-  curlyPort,curlyUserDir,curlyHistoryFile,
+  curlyPort,curlyUserDir,curlyHistoryFile,curlyVCSBackend,
 
   -- * Arguments
   CurlyConfig,
@@ -12,7 +12,7 @@ module Curly.UI(
   withMountain,reloadMountain,sourceFile,
 
   -- * Misc
-  watchSources,sourceLibs,builtinLibs
+  watchSources,sourceLibs,builtinLibs,getVCSBranches
   ) where
 
 import Control.DeepSeq (deepseq)
@@ -34,6 +34,7 @@ import System.IO (IOMode(..),withFile)
 import System.Posix.Files (createSymbolicLink,removeLink)
 import IO.Time
 import Control.DeepSeq (force)
+import Curly.Core.VCS
 
 withMountain :: (?curlyPlex :: CurlyPlex,MonadIO m) => ((?mountain :: Mountain) => m a) -> m a
 withMountain m = liftIO (trylogLevel Quiet (return undefined) $ readIORef (?curlyPlex^.mountainCache)) >>= \(c,_) -> let ?mountain = c in m
@@ -325,3 +326,13 @@ sourceLibs = symList $ fromPList [(p,sourceFile b (f,c) (getFile f^.thunk)) | (p
 curlyHistoryFile :: String
 curlyHistoryFile = curlyUserDir </> "history"
 
+curlyVCSBackend :: VCSBackend
+curlyVCSBackend = fromMaybe (protoBackend "http" "curly-vc.coiffier.net/vcs") (matches Just readable (envVar "" "CURLY_VCS"))
+
+getVCSBranches :: MonadIO m => String -> m Branches
+getVCSBranches name = do
+  u <- lookup name <$> getKeyStore
+  case (curlyVCSBackend,u) of
+    (VCSB_Native _ st run,Just (_,pub,_,_,_)) -> liftIO $ do
+      map (maybe zero unsafeExtractSigned) $ run $ vcLoad st (BranchesKey pub)
+    _ -> return zero

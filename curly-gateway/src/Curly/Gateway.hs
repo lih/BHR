@@ -187,7 +187,6 @@ main = do
         (h,_) <- accept sock
         void $ forkIO $ runConnection_ True h $ do
           receive >>= \msg -> do
-            liftIO (print msg)
             (msgMethod,msgURI) <- case messageType msg of
               GET uri -> return ("GET",uri)
               PUT uri -> return ("PUT",uri)
