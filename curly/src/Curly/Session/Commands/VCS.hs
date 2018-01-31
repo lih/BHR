@@ -189,7 +189,7 @@ vcsCmd = withDoc vcsDoc $ False <$ do
             Just s -> liftIO $ do
               createFileDir file
               writeBytes file (snd (unsafeExtractSigned s))
-            Nothing -> serveStrLn $ format "Error: the source for library %s doesn't seem to exist" (show lid)
+            Nothing -> serveStrLn $ format "Warning: cannot find source for the library %s" (show lid)
         getLibrary file lid = do
           x <- vcbLoad conn (LibraryKey lid)
           case x of
@@ -197,7 +197,7 @@ vcsCmd = withDoc vcsDoc $ False <$ do
               createFileDir file
               writeBytes file s
               modifyPermissions file (set (each.executePerm) True)
-            Nothing -> serveStrLn $ format "Error: the library %s doesn't seem to exist" (show lid)
+            Nothing -> serveStrLn $ format "Warning: the library %s doesn't seem to exist" (show lid)
         checkout pref lid = do
           serveStrLn $ format "Checking out %s.cy from library %s" pref (show lid)
           getSource (pref+".cy") lid
@@ -205,8 +205,8 @@ vcsCmd = withDoc vcsDoc $ False <$ do
           ctx <- liftIO $ fromMaybe zero . by (metadata.at "context") <$> readFormat (pref+".cyl")
           let checkoutMod suf (Pure l) = let l' = read l in
                 if l' `elem` map (by flID) builtinLibs
-                then ((lid,suf,l',Just pref):) <$> checkout (pref+foldMap ("/"+) suf) l'
-                else pure [(lid,suf,l',Nothing)]
+                then pure [(lid,suf,l',Nothing)]
+                else ((lid,suf,l',Just pref):) <$> checkout (pref+foldMap ("/"+) suf) l'
               checkoutMod suf (Join m) = do
                 map fold $ for (m^.ascList) $ \(d,m') -> do
                   checkoutMod (suf+[d]) m'
