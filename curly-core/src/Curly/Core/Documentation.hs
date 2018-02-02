@@ -11,7 +11,11 @@ module Curly.Core.Documentation(
   TagStyle(..),TermColor(..),TagDisplay(..),Style,defaultStyle,
   tagColor,tagDisplay,tagIsBold,tagIsUnderlined,tagIndent,tagPrefix,tagIsItalic,
   -- ** Rendering
-  Terminal(..),DummyTerminal(..),docString,pretty
+  Terminal(..),DummyTerminal(..),docString,pretty,
+  -- * Metadata
+  Metadata(..),i'Metadata,
+  -- * Formatted Strings
+  FormatArg(..),FormatType(..),format,
   ) where
 
 import Definitive
@@ -44,6 +48,27 @@ instance Documented String where
 instance Documented Int where
   document n = docTag' "int" [Pure (show n)]
 
+newtype Metadata = Metadata (Forest (Map String) String)
+                 deriving (Semigroup,Monoid,Serializable)
+i'Metadata :: Iso' (Forest (Map String) String) Metadata
+i'Metadata = iso Metadata (\(Metadata m) -> m)
+instance Format Metadata where datum = coerceDatum Metadata
+instance DataMap Metadata String (Free (Map String) String) where 
+  at i = from i'Metadata.at i
+instance Show Metadata where
+  show (Metadata m) = showM m
+    where showM m = format "{%s}" (intercalate " " [format "%s:%s" (show a) (showV v)
+                                                   | (a,v) <- m^.ascList])
+          showV (Pure s) = show s
+          showV (Join m) = showM m
+instance Read Metadata where
+  readsPrec _ = readsParser (map Metadata brack)
+    where val = map Pure readable <+? map Join brack
+          brack = fromAList <$> between (single '{') (single '}') (sepBy' assoc (single ' '))
+            where assoc = liftA2 (,) readable (single ':' >> val)
+instance Documented Metadata where
+  document m = Pure (show m)
+
 type DocParams = Forest (Map String) Documentation
 type DocPatterns = Map String ([String],Documentation)
 evalDocWithPatterns :: DocPatterns -> DocParams -> Documentation -> Maybe Documentation
@@ -63,6 +88,10 @@ evalDocWithPatterns pats vars = eval vars
             eval' (Join (DocTag "or" [] xs)) = foldMap eval' xs
             eval' (Join (DocTag "when" [] [x,y])) = eval' x >> eval' y
             eval' (Join (DocTag "unless" [] [x,y])) = maybe (Just ()) (const Nothing) (eval' x) >> eval' y
+            eval' (Join (DocTag "splice" as xs)) = Join . DocTag "splice" as . foldr merge [] <$> traverse eval' xs
+              where merge x [] = [x]
+                    merge (Pure x) (Pure y:t) = Pure (x+y):t
+                    merge x t = x:t
             eval' (Join (DocTag op [] [ea,eb]))
               | op`elem`["<",">","<=",">="] = do
                 let valList = many' (map Left number <+? map Right (many1' (satisfy (not . inRange '0' '9'))))
@@ -327,3 +356,27 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),StyleState BeginP zero 0)) & 
 
 pretty :: Documented t => t -> String
 pretty t = docString DummyTerminal defaultStyle (document t)
+
+-- | A class for all types that can be formatted to a string
+class Show a => FormatArg a where
+  argClass :: a -> Char
+  showFormat :: a -> String
+  showFormat = show
+-- | A base class for the 'format' function
+class FormatType a where
+  format' :: String -> String -> a
+instance (FormatArg a,FormatType r) => FormatType (a -> r) where
+  format' x ('%':c:t) a | c == argClass a = format' (reverse (showFormat a)+x) t
+                        | otherwise = error "Invalid format argument type"
+  format' x (c:t) a = format' (c:x) t a
+  format' _ [] _ = error "Unused argument in format"
+instance FormatType String where
+  format' x t = reverse x+t
+instance FormatArg Int where argClass _ = 'd'
+instance FormatArg Float where argClass _ = 'f'
+instance FormatArg Double where argClass _ = 'f'
+instance FormatArg String where argClass _ = 's'; showFormat = id
+
+-- | A function that mimics sprintf-style formatting for Haskell
+format :: FormatType r => String -> r
+format = format' ""

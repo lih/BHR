@@ -103,13 +103,13 @@ extendedBackend = map (foldr1 (+)) . sequence <$> sepBy1' (dhtBackend <+? map re
           return $ do
             dht <- dhtInstance myPort
             case server of
-              Nothing -> return (VCSB_Native ("dht:"+show myPort) dht (\(DHT_VC m) -> m))
+              Nothing -> return (VCSB_Native ["dht:"+show myPort] dht (\(DHT_VC m) -> m))
               Just (srv,port) -> do
                 res <- joinDHT dht (DHTNode srv port (OtherKey (NodeKey ("curly-vc "+show port))))
                 case res of
                   JoinSucces -> putStrLn $ "Successfully joined network node "+srv+":"+show port
                   _ -> error "Couldnt't reach root node"
-                return (VCSB_Native ("dht://"+srv+":"+show port+"/") dht (\(DHT_VC m) -> m))
+                return (VCSB_Native ["dht://"+srv+":"+show port+"/"] dht (\(DHT_VC m) -> m))
 
 dhtOpts = [
   Option "h" ["help"] (NoArg (\x -> x { dhtAction = Help })) "Shows the help menu",

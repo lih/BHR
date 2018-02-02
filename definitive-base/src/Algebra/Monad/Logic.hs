@@ -2,6 +2,7 @@
 module Algebra.Monad.Logic where
 
 import Algebra.Monad.Base
+import Algebra.Monad.Writer
 
 newtype LogicT m a = LogicT { runLogicT :: forall r. (a -> m r -> m r) -> m r -> m r }
 
@@ -39,8 +40,10 @@ instance MonadReader r m => MonadReader r (LogicT m) where
   local f (LogicT l) = LogicT (\k mr -> local f (l k mr))
 instance MonadWriter w m => MonadWriter w (LogicT m) where
   tell = lift . tell
-  listen l = induce (listen (deduce l) <&> \(w,mal) -> map ((w,) <#> listen) mal)
-  censor (LogicT l) = LogicT (\k -> l (\(a,f) mr -> k a (censor (map (,f) mr))))
+  listen l = induce (listen (deduce l) <&> \(w,ml) -> map ((w,) <#> listen) ml)
+  censor l = induce (censor (deduce l <&> \ml -> case ml of
+                                Just ((a,f),l') -> (Just (a,censor l'),f)
+                                Nothing -> (Nothing,id)))
 instance Monad m => MonadError Void (LogicT m) where
   throw _ = zero
   catch z (LogicT l) = LogicT l'

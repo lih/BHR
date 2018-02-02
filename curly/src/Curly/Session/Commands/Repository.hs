@@ -5,6 +5,7 @@ import Curly.Core
 import Curly.Core.Library
 import Curly.Core.Parser
 import Curly.Core.Security
+import Curly.Core.VCS
 import Curly.Session.Commands.Common
 import Curly.UI.Options (CurlyOpt(..),InputSource(..))
 import Data.IORef 
@@ -17,8 +18,8 @@ repoDoc = unlines ["{section {title Manage Repositories} "
                   ," {p Lists known repositories, the libraries therein or adds a new one.}}"]
 repoCmd = withDoc repoDoc $ False <$ (nbsp >>) (repoList <+? repoLibs <+? repoAdd <+? repoBrowse)
   where repoList = (opKeyword "list" >>) $ liftIOWarn $ do
-          repos <- readIORef repositories
-          for_ repos $ \r -> serveStrLn $ format "  * %s" (show r)
+          VCSB_Native repos _ _ <- readIORef libraryVCS
+          for_ repos $ \r -> serveStrLn $ format "  * %s" r
         repoLibs = (opKeyword "contents" >>) $ do
           t <- option' defaultTemplate (docLine "template" [])
           liftIOWarn $ withStyle $ withPatterns $ do
@@ -27,16 +28,18 @@ repoCmd = withDoc repoDoc $ False <$ (nbsp >>) (repoList <+? repoLibs <+? repoAd
               serveStrLn $ format "%s %s" (show l) d
         repoAdd = do
           opKeyword "add"
-          guardWarn "Error: you must have admin access to add repositories" (?access>=Admin)
+          guardWarn Sev_Error "you must have admin access to add repositories" (?access>=Admin)
           r <- nbsp >> many' (noneOf "\n") >*> readable
-          liftIOWarn $ modifyIORef repositories (touch r)
+          liftIOWarn $ modifyIORef libraryVCS (+ r)
         repoBrowse = do
           opKeyword "browse"
-          guardWarn "Error: you must have almighty acces to browse new libraries" (?access>=Almighty)
+          guardWarn Sev_Error "you must have almighty acces to browse new libraries" (?access>=Almighty)
           nbsp
-          sel <- (\d libs -> [x | x@(_,m) <- libs, nonempty (showDummyTemplate m d)]) <$> (docAtom <*= guard . has t'Join)
-                 <+? (\i -> select ((==i) . fst)) <$> (dirArg >*> readable)
-          ls <- liftIO (map sel availableLibs)
+          sel <- (\d -> do
+                     libs <- availableLibs
+                     return [x | (x,m) <- libs, nonempty (showDummyTemplate m d)]) <$> (docAtom <*= guard . has t'Join)
+                 <+? (\i -> return [i]) <$> (dirArg >*> readable)
+          ls <- liftIO sel
           case ls of
-            [(i,_)] -> ?subSession [(Nothing,Mount [] (Library i))]
-            _ -> guardWarn "Error: the pattern should select a single library to browse" False
+            [i] -> ?subSession [(Nothing,Mount [] (Library i))]
+            _ -> guardWarn Sev_Error "the pattern should select a single library to browse" False

@@ -4,17 +4,17 @@ module Curly.Core(
   ExprNode(..),Expression,
   Identifier(..),HasIdents(..),Builtin(..),
   SemanticT(..),Semantic(..),mkAbstract,mkSymbol,mkApply,sem,
+  LibraryID(..),
   pattern PatSymbol,pattern PatAbstract,pattern PatApply,pattern PatApply2,
   -- ** Utilities
   c'Expression,syntax,semantic,mapParams,
-  -- * Pretty-printing
-  indent,(</>),FormatArg(..),FormatType(..),format,
   -- * Environment
   envVar,curlyUserDir,curlyKeysFile,curlyCacheDir,curlyCommitDir,curlyPort,
   -- * Conditional output
   LogLevel(..),envLogLevel,logLine,trylogLevel,trylog,liftIOLog,cyDebug,
   -- * Misc
-  B64Chunk(..),PortNumber,watchFile,connectTo,(*+),cacheFileName,createFileDirectory
+  B64Chunk(..),PortNumber,watchFile,connectTo,(*+),cacheFileName,createFileDirectory,
+  Compressed(..),noCurlySuf,(</>),format
   ) where
 
 import Definitive
@@ -28,6 +28,7 @@ import System.Environment (lookupEnv)
 import System.INotify
 import System.IO (openFile,IOMode(AppendMode),hSetBuffering,BufferMode(LineBuffering))
 import qualified Data.ByteString.Base64 as Base64
+import Codec.Compression.Zlib (compress,decompress)
 
 {-| The type of an expression node
 
@@ -55,15 +56,6 @@ instance Traversable (ExprNode s) where
 instance (Serializable a,Serializable s) => Serializable (ExprNode s a)
 instance (Format a,Format s) => Format (ExprNode s a)
 
-instance (Serializable (f (Free f a)),Serializable a) => Serializable (Free f a) where
-  encode (Pure s) = encodeAlt 0 s
-  encode (Join f) = encodeAlt 1 f
-instance (Format (f (Free f a)),Format a) => Format (Free f a) where
-  datum = datumOf [FormatAlt Pure,FormatAlt Join]
-instance (Serializable (f (Cofree f a)),Serializable a) => Serializable (Cofree f a) where
-  encode (Step a fc) = encode (a,fc)
-instance (Format (f (Cofree f a)),Format a) => Format (Cofree f a) where
-  datum = uncurry Step<$>datum
 c'Expression :: Constraint (Expression a b)
 c'Expression = c'_
 
@@ -124,12 +116,7 @@ mapParams f = doMap
           SemAbstract s e -> mkAbstract (f s) (doMap e)
           SemApply a b -> mkApply (doMap a) (doMap b)
 
--- | Prepend the second to each line of the first.
-indent :: String -> String -> String
-indent p s = p+indent' s
-  where indent' ('\n':t) = '\n':(p+indent' t)
-        indent' [] = []
-        indent' (c:t) = c:indent' t
+instance FormatArg PortNumber where argClass _ = 'p'
 
 instance (Documented s,Documented a) => Documented (Expression s a) where
   document expr = docTag' "expr" [Pure $ show' "" expr]
@@ -209,26 +196,6 @@ logFile = case envVar "" "CURLY_LOGFILE" of
   "" -> stderr
   f -> (openFile f AppendMode <*= \h -> hSetBuffering h LineBuffering)^.thunk
 
--- | A class for all types that can be formatted to a string
-class Show a => FormatArg a where
-  argClass :: a -> Char
-  showFormat :: a -> String
-  showFormat = show
--- | A base class for the 'format' function
-class FormatType a where
-  format' :: String -> String -> a
-instance (FormatArg a,FormatType r) => FormatType (a -> r) where
-  format' x ('%':c:t) a | c == argClass a = format' (reverse (showFormat a)+x) t
-                        | otherwise = error "Invalid format argument type"
-  format' x (c:t) a = format' (c:x) t a
-  format' _ [] _ = error "Unused argument in format"
-instance FormatType String where
-  format' x t = reverse x+t
-instance FormatArg Int where argClass _ = 'd'
-instance FormatArg Float where argClass _ = 'f'
-instance FormatArg Double where argClass _ = 'f'
-instance FormatArg String where argClass _ = 's'; showFormat = id
-instance FormatArg PortNumber where argClass _ = 'p'
 
 -- | Runs an IO action, logging its errors if the given log level is lower than the environment
 trylogLevel :: LogLevel -> IO a -> IO a -> IO a
@@ -240,9 +207,6 @@ trylog = trylogLevel Debug
 liftIOLog :: MonadIO m => IO () -> m ()
 liftIOLog = liftIO . trylogLevel Quiet unit
 
--- | A function that mimics sprintf-style formatting for Haskell
-format :: FormatType r => String -> r
-format = format' ""
 
 -- | A global INotify instance
 inotify = initINotify^.thunk
@@ -334,3 +298,28 @@ instance Documented Builtin where
 instance Serializable Builtin where
 instance Format Builtin where
 instance NFData Builtin where rnf b = b`seq`()
+
+newtype Compressed a = Compressed { unCompressed :: a }
+                     deriving (Show,Eq,Ord)
+instance Serializable a => Serializable (Compressed a) where
+  encode (Compressed a) = encode (compress (serialize a))
+instance Format a => Format (Compressed a) where
+  datum = (datum <&> decompress) >*> (Compressed <$> datum)
+
+noCurlySuf f = nosuffix ".cy" f + nosuffix ".curly" f + nosuffix ".cyl" f
+  where nosuffix s s' = if t==s then Just h else Nothing
+          where (h,t) = splitAt (length s'-length s) s'
+
+newtype LibraryID = LibraryID Chunk
+                deriving (Eq,Ord,Generic)
+idSize = 32
+instance Serializable LibraryID where
+  encode (LibraryID x) = x^.chunkBuilder
+instance Format LibraryID where
+  datum = LibraryID<$>getChunk idSize
+instance NFData LibraryID
+instance Show LibraryID where
+  show (LibraryID l) = show (B64Chunk l)
+instance Read LibraryID where
+  readsPrec _ = readsParser (readable >>= \(B64Chunk c) -> LibraryID c <$ guard (chunkSize c==idSize))
+instance Documented LibraryID where document l = Pure (show l)

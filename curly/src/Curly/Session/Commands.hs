@@ -157,7 +157,7 @@ interactiveSession ack = while sessionLine
               liftIOLog ack
               return True
         line = withMountain $ do
-          (ws,ln) <- listen $ option' Nothing (Just <$> withSessionLib curlyLine)
+          (ws,ln) <- listen $ muteOnSuccess $ option' Nothing (Just <$> withSessionLib curlyLine)
           case ln of
             Just _ -> return False
             Nothing -> guard (empty ws) >> cmdLine

@@ -8,8 +8,7 @@ module Curly.Core.Library(
   ModLeaf,SourcePos,SourceRange(..),
   undefLeaf,undefSymLeaf,leafVal,leafDoc,leafPos,leafType,leafIsMethod,
   -- * Libraries
-  GlobalID(..),
-  LibraryID(..),isLibData,
+  GlobalID(..),isLibData,
   Metadata(..),Library,metadata,imports,exports,symbols,implicits,
   addImport,addExport,setExports,defSymbol,libSymbol,
   exprIn,optExprIn,builtinLibs,
@@ -20,14 +19,14 @@ module Curly.Core.Library(
   rawLibrary,fileLibrary,  
   -- * Repositories
   Template,defaultTemplate,showTemplate,showDummyTemplate,
-  RepoConfig(..),repoConfig,Repository(..),repositories,findLib,availableLibs, 
-  -- * Miscellaneous
-  Compressed(..),envVar,curlyCacheDir,noCurlySuf
+  findLib,availableLibs,libraryVCS
   ) where
 
 import Crypto.Hash.SHA256
 import Curly.Core
 import Curly.Core.Documentation
+import Curly.Core.VCS
+import Curly.Core.Security
 import Curly.Core.Annotated
 import Data.IORef
 import Language.Format
@@ -37,19 +36,12 @@ import System.Process (runInteractiveProcess)
 import Control.Concurrent (forkIO)
 import IO.Filesystem
 import IO.Time (Seconds, currentTime)
-import Codec.Compression.Zlib (compress,decompress)
 import GHC.Conc (par)
 import Control.DeepSeq
+import Control.Concurrent.MVar
 
 curlyLibVersion :: Int
 curlyLibVersion = 10
-
-newtype Compressed a = Compressed { unCompressed :: a }
-                     deriving (Show,Eq,Ord)
-instance Serializable a => Serializable (Compressed a) where
-  encode (Compressed a) = encode (compress (serialize a))
-instance Format a => Format (Compressed a) where
-  datum = (datum <&> decompress) >*> (Compressed <$> datum)
 
 newtype Chunked a = Chunked { getChunked :: a }
 instance Serializable a => Serializable (Chunked a) where
@@ -95,28 +87,16 @@ atMs (s:ss) k _ = Join<$>(atM s (Join zero).atMs ss) k zero
 
 fromPList l = compose [atMs p %- v | (p,v) <- l] (Join zero)
 
-newtype LibraryID = LibraryID Chunk
-                deriving (Eq,Ord,Generic)
-idSize :: Int
-idSize = 32
-
-instance Serializable LibraryID where
-  encode (LibraryID x) = x^.chunkBuilder
-instance Format LibraryID where
-  datum = LibraryID<$>getChunk idSize
-instance NFData LibraryID
-instance Show LibraryID where
-  show (LibraryID l) = show (B64Chunk l)
-instance Read LibraryID where
-  readsPrec _ = readsParser (readable >>= \(B64Chunk c) -> LibraryID c <$ guard (chunkSize c==idSize))
-instance Documented LibraryID where document l = Pure (show l)
+libraryCache :: IORef (Map LibraryID FileLibrary)
+libraryCache = newIORef zero^.thunk
 
 registerLib :: FileLibrary -> FileLibrary
 registerLib l = by thunk $ do
   let i = l^.flID
   logLine Debug $ format "Registering library %s" (show i)
-  i`seq`modifyIORef libraryCache (insert i (Just l))
+  i`seq`modifyIORef libraryCache (insert i l)
   return l
+
 rawLibrary :: Bool -> Library -> Bytes -> Maybe String -> FileLibrary
 rawLibrary new l b src = registerLib (FileLibrary l b (LibraryID (hashlazy b)) new src)
 fileLibrary :: Library -> Maybe String -> FileLibrary 
@@ -186,26 +166,6 @@ instance Identifier GlobalID where
   pureIdent n = GlobalID n Nothing
   identName (GlobalID n _) = n
 type Context = Module (GlobalID,LeafExpr GlobalID)
-newtype Metadata = Metadata (Forest (Map String) String)
-                 deriving (Semigroup,Monoid,Serializable)
-i'Metadata :: Iso' (Forest (Map String) String) Metadata
-i'Metadata = iso Metadata (\(Metadata m) -> m)
-instance Format Metadata where datum = coerceDatum Metadata
-instance DataMap Metadata String (Free (Map String) String) where 
-  at i = from i'Metadata.at i
-instance Show Metadata where
-  show (Metadata m) = showM m
-    where showM m = format "{%s}" (intercalate " " [format "%s:%s" (show a) (showV v)
-                                                   | (a,v) <- m^.ascList])
-          showV (Pure s) = show s
-          showV (Join m) = showM m
-instance Read Metadata where
-  readsPrec _ = readsParser (map Metadata brack)
-    where val = map Pure readable <+? map Join brack
-          brack = fromAList <$> between (single '{') (single '}') (sepBy' assoc (single ' '))
-            where assoc = liftA2 (,) readable (single ':' >> val)
-instance Documented Metadata where
-  document m = Pure (show m)
 
 data Library = Library {
   _metadata :: Metadata,
@@ -233,16 +193,6 @@ instance Semigroup Library where
   Library syn i s es is e + Library _ i' s' es' is' e' = Library syn (i+i') (s+s') (es+es') (is+is') (e+e')
 instance Monoid Library where
   zero = Library (Metadata zero) zero zero zero zero zero
-instance Show Library where
-  show (Library (Metadata syn) imp sym _ _ _exp) =
-    "Library: "+fromMaybe "" (syn^?at "synopsis".t'Just.t'Pure) +"\n"
-    + "Imports: \n"
-    + indent "  " (pretty (by l'1<$>imp))+"\n"
-    + "Exports: \n"
-    + indent "  " (pretty (by l'1<$>_exp))+"\n"
-    + "Symbols: \n"
-    + foldMap showSym (sym^.keyed)
-    where showSym (s,lf) = "### "+pretty s+"\n"+indent "# " (pretty (map fst $ c'Expression $ semantic (leafVal$^lf)))+"\n"
 cylMagic :: String
 cylMagic = "#!/lib/cyl!# "
 newtype ParEncode t = ParEncode t
@@ -563,62 +513,6 @@ builtinLibs = map (\l -> rawLibrary False l (serialize l) Nothing)
                           mkExprApplyDoc = ""
                           mkExprSymDoc = ""
                           exprIndDoc = ""
-        
-data RepoConfig = RepoConfig { repoProtoRoots :: [String] }
-data Repository = CustomRepo String (RepoConfig -> IO (Expires [(LibraryID,Metadata)])) (RepoConfig -> LibraryID -> IO Bytes)
-                | CurlyRepo String PortNumber
-
-instance Eq Repository where a == b = compare a b == EQ
-instance Ord Repository where
-  compare (CustomRepo a _ _) (CustomRepo b _ _) = compare a b
-  compare (CustomRepo _ _ _) _ = LT
-  compare (CurlyRepo s p) (CurlyRepo s' p') = compare (s,p) (s',p')
-  compare (CurlyRepo _ _) _ = GT
-instance Show Repository where
-  show (CustomRepo b _ _) = b
-  show (CurlyRepo h p) = "curly://"+h+":"+show p
-instance Read Repository where
-  readsPrec _ = map2 swap (repository^..parser)
-    where repository =
-            liftA2 (CurlyRepo . mkHost) ((single '@' <+? several "curly://") *> many1' (noneOf ": \t\n\n"))
-            (option 25465 (single ':' *> map fromInteger readable))
-            <+? liftA2 mkRepo (customArg ":") (many1' (oneOf ": ") >> customArg "")
-            where customArg x = many1' (noneOf (x+", \t\n\\") <+? (single '\\' *> token))
-                  mkHost "_" = "127.0.0.1"
-                  mkHost h = h
-                  mkRepo proto path = CustomRepo (proto+":"+path) getLs getL
-                    where getL conf l = do
-                            (_,out,_,_) <- flip fix (repoProtoRoots conf) $ \again dirs -> case dirs of
-                              (dir:dirs) -> try (again dirs) $ runInteractiveProcess (dir</>proto) ([path,show l]) Nothing Nothing
-                              [] -> undefined
-                            readHBytes out
-                          lib = liftA2 (,) readable (many' space >> readable)
-                          getLs conf = do
-                            (_,out,_,_) <- flip fix (repoProtoRoots conf) $ \again dirs -> case dirs of
-                              (dir:dirs) -> try (again dirs) $ runInteractiveProcess (dir</>proto) [path] Nothing Nothing
-                              [] -> undefined
-                            (0,) . foldMap (matches pure lib) . lines <$> readHString out
-                    
-
-repoConfig :: IORef RepoConfig
-repoConfig = newIORef (RepoConfig [])^.thunk
-repositories :: IORef (Set Repository)
-repositories = newIORef (fromKList envRepositories)^.thunk
-  where envRepositories = fromMaybe [] $ matches Just cpath $ case envVar "" "CURLY_PATH" of
-          "" -> fileRepos
-          x -> x
-          where cpath = skipMany' sp >> sepBy' readable (skipMany1' sp)
-                sp = oneOf " \t\n,"
-                fileRepos = liftA2 (\x y -> x+" "+y) (fr (curlyUserDir+"/repositories")) (fr "/etc/curly/repositories")^.thunk
-                fr n = trylog (return "") (readString n)
-type Expires t = (Seconds,t)
-listCache :: IORef (Map Repository (Expires [(LibraryID,Metadata)]))
-listCache = newIORef zero^.thunk
-libraryCache :: IORef (Map LibraryID (Maybe FileLibrary))
-libraryCache = newIORef zero^.thunk
-
-nslookup :: String -> PortNumber -> Maybe AddrInfo
-nslookup = curry $ cached $ \(s,p) -> convert $ thunk $^ getAddrInfo Nothing (Just s) (Just (show p))
 
 type Template = Documentation
 defaultTemplate = mkDoc "template"
@@ -636,54 +530,25 @@ showDummyTemplate = showTemplate DummyTerminal defaultStyle zero
 cacheName :: LibraryID -> String
 cacheName l = cacheFileName curlyCacheDir (show l) "cyl"
 
-getRepoLib :: LibraryID -> Repository -> IO (Maybe FileLibrary)
-getRepoLib l r = do
-  logLine Verbose $ format "Looking up library %s from repository %s" (show l) (show r)
-  res <- (map checkHash . trylog (return zero) . findL) r
-  case res of
-    Just (_,b) -> void $ forkIO $ do
-      let f = cacheName l
-      createFileDirectory f
-      writeBytes f b
-      modifyPermissions f (set (each.executePerm) True)
-    _ -> unit
-  return (res <&> \(f,b) -> FileLibrary f b l False Nothing)
-  where findL (CurlyRepo h p) = case nslookup h p of
-          Nothing -> return zero
-          Just a -> do
-            logLine Verbose $ format "Requesting library %s from curly://%s:%s" (show l) h (show p)
-            conn <- connect a
-            writeHString conn (show l)
-            readHBytes conn
-        findL (CustomRepo _ _ getL) = readIORef repoConfig >>= \conf -> getL conf l
-        checkHash b | isLibData l b = (,b) <$> matches Just datum b
-                    | otherwise = Nothing
-        a </> b = a+"/"+b
+libraryVCS :: IORef VCSBackend
+libraryVCS = newIORef (fromMaybe (protoBackend "http" "curly-vc.coiffier.net/vcs")
+                       (matches Just readable (envVar "" "CURLY_VCS")))^.thunk
 
-listRepository :: Repository -> IO [(LibraryID,Metadata)]
-listRepository r = do
-  now <- currentTime
-  (lookup r<$>readIORef listCache) >>= \x -> case x of
-    Just (exp,ls) | exp >= now -> return ls
-    _ -> do
-      ret <- trylog (return zero) (list r)
-      runAtomic listCache (at r =- Just ret)
-      runAtomic libraryCache $ for_ (snd ret) $ \(l,_) -> at l =~ \p -> Just $ case p of
-        Just x@(Just _) -> x
-        Nothing -> (readCachedLibrary l^.thunk)+(getRepoLib l r^.thunk)
-        Just Nothing -> getRepoLib l r^.thunk
-      return (snd ret)
-  where list (CurlyRepo h p) = do
-          conn <- connectTo h p
-          now <- currentTime
-          map ((now+15,) . fromMaybe zero) $ runConnection Just True conn $
-            liftIO (?write (foldMap encode "libraries"^..bytesBuilder)) >> receive
-        list (CustomRepo _ getLs _) = readIORef repoConfig >>= getLs
+forkValue :: IO a -> IO a
+forkValue ma = do
+  v <- newEmptyMVar
+  forkIO $ ma >>= putMVar v
+  return (takeMVar v^.thunk)
 
 availableLibs :: IO [(LibraryID,Metadata)]
 availableLibs = do
-  repos <- readIORef repositories
-  fold <$> traverse listRepository (toList repos)
+  conn <- readIORef libraryVCS
+  ks <- getKeyStore
+  all <- for (ks^.ascList) $ \(_,(_,k,_,_,_)) -> forkValue $ do
+    branches <- getBranches conn k
+    for (keys branches) $ \b -> forkValue $ do
+      maybe (return zero) (getCommit conn) =<< getBranch conn (Just (Left (k,b)))
+  return $ fold (fold all)^.ascList
   
 readCachedLibrary l = do
   b <- trylog (return zero) $ readBytes (cacheName l)
@@ -694,30 +559,18 @@ readCachedLibrary l = do
 
 registerBuiltinsLib :: ()
 registerBuiltinsLib = by thunk $ void (yb thunk (head builtinLibs))
-findLibrary :: Set Repository -> LibraryID -> IO (Maybe FileLibrary)
-findLibrary rs l = l`seq`registerBuiltinsLib`seq`fix $ \it -> do
-  c <- readIORef libraryCache
-  case lookup l c of
-    Just (Just l) -> return (Just l)
-    _ -> do
-      cl <- readCachedLibrary l
-      case cl of
-        Just _ -> return cl
-        _ -> do
-          ls <- readIORef listCache
-          let rs' = rs - keysSet ls
-          logLine Verbose $ format "Missing repositories when searching for library %s: [%s] (cached [%s])"
-            (show l) (intercalate "," (map show rs')) (intercalate "," (map show (keysSet ls)))
-          if empty rs'
-            then return (find (\fl -> l==fl^.flID) builtinLibs)
-            else do
-            for_ rs' (void . listRepository)
-            it
 
 findLib :: LibraryID -> Maybe FileLibrary
-findLib l = by thunk (readIORef repositories >>= \rs -> findLibrary rs l)
-
-noCurlySuf f = nosuffix ".cy" f + nosuffix ".curly" f + nosuffix ".cyl" f
-  where nosuffix s s' = if t==s then Just h else Nothing
-          where (h,t) = splitAt (length s'-length s) s'
-
+findLib l = registerBuiltinsLib`seq`by thunk $ do
+  conn <- readIORef libraryVCS
+  cache <- readIORef libraryCache
+  return (lookup l cache)
+    `orIO` readCachedLibrary l
+    `orIO` do
+      bs <- fromMaybe zero <$> vcbLoad conn (LibraryKey l)
+      return $ do
+        guard (isLibData l bs)
+        f <- matches Just datum bs
+        return (registerLib $ FileLibrary f bs l False Nothing)
+        
+  where orIO ma mb = ma >>= maybe mb (return . Just)

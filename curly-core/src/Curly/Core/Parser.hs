@@ -4,12 +4,12 @@
 #endif
 module Curly.Core.Parser (
   -- * Expressions and operators
-  OpMap,OpChar(..),OpParser,withParsedString,Warning(..),CurlyParserException(..),showWarning,l'library,
+  OpMap,OpChar(..),OpParser,withParsedString,Severity(..),Warning(..),CurlyParserException(..),showWarning,l'library,
   Spaces(..),parseCurly,currentPos,spc,nbsp,
   expr,accessorExpr,tom,atom,
 
   -- * Basic blocks for warning generation  
-  expected,opKeyword,guardWarn,
+  expected,opKeyword,guardWarn,warn,muteOnSuccess,
 
   -- * Lines and files
   curlyLine,curlyFile,
@@ -117,25 +117,35 @@ instance DataMap OpMap String OpMap_Val where
   at [] = l'1
   at (c:cs) = l'2.mat c.at cs
 
-data Warning = Warning (Int,Int) String
+data Severity = Sev_Info | Sev_Error
+instance Show Severity where
+  show Sev_Info = "Info"
+  show Sev_Error = "Error"
+data Warning = Warning Severity (Int,Int) String
              deriving (Show,Typeable)
 data CurlyParserException = CurlyParserException (Maybe String) [Warning]
                           deriving (Show,Typeable)
 instance Exception CurlyParserException
 instance Documented CurlyParserException where
   document (CurlyParserException s ws) =
-    Pure $ intercalate "\n" [format "  Warning #%d:%s" (i :: Int) (showWarning s w) | (i,w) <- zip [1..] ws]
+    Pure $ intercalate "\n" [format "  #%d:%s" (i :: Int) (showWarning s w) | (i,w) <- zip [1..] ws]
 
 showWarning :: Maybe String -> Warning -> String
-showWarning f (Warning (l,c) s) = format "%s%d:%d: %s" (c'string $ maybe "" (format "%s: ") f) l c s
-warn :: Monad m => String -> OpParser m ()
-warn s = currentPos >>= \(_,l,c) -> tell [Warning (l,c) s]
+showWarning f (Warning sev (l,c) s) = format "%s %s%d:%d: %s" (show sev) (c'string $ maybe "" (format "%s: ") f) l c s
+warn :: Monad m => Severity -> String -> OpParser m ()
+warn sev s = currentPos >>= \(_,l,c) -> tell [Warning sev (l,c) s]
+muteOnSuccess :: Monad m => OpParser m a -> OpParser m a
+muteOnSuccess p = do
+  (ws,ma) <- intercept (option' Nothing (Just<$>p))
+  case ma of
+    Nothing -> tell ws >> zero
+    Just a -> tell [w | w@(Warning Sev_Info _ _) <- ws] >> return a
 expected :: Monad m => String -> OpParser m a -> OpParser m a
-expected x p = p <+? (warn (format "expected %s" x) >> zero)
+expected x p = p <+? (warn Sev_Error (format "expected %s" x) >> zero)
 opKeyword :: Monad m => String -> OpParser m ()
 opKeyword s = expected (format "opKeyword '%s'" s) (several s)
-guardWarn :: Monad m => String -> Bool -> OpParser m ()
-guardWarn msg p = if p then unit else (warn msg >> zero)
+guardWarn :: Monad m => Severity -> String -> Bool -> OpParser m ()
+guardWarn sev msg p = if p then unit else (warn sev msg >> zero)
 
 l'library = l'3.l'2
 l'typeMap = l'3.l'1
@@ -236,10 +246,10 @@ tom sp = do
                                        Step x' (if isEmpty then zero else map snd xs'))
           suff (Step (Just x@((d,_),_)) m) =
             suff (filterM (>= d) (Step Nothing m))
-            + suffO x
-            + suff (filterM (< d) (Step Nothing m))
+            <+? suffO x
+            <+? suff (filterM (< d) (Step Nothing m))
           suff (Step Nothing m) = suffM m
-          suffM m = (tokParam m >>= suff) + do
+          suffM m = (tokParam m >>= suff) <+? do
             tl <- param m '_'
             guard (any (maybe False (p . fst . fst)) tl)
             let exprSuf tl@(Step _ tlm) | empty tlm = zero
@@ -305,7 +315,7 @@ lambdaArg :: Monad m => OpParser m [(String, Maybe SourceExpr):+:[SourceExpr]]
 lambdaArg = letBinding + funPrefix + do
   n <- (varName <*= register) <+? ("_"<$"_")
   tm <- lift (getl (l'typeMap))
-  map (Left (n,Nothing):) $ option [] $
+  map (Left (n,Nothing):) $ option' [] $
     map (Right [mkSymIn tm n]:) $ wrapRound (map fold (sepBy' lambdaArg nbsp))
   where letBinding = wrapCurly $ expected "let-binding" $ typeBinding <+? do
           n <- varName
@@ -335,7 +345,7 @@ curlyFile = do
           "#!/lib/module!#" <+? "module"
           syn <- hspc *> synopsis <* (eol+eoi)
           lift (l'library.metadata =~ syn)
-          skipMany' (curlyLine <+> (hspc >> eol))
+          skipMany' (muteOnSuccess (curlyLine <+> (hspc >> eol)))
         synopsis = liftA2 (.) (option' id (synName <* ":" <* hspc))
                    (many' (noneOf' "\n") <&> \s -> insert "synopsis" (Pure s))
           where synName = liftA2 (.) (many1' (noneOf' ": \t") <&> \s -> insert "name" (Pure s))
@@ -357,14 +367,15 @@ raw :: (ParseStream c s, TokenPayload c ~ Char,MonadParser s m p) => String -> p
 raw = several
 
 curlyLine :: (Monad m, ?mountain :: Mountain) => OpParser m ()
-curlyLine = swaying (foldr1 (<+?) [defLine,descLine,typeLine,classLine,comment,impLine,expLine,transLine,setLine,metaLine])
+curlyLine = expected "Curly source definition ('define', 'type', 'family', 'import', 'export', ...)"
+            (swaying (foldr1 (<+?) [defLine,descLine,typeLine,classLine,comment,impLine,expLine,transLine,setLine,metaLine])
              <* expected "end of line" (eol+eoi)
-             >>= \f -> lift $ l'library =~ f
-  where withPlural p = p >> option () "s"
+             >>= \f -> lift $ l'library =~ f)
+  where withPlural p = p >> option' () "s"
         impLine = withPlural "import" >> nbsp >> do
           mods <- sepBy1' modTree nbhsp
           resolved <- fold<$>traverse resolve mods
-          guardWarn (format "Nothing to import for '%s' in the current context" (show mods)) (nonempty resolved)
+          guardWarn Sev_Info (format "Nothing to import for '%s' in the current context" (show mods)) (nonempty resolved)
           let newinsts = c'set $ fromKList $ fold [toList (zipWith const ?mountain mod) | mod <- mods]
               addID fl (GlobalID n Nothing) = GlobalID n (Just (n,fl^.flID))
               addID _  i = i

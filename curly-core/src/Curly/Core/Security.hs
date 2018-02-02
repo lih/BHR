@@ -13,7 +13,7 @@ module Curly.Core.Security(
 
 import Control.DeepSeq (deepseq)
 import Curly.Core
-import Curly.Core.Library
+import Curly.Core.Documentation
 import Data.Bits (xor)
 import Data.IORef
 import GHC.Conc (threadDelay)

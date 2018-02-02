@@ -1,6 +1,6 @@
 #!/bin/sh
 get_data() {
-    curly --dump-data-file="$2" > "$1"
+    curly --goody="$2" > "$1"
 }
 case "$1" in
     emacs)
@@ -15,7 +15,7 @@ case "$1" in
 (define-package
   "curly"
   "$ver"
-  "A package help in writing Curly code.")
+  "A major mode for Curly")
 EOF
 	    tar -cf "curly-$ver.tar" "curly-$ver"
 	    rm -r "curly-$ver"

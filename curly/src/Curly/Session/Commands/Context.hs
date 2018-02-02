@@ -35,5 +35,5 @@ fixCmd = withDoc fixDoc $ False <$ do
   i <- option' 1 (nbhspace >> number)
   (s,ws) <- getSession warnings
   case (s,drop (i-1) ws) of
-    (Just s, Warning (l,c) _:_) -> liftIOWarn $ editSource s (l,c) reloadMountain
+    (Just s, Warning _ (l,c) _:_) -> liftIOWarn $ editSource s (l,c) reloadMountain
     _ -> serveStrLn $ format "Error: there is no error #%d" i

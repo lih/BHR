@@ -2,9 +2,9 @@
 module Curly.Core.VCS where
 
 import Curly.Core
-import Curly.Core.Library
 import Curly.Core.VCS.Diff
 import Curly.Core.Security
+import Curly.Core.Documentation
 import Definitive
 import Language.Format
 import qualified Crypto.Hash.SHA256 as SHA256
@@ -161,23 +161,23 @@ vcbLoad (VCSB_Native _ st run) k = liftIO (run (vcLoad st k))
 vcbLoadP :: (Format a,MonadIO m) => VCSBackend -> (WithResponse a -> VCKey ()) -> ParserT s m a
 vcbLoadP b k = vcbLoad b k >>= maybe zero return
 
-data VCSBackend = forall m s. MonadVC m s => VCSB_Native String s (forall a. m a -> IO a)
+data VCSBackend = forall m s. MonadVC m s => VCSB_Native [String] s (forall a. m a -> IO a)
 instance Semigroup VCSBackend where
   VCSB_Native n conn run + VCSB_Native n' conn' run' =
-    VCSB_Native (n+" "+n') (conn,conn') (\(Combined_VC (Compose m)) -> run m >>= run')
+    VCSB_Native (n+n') (conn,conn') (\(Combined_VC (Compose m)) -> run m >>= run')
 instance Eq VCSBackend where a == b = compare a b == EQ
 instance Ord VCSBackend where
   compare (VCSB_Native s _ _) (VCSB_Native s' _ _) = compare s s'
-dummyBackend = VCSB_Native "dummy" () (\(Dummy_VC io) -> io)
+dummyBackend = VCSB_Native [] () (\(Dummy_VC io) -> io)
 nativeBackend :: MonadIO m => String -> PortNumber -> m VCSBackend
 nativeBackend h p = do
   conn <- liftIO (connectTo h p)
   lock <- liftIO (newMVar ())
-  return (VCSB_Native ("curly-vc://"+h+":"+show p) (Client_Handle lock conn) (\(Client_VC io) -> io))
-fileBackend p = VCSB_Native ("file://"+p) p (\(File_VC io) -> io)
-protoBackend pr p = VCSB_Native (pr+"://"+p) (pr,p) (\(Proto_VC io) -> io)
+  return (VCSB_Native ["curly-vc://"+h+":"+show p] (Client_Handle lock conn) (\(Client_VC io) -> io))
+fileBackend p = VCSB_Native ["file://"+p] p (\(File_VC io) -> io)
+protoBackend pr p = VCSB_Native [pr+"://"+p] (pr,p) (\(Proto_VC io) -> io)
 instance Show VCSBackend where
-  show (VCSB_Native s _ _) = s
+  show (VCSB_Native s _ _) = intercalate " " s
 instance Read VCSBackend where
   readsPrec _ = readsParser (foldr1 (+) <$> sepBy1' backend nbspace)
     where backend = proto_native <+? proto_file <+? proto_arbitrary <+? fill dummyBackend (several "dummy")
@@ -197,3 +197,30 @@ instance Read VCSBackend where
 curlyPublisher :: String
 curlyPublisher = envVar "" "CURLY_PUBLISHER"
 
+getBranches :: MonadIO m => VCSBackend -> PublicKey -> m Branches
+getBranches conn pub = maybe zero unsafeExtractSigned <$> vcbLoad conn (BranchesKey pub)
+
+getBranch :: MonadIO m => VCSBackend -> Maybe ((PublicKey,String):+:Hash) -> m (Maybe Hash)
+getBranch conn = deepBranch'
+  where deepBranch' Nothing = return Nothing
+        deepBranch' (Just (Right h)) = return (Just h)
+        deepBranch' (Just (Left (pub,b))) = deepBranch b pub
+        deepBranch b pub = do
+          bs <- getBranches conn pub
+          deepBranch' (lookup b bs)
+
+getCommit :: MonadIO m => VCSBackend -> Hash -> m (Map LibraryID Metadata)
+getCommit conn c = liftIO $ getAll (Just c)
+  where 
+    getAll (Just c) = cachedCommit c $ do
+      comm <- vcbLoad conn (CommitKey c)
+      case comm of
+        Just (Compressed (p,mh)) -> patch p <$> getAll mh
+        Nothing -> do error "Could not reconstruct the commit chain for commit"
+    getAll Nothing = return zero
+    
+    cachedCommit c def = do
+      let commitFile = cacheFileName curlyCommitDir (show (Zesty c)) "index"
+      x <- liftIO $ try (return Nothing) (map (Just . unCompressed) $ readFormat commitFile)
+      maybe (do createFileDirectory commitFile
+                def <*= liftIO . writeSerial commitFile . Compressed) return x

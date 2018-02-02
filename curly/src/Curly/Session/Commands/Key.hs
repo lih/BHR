@@ -32,8 +32,8 @@ keyCmd = withDoc keyDoc $ False <$ do
   x <- expected "key command" (nbhspace >> dirArg)
   let setKey name v = do
         ks <- getKeyStore
-        if name`isKeyIn`ks then serveStrLn (format "Error: the key '%s' already exists" name) >> zero
-          else modifyKeyStore (at name %- Just v)
+        guardWarn Sev_Error (format "the key '%s' already exists" name) (not (name`isKeyIn`ks)) 
+        modifyKeyStore (at name %- Just v)
   case x of
     "access" -> serveStrLn $ format "You have %s access to this instance." (show ?access)
     "list" -> getKeyStore >>= \m -> do
@@ -106,7 +106,7 @@ keyCmd = withDoc keyDoc $ False <$ do
                               logLine Debug $ format "Asking client for key '%s'" name'
                               (maybe zero return =<< liftIO (clientKey name'))
                                 <+? (maybe zero (\(Zesty p) -> return p) =<< dns_lookup (DomainKey name'))
-                                <+? (serveStrLn (format "Error: unknown client key '%s'" name') >> zero)
+                                <+? (warn Sev_Error (format "Error: unknown client key '%s'" name') >> zero)
         let keyType = maybe "claim" (const "proof") priv
         serveStrLn (format "Importing %s '%s'" keyType name)
         setKey name (fingerprint pub,pub,map fst priv,maybe zero snd priv,zero)

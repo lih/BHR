@@ -30,6 +30,7 @@ showMetaDir (Pure x) = x
 showMetaDir (Join (ModDir m)) = intercalate "\n" [showSM s a | (s,a) <- m]
   where showSM s x@(Join (ModDir _)) = format "* %s:\n%s" s (indent "  " (showMetaDir x))
         showSM s (Pure y) = format "- %s: %s" s y
+        indent i s = unlines (map (i+) (lines s))
 
 optimized e = lift (getl l'library) <&> \l -> optExprIn l e
 

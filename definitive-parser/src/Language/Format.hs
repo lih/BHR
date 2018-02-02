@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, TypeFamilies, ExistentialQuantification, ImplicitParams, DefaultSignatures #-}
+{-# LANGUAGE ScopedTypeVariables, TypeFamilies, ExistentialQuantification, ImplicitParams, DefaultSignatures, UndecidableInstances #-}
 module Language.Format (
   -- * You'll need this
   module Language.Parser,
@@ -323,6 +323,15 @@ instance Serializable a => Serializable [a] where
   encode l = encode (length l) + foldMap encode l
 instance Format a => Format [a] where
   datum = datum >>= \n -> doTimes n datum
+instance (Serializable (f (Free f a)),Serializable a) => Serializable (Free f a) where
+  encode (Pure s) = encodeAlt 0 s
+  encode (Join f) = encodeAlt 1 f
+instance (Format (f (Free f a)),Format a) => Format (Free f a) where
+  datum = datumOf [FormatAlt Pure,FormatAlt Join]
+instance (Serializable (f (Cofree f a)),Serializable a) => Serializable (Cofree f a) where
+  encode (Step a fc) = encode (a,fc)
+instance (Format (f (Cofree f a)),Format a) => Format (Cofree f a) where
+  datum = uncurry Step<$>datum
 instance Serializable (f (g a)) => Serializable ((f:.:g) a) where
   encode = coerceEncode Compose
 instance Format (f (g a)) => Format ((f:.:g) a) where

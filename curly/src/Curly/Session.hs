@@ -161,6 +161,12 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
             completeClientKeyName = completeWord clientKeyNames
             completeBranchName k = completeWord brancheNames
               where brancheNames = keys (getVCSBranches k^.thunk)
+            completeVCSFlags [] = []
+            completeVCSFlags [f] = completeWord ["-add","-keep","-drop"] f
+            completeVCSFlags ["-add",p] = completeAbsPath w False p
+            completeVCSFlags ["-keep",x] = completeWord ["maximum","minimum"] x
+            completeVCSFlags ["-drop",x] = completeWord ["maximum","minimum"] x
+            completeVCSFlags (_:t) = completeVCSFlags t
             beginning = matches (const True) nbsp (reverse ln)
             lnWords = words ln & \l -> if beginning || empty l then l+[""] else l
         writeChan srv . CompleteResponse $!! case lnWords of
@@ -192,12 +198,12 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["vcs","list",k] -> completeKeyName k
           ["vcs","list",k,b] -> completeBranchName k b
           ["vcs","get",x] -> completeWord ["source","library"] x
-          ["vcs","branch",b] -> completeBranchName curlyPublisher b
-          ["vcs","branch",_,c] -> completeWord ["keep","drop","fork","link"] c
-          ["vcs","branch",_,c,u] | c`elem`["fork","link"] -> completeKeyName u
-          ["vcs","branch",_,c,u,b] | c`elem`["fork","link"] -> completeBranchName u b
           ["vcs","commit",b] -> completeBranchName curlyPublisher b
-          ["vcs","commit",_,p] -> completeAbsPath w False p
+          ("vcs":"commit":_:t) -> completeVCSFlags t
+          ["vcs","branch",b] -> completeBranchName curlyPublisher b
+          ["vcs","branch",_,c] -> completeWord ["fork","alias"] c
+          ["vcs","branch",_,c,u] | c`elem`["fork","alias"] -> completeKeyName u
+          ["vcs","branch",_,c,u,b] | c`elem`["fork","alias"] -> completeBranchName u b
           ("vcs":_) -> []
           ["configure",p] -> completeWord [show n+":"+s | (n,s) <- zip [0..] (curlyFiles ?curlyConfig)] p
           ["repository",cmd] -> completeWord ["list","add","contents","browse"] cmd

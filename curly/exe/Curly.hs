@@ -66,47 +66,11 @@ t'IOTgt :: Traversal' TargetType (IO ())
 t'IOTgt k (IOTgt m) = IOTgt<$>k m
 t'IOTgt _ x = return x
 
-forkValue :: IO a -> IO a
-forkValue ma = do
-  v <- newEmptyMVar
-  forkIO $ ma >>= putMVar v
-  return (takeMVar v^.thunk)
-
 initCurly = do
   setLocaleEncoding utf8
   putMVar getDataFileName_ref getDataFileName
   getDataFileName "proto/vc" >>= \p -> modifyIORef vcsProtoRoots (p:)
-  getDataFileName "proto/repo" >>= \p -> modifyIORef repoConfig (\c -> c { repoProtoRoots = p:repoProtoRoots c })
-  trylogLevel Debug unit $ do
-    let conn = curlyVCSBackend
-        getBranches pub = maybe zero unsafeExtractSigned <$> vcbLoad conn (BranchesKey pub)
-        deepBranch' Nothing = return Nothing
-        deepBranch' (Just (Right h)) = return (Just h)
-        deepBranch' (Just (Left (pub,b))) = deepBranch b pub
-        deepBranch b pub = do
-          bs <- getBranches pub
-          deepBranch' (lookup b bs)
-        getAll (Just c) = cachedCommit c $ do
-          comm <- vcbLoad conn (CommitKey c)
-          case comm of
-            Just (Compressed (p,mh)) -> patch p <$> getAll mh
-            Nothing -> do error "Could not reconstruct the commit chain for commit"
-        getAll Nothing = return zero
-        cachedCommit c def = do
-          let commitFile = cacheFileName curlyCommitDir (show (Zesty c)) "index"
-          x <- liftIO $ try (return Nothing) (map (Just . unCompressed) $ readFormat commitFile)
-          maybe (do createFileDirectory commitFile
-                    def <*= liftIO . writeSerial commitFile . Compressed) return x
-        
-        getLs _ = do
-          ks <- getKeyStore
-          now <- currentTime
-          branches <- map fold $ for (ks^.ascList) $ \(l,(_,pub,_,_,_)) -> do
-            map (first (pub,)) . by ascList <$> forkValue (getBranches pub)
-          map ((now+15,) . by ascList . concat) $ for branches $ \((pub,b),h) -> forkValue (getAll =<< deepBranch' (Just h))
-        getL _ lid = fromMaybe zero <$> vcbLoad conn (LibraryKey lid)
-    runAtomic repositories (modify (touch (CustomRepo "curly-vc://" getLs getL)))
-
+  
 ioTgt = return . IOTgt
 forkTgt m = do
   v <- newEmptyMVar
@@ -150,6 +114,7 @@ runTarget Help = ioTgt $ do
       allFlags = foldMap (argFlags . snd) ?curlyConfig
       flagDesc | empty allFlags = "OPTION"
                | otherwise = format "(OPTION%s)" $ foldMap ("|+"+) allFlags
+      indent i s = unlines (map (i+) (lines s))
   putStrLn $ format "Usage: %s%s %s..."
     ?programName (foldMap (' ':) ?commandLineScripts)
     flagDesc
@@ -165,12 +130,11 @@ runTarget Help = ioTgt $ do
         _ -> format " (from %s)" v
   
   putStrLn $ "Known systems: "+intercalate ", " (map show knownSystems)
-  putStrLn $ format "Repositories%s:" (valOrigin "CURLY_PATH")
-  repos <- readIORef repositories
-  for_ repos $ \r -> putStrLn $ "  * "+show r
+  putStrLn $ format "Repositories%s:" (valOrigin "CURLY_VCS")
+  VCSB_Native repos _ _ <- readIORef libraryVCS
+  for_ repos $ \r -> putStrLn $ "  * "+r
   putStrLn $ format "Library cache: %s%s" curlyCacheDir (valOrigin "CURLY_LIBCACHE")
   putStrLn $ format "Server port: %p%s"   curlyPort     (valOrigin "CURLY_PORT")
-  putStrLn $ format "Version control: %s%s" (show curlyVCSBackend) (valOrigin "CURLY_VCS")
   putStrLn $ format "Publisher key: %s%s" curlyPublisher (valOrigin "CURLY_PUBLISHER")
   putStr "\n"
   putStrLn $ format "Mounts:%s" (if nonempty (?curlyPlex^.mounts) then "" else " none")
@@ -181,10 +145,10 @@ runTarget Help = ioTgt $ do
 runTarget Interactive = ioTgt $ runCurlySession (\_ -> unit) LocalClient =<< targetServer
 runTarget (Execute s) = ioTgt $ runCurlySession (\_ -> unit) (StringClient s) =<< targetServer
 runTarget (RunFile f) = ioTgt $ runCurlySession (\_ -> unit) (FileClient f) =<< targetServer
-runTarget (Server InstanceServer) = forkTgt $ \tid1 -> trylog unit $ bracket_
-                                                       (modifyIORef processInstances (touch (getConf confInstance)))
-                                                       (modifyIORef processInstances (delete (getConf confInstance)))
-                                                       $ do
+runTarget ServeInstance = forkTgt $ \tid1 -> trylog unit $ bracket_
+                                             (modifyIORef processInstances (touch (getConf confInstance)))
+                                             (modifyIORef processInstances (delete (getConf confInstance)))
+                                             $ do
   port <- until $ (<*= maybe (threadDelay 1000000) (const unit)) $ do
     h <- peerClient
     runConnection Just True h $ do
@@ -213,25 +177,7 @@ runTarget (Server InstanceServer) = forkTgt $ \tid1 -> trylog unit $ bracket_
       let storeTid tid = runAtomic tids $ do l'2 =~ insert n tid
       runCurlySession storeTid (SocketClient h) =<< targetServer
     
-
-runTarget (Server LibServer) = forkTgt $ \_ -> do
-  putStrLn $ format "Serving libraries on port %p" curlyPort
-  forever $ do
-    h <- peerClient
-    runConnection_ True h $ do
-      send DeclareSupply
-      forever $ receive >>= liftIO . \x -> withMountain $ do
-        let localLibs = c'map (fromAList [(fl^.flID,(p,fl^.flLibrary,fl^.flBytes)) | (p,fl) <- sourceLibs])
-        ls <- case x of
-          Nothing -> availableLibs <&> \al -> SupplyLibraries ((localLibs^.ascList <&> \(i,(_,l,_)) -> (i,l^.metadata))
-                                                               + al)
-          Just l -> return (SupplyLibrary $ fromMaybe zero (map (by l'3) (localLibs^.at l) + map (by flBytes) (findLib l)))
-        send ls
-runTarget (ListServer LibServer t) = ioTgt $ showLibs =<< availableLibs 
-  where showLibs l = traverse_ showLib [(l,d) | (l,Just d) <- map (second showT) l]
-        showLib (l,d) = putStrLn (show l+" "+d)
-        showT d = maybe (Just $ show d) (showDummyTemplate d) t
-runTarget (ListServer InstanceServer _) = ioTgt $ do
+runTarget ListInstances = ioTgt $ do
   let (h,p) = case getConf confServer of
         Just (_,h,p) -> (h,p)
         Nothing -> ("127.0.0.1",curlyPort)
@@ -239,24 +185,6 @@ runTarget (ListServer InstanceServer _) = ioTgt $ do
   insts <- fold <$> runConnection Just True h (exchange AskInstances)
   putStrLn $ format "Available instances: %s" (intercalate "," insts)
 
-runTarget (ShowLib l) = ioTgt $ do
-  let libName = Right <$> single '@' *> readable <* eoi
-                <+? Left <$> remaining
-      Just nm = matches Just libName l
-  case nm of
-    Left file -> do
-      l' <- matches Just datum <$> readBytes file
-      case l' of
-        Just x -> print (x :: Library)
-        Nothing -> withMountain $ do
-          Id l' <- parseCurly<$>readString file<*>pure curlyFile
-          case l' of
-            Right x -> print x
-            Left ws -> putStrLn $ format "Couldn't parse source file:%s"
-                       $ foldMap (("\n  "+) . showWarning (Just file)) ws
-    Right i -> case findLib i of
-       Just x -> print (x^.flLibrary)
-       Nothing -> putStrLn $ "Couldn't find library "+show i
 runTarget (Translate f sys path) = ioTgt $ do
   runAtomic (?curlyPlex^.mountainCache) $ do l'2 =~ (doBuild:)
   withMountain $ doBuild ?mountain
@@ -268,19 +196,19 @@ runTarget (Translate f sys path) = ioTgt $ do
             modifyPermissions f (_sysProgPerms sys)
           _ -> putStrLn $ "Error: the path "+show path+" doesn't seem to point to a function in the default context"
   
-runTarget (DumpDataFile "builtins/ids") = ioTgt $ for_ (reverse builtinLibs) $ \l -> putStrLn (show (l^.flID))
-runTarget (DumpDataFile ('b':'u':'i':'l':'t':'i':'n':'s':'/':'v':x)) = ioTgt $ do
+runTarget (Goody "builtins/ids") = ioTgt $ for_ (reverse builtinLibs) $ \l -> putStrLn (show (l^.flID))
+runTarget (Goody ('b':'u':'i':'l':'t':'i':'n':'s':'/':'v':x)) = ioTgt $ do
   let (h,ext) = splitAt (length x-4) x
   case ext of
     ".cyl" -> writeHBytes stdout ((reverse builtinLibs!!(read h-1))^.flBytes)
     _ -> error $ "No such builtin library: "+x
-runTarget (DumpDataFile "list") = ioTgt $ do
+runTarget (Goody "list") = ioTgt $ do
   fn <- getDataFileName "list"
   readBytes fn >>= writeHBytes stdout
   putStrLn "builtins/ids"
   for_ (zip [1..] builtinLibs) $ \(i,l) -> do
     putStrLn $ "builtins/v"+show i
-runTarget (DumpDataFile f) = ioTgt $ do
+runTarget (Goody f) = ioTgt $ do
   fn <- getDataFileName f
   readBytes fn >>= writeHBytes stdout
 runTarget (SetServer _) = ioTgt unit

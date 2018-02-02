@@ -28,7 +28,7 @@ runCmd = withDoc runDoc $ False <$ do
           p <- absPath ""
           withMountain $ case localContext^?atMs p of
             Just (Pure (_,v)) -> liftIOWarn $ doRun (anonymous (v^.leafVal))
-            _ -> guardWarn ("The path "+showSymPath p+" doesn't point to a runnable function") False
+            _ -> guardWarn Sev_Error ("The path "+showSymPath p+" doesn't point to a runnable function") False
         doRun ex = do
           logLine Verbose $ "Running expression "+pretty (semantic ex :: Expression GlobalID (Symbol GlobalID))
           runIt <- jitExpr (?curlyPlex^.jitContext) ex

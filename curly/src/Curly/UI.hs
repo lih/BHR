@@ -1,7 +1,7 @@
 {-# LANGUAGE ViewPatterns,TypeFamilies #-}
 module Curly.UI(
   -- * Variables
-  curlyPort,curlyUserDir,curlyHistoryFile,curlyVCSBackend,
+  curlyPort,curlyUserDir,curlyHistoryFile,
 
   -- * Arguments
   CurlyConfig,
@@ -326,13 +326,10 @@ sourceLibs = symList $ fromPList [(p,sourceFile b (f,c) (getFile f^.thunk)) | (p
 curlyHistoryFile :: String
 curlyHistoryFile = curlyUserDir </> "history"
 
-curlyVCSBackend :: VCSBackend
-curlyVCSBackend = fromMaybe (protoBackend "http" "curly-vc.coiffier.net/vcs") (matches Just readable (envVar "" "CURLY_VCS"))
-
 getVCSBranches :: MonadIO m => String -> m Branches
-getVCSBranches name = do
+getVCSBranches name = liftIO $ do
+  conn <- readIORef libraryVCS
   u <- lookup name <$> getKeyStore
-  case (curlyVCSBackend,u) of
-    (VCSB_Native _ st run,Just (_,pub,_,_,_)) -> liftIO $ do
-      map (maybe zero unsafeExtractSigned) $ run $ vcLoad st (BranchesKey pub)
+  case u of
+    Just (_,pub,_,_,_) -> getBranches conn pub
     _ -> return zero
