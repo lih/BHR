@@ -568,9 +568,11 @@ findLib l = registerBuiltinsLib`seq`by thunk $ do
     `orIO` readCachedLibrary l
     `orIO` do
       bs <- fromMaybe zero <$> vcbLoad conn (LibraryKey l)
-      return $ do
-        guard (isLibData l bs)
-        f <- matches Just datum bs
-        return (registerLib $ FileLibrary f bs l False Nothing)
+      case guard (isLibData l bs) >> matches Just datum bs of
+        Just f -> do
+          createFileDirectory (cacheName l)
+          writeBytes (cacheName l) bs
+          return (Just (registerLib $ FileLibrary f bs l False Nothing))
+        Nothing -> return Nothing
         
   where orIO ma mb = ma >>= maybe mb (return . Just)
