@@ -33,7 +33,6 @@ import Curly.Session.Commands.Style
 import Curly.Session.Commands.Key
 import Curly.Session.Commands.Repository
 import Curly.Session.Commands.Run
-import Curly.Session.Commands.VCS
 
 commands :: Interactive [(String,[(String,Command)])]
 commands = [
@@ -60,8 +59,7 @@ commands = [
       ("configure",configCmd),
       ("run",runCmd),
       ("fix",fixCmd),
-      ("repository",repoCmd),
-      ("vcs",vcsCmd),
+      ("repository",repositoryCmd),
       ("quit",quitCmd),
       ("kill-server",killCmd)])]
 

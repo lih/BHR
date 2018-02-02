@@ -40,7 +40,7 @@ data-files:
 
 library
   default-language:    Haskell2010
-  exposed-modules:     Curly.Style, Curly.UI, Curly.Session, Curly.UI.Options, Curly.Session.Commands, Curly.Session.Commands.Repository, Curly.Session.Commands.Context, Curly.Session.Commands.Common, Curly.Session.Commands.Query, Curly.Session.Commands.Style, Curly.Session.Commands.Navigation, Curly.Session.Commands.VCS, Curly.Session.Commands.Run, Curly.Session.Commands.Key, Language.Syntax.CmdArgs
+  exposed-modules:     Curly.Style, Curly.UI, Curly.Session, Curly.UI.Options, Curly.Session.Commands, Curly.Session.Commands.Repository, Curly.Session.Commands.Context, Curly.Session.Commands.Common, Curly.Session.Commands.Query, Curly.Session.Commands.Style, Curly.Session.Commands.Navigation, Curly.Session.Commands.Run, Curly.Session.Commands.Key, Language.Syntax.CmdArgs
   default-extensions:  RebindableSyntax
                        FlexibleInstances
                        MultiParamTypeClasses

@@ -194,20 +194,19 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ("key":_) -> []
           ["show",p] -> completeAbsPath w False p
           ["show",_,k] -> completeWord (keys pats) k
-          ["vcs",c] -> completeWord ["list","get","commit","checkout","branch"] c
-          ["vcs","list",k] -> completeKeyName k
-          ["vcs","list",k,b] -> completeBranchName k b
-          ["vcs","get",x] -> completeWord ["source","library"] x
-          ["vcs","commit",b] -> completeBranchName curlyPublisher b
-          ("vcs":"commit":_:t) -> completeVCSFlags t
-          ["vcs","branch",b] -> completeBranchName curlyPublisher b
-          ["vcs","branch",_,c] -> completeWord ["fork","alias"] c
-          ["vcs","branch",_,c,u] | c`elem`["fork","alias"] -> completeKeyName u
-          ["vcs","branch",_,c,u,b] | c`elem`["fork","alias"] -> completeBranchName u b
-          ("vcs":_) -> []
-          ["configure",p] -> completeWord [show n+":"+s | (n,s) <- zip [0..] (curlyFiles ?curlyConfig)] p
-          ["repository",cmd] -> completeWord ["list","add","contents","browse"] cmd
+          ["repository",c] -> completeWord ["info","list","add","get","commit","checkout","branch","browse"] c
+          ["repository","list",t] -> completeWord (keys pats) t
+          ["repository","list",_,k] -> completeKeyName k
+          ["repository","list",_,k,b] -> completeBranchName k b
+          ["repository","get",x] -> completeWord ["source","library"] x
+          ["repository","commit",b] -> completeBranchName curlyPublisher b
+          ("repository":"commit":_:t) -> completeVCSFlags t
+          ["repository","branch",b] -> completeBranchName curlyPublisher b
+          ["repository","branch",_,c] -> completeWord ["fork","alias"] c
+          ["repository","branch",_,c,u] | c`elem`["fork","alias"] -> completeKeyName u
+          ["repository","branch",_,c,u,b] | c`elem`["fork","alias"] -> completeBranchName u b
           ("repository":_) -> []
+          ["configure",p] -> completeWord [show n+":"+s | (n,s) <- zip [0..] (curlyFiles ?curlyConfig)] p
           ["compareTypes",x] -> completeWord ["shape","constraints"] x
           ["cd",p] -> completeAbsPath w True p
           ["ls",p] -> completeAbsPath w True p

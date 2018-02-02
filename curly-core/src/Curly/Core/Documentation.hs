@@ -285,7 +285,9 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),StyleState BeginP zero 0)) & 
             let tstl = tagStl t as
             activeStyle =~ \(_,s) -> (False,(s + tstl))
             s <- getl (activeStyle.l'2)
-            maybe unit (\i -> indentDepth =~ maybe id ((+) . length) (tstl^.tagPrefix) . (+i)) (s^.tagIndent)
+            indentDepth =~
+              maybe id ((+) . length) (tstl^.tagPrefix)
+              . maybe id (+) (s^.tagIndent)
             maybe unit setDisplay (s^.tagDisplay)
             case t of
               "nodoc" -> subDoc (Pure "Not documented:":subs)
