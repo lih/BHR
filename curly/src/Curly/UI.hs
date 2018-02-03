@@ -17,7 +17,7 @@ module Curly.UI(
 
 import Control.DeepSeq (deepseq)
 import Control.Exception hiding (throw)
-import Crypto.Hash.SHA256 (hashlazy)
+import Curly.Core.Security.SHA256 (hashlazy)
 import Curly.Core
 import Curly.Core.Library
 import Curly.Core.Parser

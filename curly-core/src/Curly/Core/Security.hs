@@ -21,7 +21,7 @@ import IO.Filesystem
 import Language.Format
 import qualified Codec.Crypto.AES.IO as AES
 import qualified Curly.Core.Security.EC as EC
-import qualified Crypto.Hash.SHA256 as SHA256
+import qualified Curly.Core.Security.SHA256 as SHA256
 import System.Entropy
 import System.IO
 import IO.Time

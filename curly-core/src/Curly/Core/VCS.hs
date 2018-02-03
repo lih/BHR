@@ -7,7 +7,7 @@ import Curly.Core.Security
 import Curly.Core.Documentation
 import Definitive
 import Language.Format
-import qualified Crypto.Hash.SHA256 as SHA256
+import qualified Curly.Core.Security.SHA256 as SHA256
 import System.Process (readProcess, withCreateProcess)
 import qualified System.Process as Sys
 import Data.IORef

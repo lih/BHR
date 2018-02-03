@@ -22,7 +22,7 @@ module Curly.Core.Library(
   findLib,availableLibs,libraryVCS
   ) where
 
-import Crypto.Hash.SHA256
+import Curly.Core.Security.SHA256
 import Curly.Core
 import Curly.Core.Documentation
 import Curly.Core.VCS
