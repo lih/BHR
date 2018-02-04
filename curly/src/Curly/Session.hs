@@ -22,7 +22,7 @@ import Data.IORef
 import GHC.IO.Handle (hSetBuffering,hClose,BufferMode(..))
 import IO.Filesystem
 import Language.Format
-import System.Console.Readline (readline,addHistory,setCompletionEntryFunction,getLineBuffer,setCompleterWordBreakCharacters)
+import Curly.Readline (readline,addHistory,setCompletionEntryFunction)
 import System.Directory (removeFile)
 import System.Environment
 import System.Exit (exitSuccess)
@@ -37,7 +37,7 @@ isPrefix _ _ = False
 
 data ClientPacket = BannerRequest Bool
                   | LineResponse String
-                  | CompleteRequest String String
+                  | CompleteRequest String
                   | EditResponse Bytes
                   | EndOfTransmission
                   | PubkeyResponse (Maybe PublicKey)
@@ -131,7 +131,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
     pkt <- readChan clt
     plex <- readIORef compPlex
     let ?curlyPlex = plex in case pkt of
-      CompleteRequest lst ln -> withMountain $ do
+      CompleteRequest ln -> withMountain $ do
         w <- getSession wd
         pats <- getSession patterns
         ks <- getKeyStore
@@ -276,9 +276,8 @@ localClient user conn@(Connection clt srv) = do
     trylog unit $ do
       x <- readString curlyHistoryFile
       traverse_ addHistory (lines x)
-    setCompleterWordBreakCharacters " \t\n"
-    setCompletionEntryFunction $ Just $ \s -> getLineBuffer >>= \ln -> do
-      writeChan clt (CompleteRequest s ln)
+    setCompletionEntryFunction $ Just $ \ln -> do
+      writeChan clt (CompleteRequest ln)
       until $ do
         x <- readChan srv
         case x of

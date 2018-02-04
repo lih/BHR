@@ -43,11 +43,10 @@ packages:
 - curly-kademlia
 - curly-core
 - curly-system
-- curly-terminfo
 - curly
 - curly-gateway
-- grow
-- misc
+# - grow
+# - misc
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps: [AES-0.2.9,kademlia-1.1.0.0]

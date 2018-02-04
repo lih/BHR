@@ -1,43 +1,42 @@
 module Curly.Style(
   -- * Posix terminals for more entertaining documentation rendering
-  POSIXTerm,setupTerm,setupTermFromEnv) where
+  ANSITerm,setupTerm,setupTermFromEnv) where
  
 import Definitive
 import Curly.Core.Documentation
 import qualified Control.Monad as Mon
 import qualified Prelude as P
-import qualified System.Console.Terminfo as TI
  
-instance Semigroup (TI.Capability a) where (+) = Mon.mplus
-instance Monoid (TI.Capability a) where zero = Mon.mzero
-instance Semigroup TI.TermOutput where (+) = TI.mappend
-instance Monoid TI.TermOutput where zero = TI.mempty
+csi = "\x1b["
 
-instance Functor TI.Capability where map = P.fmap
-instance Unit TI.Capability where pure = P.return
-instance SemiApplicative TI.Capability
-instance Applicative TI.Capability
-instance Monad TI.Capability where join x = x P.>>= id
+data ANSITerm = ANSITerm
+tc2c :: Bool -> TermColor -> String
+tc2c True Black = "30m"
+tc2c False Black = "40m"
+tc2c True Red = "31m"
+tc2c False Red = "41m"
+tc2c True Green = "32m"
+tc2c False Green = "42m"
+tc2c True Yellow = "33m"
+tc2c False Yellow = "43m"
+tc2c True Blue = "34m"
+tc2c False Blue = "44m"
+tc2c True Magenta = "35m"
+tc2c False Magenta = "45m"
+tc2c True Cyan = "36m"
+tc2c False Cyan = "46m"
+tc2c True White = "37m"
+tc2c False White = "47m"
+tc2c True (ColorNumber n) = "38;5;"+show n+"m"
+instance Terminal ANSITerm where
+  setBold ANSITerm b             = csi + if b then "1m" else "m"
+  setUnderlined ANSITerm b       = csi + if b then "4m" else "24m"
+  setItalic ANSITerm b           = csi + if b then "3m" else "23m"
+  setForegroundColor ANSITerm c  = csi + tc2c True c
+  setBackgroundColor ANSITerm c  = csi + tc2c False c
+  restoreDefaultColors ANSITerm  = csi + "39m"
 
-newtype POSIXTerm = POSIXTerm TI.Terminal
-runCap :: TI.Terminal -> TI.Capability TI.TermOutput -> String
-runCap t c = maybe "" TI.termOutputString $ TI.getCapability t c
-tc2c :: TermColor -> TI.Color
-tc2c Black = TI.Black
-tc2c Red = TI.Red
-tc2c Yellow = TI.Yellow
-tc2c Blue = TI.Blue
-tc2c Magenta = TI.Magenta
-tc2c Cyan = TI.Cyan
-tc2c White = TI.White
-tc2c (ColorNumber n) = TI.ColorNumber n
-instance Terminal POSIXTerm where
-  setBold (POSIXTerm t) b             = runCap t $ if b then TI.boldOn else TI.allAttributesOff
-  setUnderlined (POSIXTerm t) b       = runCap t $ if b then TI.enterUnderlineMode else TI.exitUnderlineMode
-  setItalic (POSIXTerm t) b           = runCap t $ if b then TI.tiGetOutput1 "sitm" else TI.tiGetOutput1 "ritm"
-  setForegroundColor (POSIXTerm t) c  = runCap t $ TI.setForegroundColor <&> ($tc2c c)
-  setBackgroundColor (POSIXTerm t) c  = runCap t $ TI.setBackgroundColor <&> ($tc2c c)
-  restoreDefaultColors (POSIXTerm t)  = runCap t TI.restoreDefaultColors
-
-setupTerm t = POSIXTerm <$> TI.setupTerm t
-setupTermFromEnv = POSIXTerm <$> TI.setupTermFromEnv
+setupTerm :: String -> IO ANSITerm
+setupTerm _ = return ANSITerm
+setupTermFromEnv :: IO ANSITerm
+setupTermFromEnv = return ANSITerm
