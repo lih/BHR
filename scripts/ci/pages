@@ -1,5 +1,12 @@
 #!/bin/bash
 make doc || exit
+function has_cmd() { which "$1" 2>/dev/null; }
+
+if has_cmd sass; then scss=sass
+elif has_cmd sassc; then scss=sassc
+elif has_cmd scss; then scss=scss
+fi
+
 mkdir -p public && {
     packages=( )
     ispackage=
@@ -84,6 +91,6 @@ EOF
 	mkdir -p "public/doc${rel%/*}"
 	pandoc -s --toc --template="curly/doc/template.html" --css "style.css" -o "public/doc${rel/%.md/.html}" "$i"
     done
-    sassc curly/doc/style.scss > public/doc/style.css
+    $scss curly/doc/style.scss > public/doc/style.css
     cp curly/doc/{Titillium.woff2,Roboto.woff2} public/doc/
 }

@@ -5,7 +5,7 @@ stages:
 pages:
   stage: deploy
   script:
-  - apt-get install -y xz-utils
+  - apt-get install -y xz-utils pandoc ruby-compass
   - stack config set system-ghc --global true
   - scripts/ci/pages
   artifacts:
