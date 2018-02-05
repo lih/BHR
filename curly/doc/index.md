@@ -89,6 +89,11 @@ First of all, you'll need a working version of Curly. You can either
 (unpack it with `tar -xJf curly.tar.xz`) or build it from [the
 source](https://gricad-gitlab.univ-grenoble-alpes.fr/coiffiem/curly)
 
+If you're feeling lucky, you can also elect to use the following
+generously provided install script :
+
+    curl -s https://coiffiem.gricad-pages.univ-grenoble-alpes.fr/curly/doc/install.sh | sh -s -- --prefix "$HOME/.local" 
+
 I assume the previous steps went well. If they did, you should now be
 able to run Curly, and it may as well be in your PATH. You can test it
 by running `curly --help`, which should present you with a screen like the following
@@ -147,5 +152,5 @@ Let's put that knowledge in practice with an exercise. Try running
 `curly -M builtins=builtins -i` to walk around the builtin library and
 discover the interactive environment. In that environment, you can
 define functions and use them, just like you would in source files
-(we'll get to the source format in a mo'). Additionally, there are a
-few commands to navigate and discover the context.
+(we'll get to the source format in a mo').
+
