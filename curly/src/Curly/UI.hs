@@ -229,7 +229,7 @@ curlyDataFileName n = withMVar getDataFileName_ref $ \gdfn -> do
   ret1 <- gdfn n
   foldr firstEx (return ret1) [ret1,executableDir+n,executableDir+"../share/curly/"+n,executableDir+"../share/"+n]
   where firstEx f k = do
-          canRead <- fileAccess f True False False
+          canRead <- trylog (return False) (fileAccess f True False False)
           if canRead then return f
             else k
 
