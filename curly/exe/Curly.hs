@@ -68,7 +68,7 @@ t'IOTgt _ x = return x
 initCurly = do
   setLocaleEncoding utf8
   putMVar getDataFileName_ref getDataFileName
-  curlyDataFileName "proto/vc" >>= \p -> modifyIORef vcsProtoRoots (debug p:)
+  curlyDataFileName "proto/vc" >>= \p -> modifyIORef vcsProtoRoots (p:)
   
 ioTgt = return . IOTgt
 forkTgt m = do
