@@ -17,7 +17,7 @@ foreign import ccall "sha256_final" sha256_final :: F.Ptr SHA256_CTX -> F.Ptr F.
 hashlazy :: Bytes -> Chunk
 hashlazy bs = by thunk $ do
   F.allocaBytes 32 $ \ret -> do
-    F.allocaBytes 76 $ \ctx -> do
+    F.allocaBytes 108 $ \ctx -> do
       sha256_init ctx
       for_ (toChunks bs) $ \c -> do
         useAsCStringLen c $ \(s,sz) -> do
