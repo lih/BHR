@@ -84,13 +84,6 @@ EOF
 EOF
     } > public/index.html
 
-    shopt -s globstar
-    mkdir -p "public/doc"
-    for i in curly/doc/**/*.md; do
-	rel="${i#curly/doc}"
-	mkdir -p "public/doc${rel%/*}"
-	pandoc -s --toc --template="curly/doc/template.html" --css "style.css" -o "public/doc${rel/%.md/.html}" "$i"
-    done
-    $scss curly/doc/style.scss > public/doc/style.css
-    cp curly/doc/{Titillium.woff2,Roboto.woff2} public/doc/
+    mkdir -p public/doc
+    tar -xvzf curly/doc/bundle.tar.gz -C public/doc
 }
