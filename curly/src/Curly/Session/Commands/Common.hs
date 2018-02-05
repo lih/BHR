@@ -133,14 +133,11 @@ absPath :: (?sessionState :: IORef SessionState, MonadParser s m p, ParseStream 
 absPath lim = (single '.' >> symPath lim)
               <+? (liftA2 subPath (getSession wd) (symPath lim))
 
-getDataFileName_ref :: MVar (String -> IO String)
-getDataFileName_ref = newEmptyMVar^.thunk
-
 data CurlyDNSQuery = DomainVC (WithResponse (String,PortNumber))
                    | DomainKey String (WithResponse (Zesty PublicKey))
 dns_lookup :: (MonadIO m,Read a) => (WithResponse a -> CurlyDNSQuery) -> m (Maybe a)
-dns_lookup k = liftIO $ withMVar getDataFileName_ref $ \getDataFileName -> do
-  p <- getDataFileName "dns-lookup.sh"
+dns_lookup k = liftIO $ do
+  p <- curlyDataFileName "dns-lookup.sh"
   let t = WithResponse
   case k t of
     DomainVC _ -> readProcess "sh" [p,"domain-vc"] "" <&> \s -> map (response t) (matches Just readable s)

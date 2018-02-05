@@ -17,7 +17,6 @@ import Curly.Core.Peers
 import Curly.Core.Security
 import Curly.Core.VCS
 import Curly.Core.VCS.Diff (patch)
-import Curly.Session.Commands.Common (getDataFileName_ref)
 import Curly.Session
 import Curly.System
 import Curly.System.Base
@@ -69,7 +68,7 @@ t'IOTgt _ x = return x
 initCurly = do
   setLocaleEncoding utf8
   putMVar getDataFileName_ref getDataFileName
-  getDataFileName "proto/vc" >>= \p -> modifyIORef vcsProtoRoots (p:)
+  curlyDataFileName "proto/vc" >>= \p -> modifyIORef vcsProtoRoots (debug p:)
   
 ioTgt = return . IOTgt
 forkTgt m = do
@@ -203,13 +202,13 @@ runTarget (Goody ('b':'u':'i':'l':'t':'i':'n':'s':'/':'v':x)) = ioTgt $ do
     ".cyl" -> writeHBytes stdout ((reverse builtinLibs!!(read h-1))^.flBytes)
     _ -> error $ "No such builtin library: "+x
 runTarget (Goody "list") = ioTgt $ do
-  fn <- getDataFileName "list"
+  fn <- curlyDataFileName "list"
   readBytes fn >>= writeHBytes stdout
   putStrLn "builtins/ids"
   for_ (zip [1..] builtinLibs) $ \(i,l) -> do
     putStrLn $ "builtins/v"+show i
 runTarget (Goody f) = ioTgt $ do
-  fn <- getDataFileName f
+  fn <- curlyDataFileName f
   readBytes fn >>= writeHBytes stdout
 runTarget (SetServer _) = ioTgt unit
 runTarget (SetPrelude _) = ioTgt unit

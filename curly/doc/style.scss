@@ -1,0 +1,43 @@
+/* latin-ext */
+@font-face {
+  font-family: 'Titillium Web';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Titillium Web Regular'), local('TitilliumWeb-Regular'), url(Titillium.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Roboto'), local('Roboto-Regular'), url(Roboto.woff2) format('woff2');
+}
+
+body { width: 60%; margin: auto; font-family: 'Titillium Web'; }
+p, div, body { font-family: 'Titillium Web'; }
+h1, h2, h3, h4, h5, h6 { font-family: 'Roboto'; }
+a { text-decoration: none; color: grey;  }
+a:hover { text-decoration: underline; }
+
+pre, code { background: black; border-radius: 3px; border: 1px white; color: white; padding: 0.1em; }
+pre code { border: none; padding: 0; }
+
+nav {
+    ul { padding: 0; margin: 0; }
+    li > ul {
+	display: none;
+	position: absolute;
+	left: 100%; top: -1px;
+    }
+
+    li { padding: 0.3em; display: block; border: 1px solid; text-decoration: none; position: relative; background: white; }
+    
+    & > ul > li {
+	display: inline-block;
+	width: 15em; 
+	& > ul {
+	    left: -1px; top: 100%;
+	}
+    }
+
+    li:hover > ul { display: block; width: 15em; }
+}

@@ -1,5 +1,5 @@
 #!/bin/bash
-make doc || exit
+# make doc || exit
 mkdir -p public && {
     packages=( )
     ispackage=
@@ -31,6 +31,7 @@ mkdir -p public && {
     <div id="package-header">
       <ul class="links">
         <li><a href="https://gricad-gitlab.univ-grenoble-alpes.fr/coiffiem/curly">Source repository</a></li>
+	<li><a href="doc/index.html">Tutorial</a></li>
       </ul>
       <div class="caption">Curly packages</div></div>
     <div id="content">
@@ -53,11 +54,20 @@ EOF
       <h2>Packages</h2>
       <ul>
 EOF
-        mkdir public/pkg
+        mkdir -p public/pkg
         for exe in "${executables[@]}"; do
+	    version="$(sed -n 's/^version:\s*//p' "$exe/$exe.cabal")"
+	    full="$exe-$version"
 	    shopt -s nullglob
-	    ( cd "$stack_path"; tar -c bin/$exe share/*/$exe-* ) | xz > public/pkg/$exe.tar.xz
-            printf '<li><a href="pkg/%s.tar.xz">%s.tar.xz</a></li>\n' "$exe" "$exe"
+	    (
+	    	tmp="$(mktemp -d)"
+	    	mkdir -p "$tmp/$full"
+	    	cd "$stack_path"
+	    	cp -r bin/$exe share/*/$exe-*/* "$tmp/$full"
+	    	tar -C "$tmp" -c .
+	    	rm -r "$tmp"
+	    ) | xz > public/pkg/$exe.tar.xz
+            printf '<li><a href="pkg/%s.tar.xz">%s.tar.xz</a></li>\n' "$exe" "$full"
         done
         cat <<EOF
       </ul>
@@ -66,4 +76,14 @@ EOF
 </html>
 EOF
     } > public/index.html
+
+    shopt -s globstar
+    mkdir -p "public/doc"
+    for i in curly/doc/**/*.md; do
+	rel="${i#curly/doc}"
+	mkdir -p "public/doc${rel%/*}"
+	pandoc -s --toc --template="curly/doc/template.html" --css "style.css" -o "public/doc${rel/%.md/.html}" "$i"
+    done
+    sassc curly/doc/style.scss > public/doc/style.css
+    cp curly/doc/{Titillium.woff2,Roboto.woff2} public/doc/
 }

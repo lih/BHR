@@ -105,12 +105,13 @@ readline prompt = between (hSetEcho tty False) (hSetEcho tty True) $ do
               putTTY c
               lift $ liftA2 (\x y -> reverse x+y) (getl rlPrefix) (getl rlSuffix)
             RawChar '\DEL' -> do
-              suf <- lift $ do rlPrefix =~ drop 1; getl rlSuffix
-              putTTY (CUB []) >> putTTY (suf+" ") >> putTTY (CUB [1+length suf])
+              (pref,suf) <- lift $ liftA2 (,) (getl rlPrefix) $ do
+                rlPrefix =~ drop 1; getl rlSuffix
+              unless (empty pref) $ do putTTY (CUB []) ; putTTY (suf+" ") ; putTTY (CUB [1+length suf])
               axiom
             CSI [3] '~' -> do -- Reverse delete
-              suf <- lift $ do rlSuffix =~ drop 1; getl rlSuffix
-              putTTY (suf+" ") >> putTTY (CUB [1+length suf])
+              suf <- lift $ getl rlSuffix <* do rlSuffix =~ drop 1
+              unless (empty suf) $ do putTTY (drop 1 suf+" ") ; putTTY (CUB [length suf])
               axiom
             
             RawChar '\SOH' -> do -- Ctrl-a to beginning of line

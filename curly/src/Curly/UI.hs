@@ -12,29 +12,31 @@ module Curly.UI(
   withMountain,reloadMountain,sourceFile,
 
   -- * Misc
-  watchSources,sourceLibs,builtinLibs,getVCSBranches
+  watchSources,sourceLibs,builtinLibs,getVCSBranches,curlyDataFileName,getDataFileName_ref
   ) where
 
+import Control.Concurrent.MVar
 import Control.DeepSeq (deepseq)
+import Control.DeepSeq (force)
 import Control.Exception hiding (throw)
-import Curly.Core.Security.SHA256 (hashlazy)
 import Curly.Core
+import Curly.Core.Annotated
+import Curly.Core.Documentation
 import Curly.Core.Library
 import Curly.Core.Parser
 import Curly.Core.Security
-import Curly.Core.Annotated
-import Curly.Core.Documentation
+import Curly.Core.Security.SHA256 (hashlazy)
+import Curly.Core.VCS
 import Curly.UI.Options
 import Data.IORef 
 import Data.List (sortBy)
 import IO.Filesystem hiding ((</>))
+import IO.Time
 import Language.Format
 import Language.Syntax.CmdArgs hiding (hspace)
 import System.IO (IOMode(..),withFile)
-import System.Posix.Files (createSymbolicLink,removeLink)
-import IO.Time
-import Control.DeepSeq (force)
-import Curly.Core.VCS
+import System.Posix.Files (createSymbolicLink,removeLink,fileAccess)
+import System.Environment (getExecutablePath)
 
 withMountain :: (?curlyPlex :: CurlyPlex,MonadIO m) => ((?mountain :: Mountain) => m a) -> m a
 withMountain m = liftIO (trylogLevel Quiet (return undefined) $ readIORef (?curlyPlex^.mountainCache)) >>= \(c,_) -> let ?mountain = c in m
@@ -215,6 +217,21 @@ type CurlyConfig = [(Maybe String,CurlyOpt)]
 
 followSymlinks :: String -> IO String
 followSymlinks f = return f`trylog`(followSymlinks =<< followSymlink f)
+
+executableDir :: FilePath
+executableDir = (map dropFileName . followSymlinks =<< getExecutablePath)^.thunk
+
+getDataFileName_ref :: MVar (String -> IO String)
+getDataFileName_ref = newEmptyMVar^.thunk
+
+curlyDataFileName :: String -> IO String
+curlyDataFileName n = withMVar getDataFileName_ref $ \gdfn -> do
+  ret1 <- gdfn n
+  foldr firstEx (return ret1) [ret1,executableDir+n,executableDir+"../share/curly/"+n,executableDir+"../share/"+n]
+  where firstEx f k = do
+          canRead <- fileAccess f True False False
+          if canRead then return f
+            else k
 
 i'isJust :: Monoid m => Iso' (Maybe m) Bool
 i'isJust = iso (maybe False (const True)) (\b -> if b then Just zero else Nothing)
