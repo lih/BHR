@@ -332,7 +332,7 @@ curlyPlex args = do
                           $ (c'set.fromKList) [f | (_,Flag f) <- args])
 
 curlyFiles :: CurlyConfig -> [FilePath]
-curlyFiles args = foldr go (const []) [s | (Just s,_) <- args] (c'set zero)
+curlyFiles args = reverse $ foldr go (const []) [s | (Just s,_) <- args] (c'set zero)
   where go f fs visited | isKeyIn f visited = fs visited
                         | otherwise = f:fs (touch f visited)
 

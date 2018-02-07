@@ -11,29 +11,48 @@
   font-weight: 400;
   src: local('Roboto'), local('Roboto-Regular'), url(Roboto.woff2) format('woff2');
 }
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Roboto-Mono'), url(Roboto-Mono.ttf);
+}
 
-body { width: 60%; margin: auto; font-family: 'Titillium Web'; }
+.title { text-align: center; margin-bottom: 2em; }
+body { padding-top: 3em; width: 50%; margin: auto; font-family: 'Titillium Web'; line-height: 180%; }
 p, div, body { font-family: 'Titillium Web'; }
-h1, h2, h3, h4, h5, h6 { font-family: 'Roboto'; }
+h1, h2, h3, h4, h5, h6 { font-family: 'Roboto'; margin-top: 1em; }
 a { text-decoration: none; color: grey;  }
 a:hover { text-decoration: underline; }
 
-pre, code { background: black; border-radius: 3px; border: 1px white; color: white; padding: 0.1em; }
-pre code { border: none; padding: 0; }
+pre { overflow: auto; }
+pre, code { font-family: 'Roboto Mono'; font-size: 90%; background: black; border-radius: 2px; border: 1px grey outset; color: lightgreen; padding: 0.1em 0.5em 0.1em 0.5em; }
+pre code { border: none; padding: 0; line-height: 130%; }
+.curly { background: white; color: black; }
 
 nav {
+    $border-size: 1px;
+    position: absolute;
+    top: 0;
+    
     ul { padding: 0; margin: 0; }
     li > ul {
 	display: none;
 	position: absolute;
-	left: 100%; top: -1px;
+	left: 100%; top: -$border-size;
     }
 
-    li { padding: 0.3em; display: block; border: 1px solid; text-decoration: none; position: relative; background: white; }
+    li { padding: 0.3em;
+	 display: block;
+	 border: $border-size solid;
+	 text-decoration: none;
+	 position: relative;
+	 width: 12em; 
+	 background: white; }
     
     & > ul > li {
 	display: inline-block;
-	width: 15em; 
+	text-align: center;
 	& > ul {
 	    left: -1px; top: 100%;
 	}

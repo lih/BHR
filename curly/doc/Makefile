@@ -1,5 +1,5 @@
 SOURCES := $(wildcard *.md)
-FONTS := $(wildcard *.woff2)
+FONTS := $(wildcard *.woff2) $(wildcard *.ttf)
 
 all: bundle.tar.gz
 
@@ -12,6 +12,8 @@ bundle:
 bundle/%.sh: %.sh | bundle
 	cp $< $@
 bundle/%.woff2: %.woff2 | bundle
+	cp $< $@
+bundle/%.ttf: %.ttf | bundle
 	cp $< $@
 bundle/style.css: style.scss | bundle
 	sassc $< > $@

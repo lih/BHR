@@ -30,19 +30,23 @@ import IO.Network.Socket
 import IO.Time (currentTime)
 import Language.Format
 import Paths_curly
-import System.Directory (doesFileExist)
+import System.Directory (doesFileExist,getCurrentDirectory)
 import System.Environment (getArgs)
 import System.IO (withFile,IOMode(..))
 import System.Process (readProcess)
+import System.FilePath.Posix (splitFileName)
 
 main :: IO ()
 main = cli "curly" $ do
   initCurly
-  
+
+  cwd <- getCurrentDirectory
+  let prefixes "" = []
+      prefixes f = let (h,t) = splitFileName f in f:prefixes (init h)
   args <- parseCurlyArgs <$> getArgs
-  additional <- liftA2 (+)
-                (existingFiles [curlyUserDir</>"default.curly"])
-                (if any (has t'1) args then pure [] else existingFiles [".curly"])
+  additional <- liftA2 (\x y -> convert x + convert y)
+                (firstExistingFile [curlyUserDir</>"default.curly"])
+                (firstExistingFile (if any (has t'1) args then [] else map (+"/.curly") (prefixes cwd)))
   
   let fullArgs = map Left additional + args
 
@@ -53,10 +57,13 @@ main = cli "curly" $ do
         tgts = try [Help] (guard uninhibited >> ?curlyPlex^.targets)
     runTargets tgts
 
-existingFiles :: [String] -> IO [String]
-existingFiles fs = do
-  exs <- traverse doesFileExist fs
-  return (fold (zipWith (\ex f -> fill f (guard ex)) exs fs))
+firstExistingFile :: [String] -> IO (Maybe String)
+firstExistingFile fs = foldr go (return Nothing) fs
+  where go f rest = do
+          ex <- doesFileExist f
+          if ex
+            then return (Just f)
+            else rest
 
 data TargetType = ForkTgt (MVar ())
                 | IOTgt (IO ())
