@@ -161,13 +161,13 @@ runTarget ServeInstance = forkTgt $ \tid1 -> trylog unit $ bracket_
       x <- exchange (DeclareInstance (getConf confInstance))
       case x of
         Left err -> liftIO (putStrLn err) >> zero
-        Right p -> return p
+        Right (PeerPort p) -> return p
   tid2 <- forkIO $ while $ catch (\e -> case fromException e of
                                     Just ThreadKilled -> return False
                                     _ -> print e >> return True)
           $ map (const True) $ do
     h <- peerClient
-    runConnection_ True h $ doTimes_ 1000 $ void $ exchange (RedeclareInstance (getConf confInstance) port)
+    runConnection_ True h $ doTimes_ 1000 $ void $ exchange (RedeclareInstance (getConf confInstance) (PeerPort port))
   tids <- newIORef (c'int 0,c'map zero)
   let ?targetParams = ?targetParams & confThreads %- Just (tid1,tid2,tids)
       

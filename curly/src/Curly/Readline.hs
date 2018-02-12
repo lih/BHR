@@ -101,7 +101,10 @@ readline prompt = between (hSetEcho tty False) (hSetEcho tty True) $ do
             axiom = do
               c <- cseq
               case c of
-                RawChar '\EOT' -> zero
+                RawChar '\EOT' -> do
+                  emptyline <- lift $ liftA2 (\x y -> empty x && empty y) (getl rlPrefix) (getl rlSuffix)
+                  if emptyline then zero
+                    else deleteForward 1 >> axiom
               
                 RawChar '\n' -> do
                   putTTY c

@@ -17,6 +17,7 @@ module Curly.Core(
   Compressed(..),noCurlySuf,(</>),format
   ) where
 
+
 import Definitive
 import Language.Format
 import Curly.Core.Documentation
@@ -83,13 +84,25 @@ instance Semantic (Free (ExprNode s) a) s a where
 
 sem :: Semantic e i o => e -> SemanticT e i o
 sem = by semNode
+
+mkSymbol :: Semantic e i o => o -> e
 mkSymbol x = SemSymbol x^..semNode
+
+mkAbstract :: Semantic e i o => i -> e -> e
 mkAbstract s e = SemAbstract s e^..semNode
+
+mkApply :: Semantic e i o => e -> e -> e
 mkApply a b = SemApply a b^..semNode
 
+pattern PatSymbol :: Semantic e i o => o -> e
 pattern PatSymbol s <- (sem -> SemSymbol s)
+
+pattern PatAbstract :: Semantic e i o => i -> e -> e
 pattern PatAbstract s e <- (sem -> SemAbstract s e)
+
+pattern PatApply :: Semantic e i o => e -> e -> e
 pattern PatApply f x <- (sem -> SemApply f x)
+pattern PatApply2 :: Semantic e i o => e -> e -> e -> e
 pattern PatApply2 f x y <- PatApply (PatApply f x) y
 
 -- | Transform a lambda-like expression into another
@@ -102,10 +115,10 @@ semantic e = case sem e of
 -- | Tranform an expression into another, annotating it with contextual information.
 {-# INLINE syntax #-}
 syntax :: (Semantic e i o,Semantic e' i o'',Ord i) => (o -> o' -> o'') -> (o -> o') -> (o -> i) -> (Int -> o') -> e -> e'
-syntax cons val name loc = syn (zero :: Int,c'map zero)
-  where syn (n,m) = fix $ \syn' e -> case sem e of
-          SemSymbol o -> mkSymbol $ cons o $ maybe (val o) (loc . \m -> (n-m)-1) (m^.at (name o))
-          SemAbstract i e' -> mkAbstract i (syn (n+1,insert i n m) e')
+syntax mergeSym val name loc = syn (zero :: Int,c'map zero)
+  where syn (depth,syms) = fix $ \syn' e -> case sem e of
+          SemSymbol o -> mkSymbol $ mergeSym o $ maybe (val o) (loc . \depth' -> (depth-depth')-1) (syms^.at (name o))
+          SemAbstract i e' -> mkAbstract i (syn (depth+1,insert i depth syms) e')
           SemApply f x -> mkApply (syn' f) (syn' x)
 
 -- | Maps a function over lambda parameters in an expression
@@ -115,8 +128,6 @@ mapParams f = doMap
           SemSymbol s -> mkSymbol s
           SemAbstract s e -> mkAbstract (f s) (doMap e)
           SemApply a b -> mkApply (doMap a) (doMap b)
-
-instance FormatArg PortNumber where argClass _ = 'p'
 
 instance (Documented s,Documented a) => Documented (Expression s a) where
   document expr = docTag' "expr" [Pure $ show' "" expr]
@@ -140,11 +151,11 @@ instance Show B64Chunk where
           to x = [x]
 instance Read B64Chunk where
   readsPrec _ = readsParser $ do
-    let from '-' = '/'
-        from '_' = '+'
-        from x = x
+    let tr '-' = '/'
+        tr '_' = '+'
+        tr x = x
         pad c = c+take (negate (length c)`mod`4) "===="
-    c <- many' (from <$> satisfy p)
+    c <- many' (tr <$> satisfy p)
     (const zero <|> return . B64Chunk) (Base64.decode (pad c^..i'elems))
     where p x = inRange 'a' 'z' x || inRange 'A' 'Z' x || inRange '0' '9' x || x=='_' || x=='-'
 
@@ -178,6 +189,7 @@ curlyCommitDir = curlyDirPath (curlyUserDir + "/commits")
 data LogLevel = Quiet | Verbose | Debug
               deriving (Eq,Ord)
 -- The global log level, as set by the environment variable CURLY_LOGLEVEL
+envLogLevel :: LogLevel
 envLogLevel = envVar "quiet" "CURLY_LOGLEVEL"
               & fromMaybe Quiet . matches Just (foldl1' (<+?) [x<$several s | (x,s) <- levels])
   where levels = [(Quiet,"quiet"),(Verbose,"verbose"),(Debug,"debug")]
@@ -209,8 +221,10 @@ liftIOLog = liftIO . trylogLevel Quiet unit
 
 
 -- | A global INotify instance
+inotify :: INotify
 inotify = initINotify^.thunk
 -- | Sets a watch on the given file, on the usual signals
+watchFile :: FilePath -> IO () -> IO WatchDescriptor
 watchFile s f = addWatch inotify [Modify,Create,Delete,Move,MoveIn,MoveOut,MoveSelf] s (\_ -> f)
 
 -- | A utility function that opens a client socket to the given server and port
@@ -248,7 +262,7 @@ instance (Traversable f,HasIdents s s' (f (Free f' a)) (f' (Free f' a))) => HasI
     where f (Pure a) = pure (Pure a)
           f (Join ffa) = map Join (traverse f ffa >>= traversel ff'idents k)
 instance forall s s' g g' f f' a. (Traversable f,HasIdents s s' (g a) (g' a), HasIdents s s' (f (g' a)) (f' (g' a))) => HasIdents s s' ((f:.:g) a) ((f':.:g') a) where
-  ff'idents k (Compose x) = Compose<$>(traversel (traverse.ff'idents) k x >>= \x -> traversel ff'idents k (x :: f (g' a)))
+  ff'idents k (Compose x) = Compose<$>(traversel (traverse.ff'idents) k x >>= \y -> traversel ff'idents k (y :: f (g' a)))
 instance HasIdents s s' (ExprNode s a) (ExprNode s' a) where
   ff'idents k (Lambda s a) = k s <&> \s' -> Lambda s' a
   ff'idents _ (Apply x y) = pure (Apply x y)
@@ -291,7 +305,7 @@ data Builtin = B_Undefined
              | B_Open | B_Read | B_Write | B_Close
              deriving (Eq,Ord,Show,Generic)
 instance Documented Builtin where
-  document b = Pure (show' b)
+  document = Pure . show'
     where show' (B_Number n) = show n
           show' (B_String s) = show s
           show' b = show b
@@ -306,12 +320,14 @@ instance Serializable a => Serializable (Compressed a) where
 instance Format a => Format (Compressed a) where
   datum = (datum <&> decompress) >*> (Compressed <$> datum)
 
+noCurlySuf :: FilePath -> Maybe FilePath
 noCurlySuf f = nosuffix ".cy" f + nosuffix ".curly" f + nosuffix ".cyl" f
   where nosuffix s s' = if t==s then Just h else Nothing
           where (h,t) = splitAt (length s'-length s) s'
 
 newtype LibraryID = LibraryID Chunk
                 deriving (Eq,Ord,Generic)
+idSize :: Int
 idSize = 32
 instance Serializable LibraryID where
   encode (LibraryID x) = x^.chunkBuilder

@@ -34,7 +34,11 @@ i'ascList :: (OrderedMap m k a,OrderedMap m' k' a') => Iso [(k,a)] [(k',a')] m m
 i'ascList = iso (by ascList) (yb ascList)
 
 data TypeClass s = Function | NamedType Int s | ClassType Int [Set Int] s
-               deriving (Show,Eq,Ord,Generic)
+               deriving (Eq,Ord,Generic)
+instance Identifier s => Show (TypeClass s) where
+  show Function = "->"
+  show (NamedType _ s) = identName s
+  show (ClassType _ _ s) = identName s
 instance HasIdents s s' (TypeClass s) (TypeClass s') where
   ff'idents _ Function = pure Function
   ff'idents k (NamedType n s) = NamedType n<$>k s
@@ -62,16 +66,20 @@ instance NFData NativeType
 
 -- | An index into a type
 data TypeIndex s = TypeIndex (TypeClass s) Int
-                 deriving (Eq,Ord,Show,Generic)
+                 deriving (Eq,Ord,Generic)
+instance Identifier s => Show (TypeIndex s) where
+  show (TypeIndex c n) = show c+":"+show n
 instance HasIdents s s' (TypeIndex s) (TypeIndex s') where
   ff'idents k (TypeIndex c i) = forl ff'idents c k <&> \c' -> TypeIndex c' i
 instance Serializable s => Serializable (TypeIndex s)
 instance Format s => Format (TypeIndex s)
 instance NFData s => NFData (TypeIndex s)
+pattern In :: TypeIndex t
 pattern In = TypeIndex Function 0
+pattern Out :: TypeIndex t
 pattern Out = TypeIndex Function 1
 
-{- | The path of a node inRange a type.
+{- | The path of a node inside a type.
 
 A path is comprised of two parts : a canonical path, which uniquely identifies the node within
 its type graph; and a set of equivalent paths that are shared between all types.
@@ -174,6 +182,8 @@ instance Identifier s => Ord (Type s) where
           cmpNodes s s' = case compare s s' of
             EQ -> unit
             x -> Left x
+
+compareConstrainedness :: Identifier s => Type s -> Type s -> Maybe Ordering
 compareConstrainedness t t' = case fst (zipTypes cmp t t') of
     (True,False) -> Just GT
     (False,True) -> Just LT
@@ -183,20 +193,23 @@ compareConstrainedness t t' = case fst (zipTypes cmp t t') of
           cmp PolyType _ = tell (False,True)
           cmp _ PolyType = tell (True,False)
           cmp _ _ = tell (True,True)
+isSubtypeOf :: Identifier s => Type s -> Type s -> Bool
 isSubtypeOf t t' = compareConstrainedness t t' `elem` [Just GT,Just EQ]
 
 instance Identifier s => Show (Type s) where
-  show t@(Type e) = (arguments+implicits+body+context+subs)
+  show (Type e) = (arguments+implicits+body+context+subs)
     where paths :: Map (Set (TypePath s)) (Maybe (TypeClass s),Maybe String,String)
-          ~(paths,_,_) = execS (traverseTypeShapes f t^..state) (c'map zero,tail (namesFrom ['a'..'z']),tail (namesFrom ['A'..'Z']))
+          ~(paths,_,_) = execS (traverseTypeShapes f (Type e)^..state) (c'map zero,tail (namesFrom ['a'..'z']),tail (namesFrom ['A'..'Z']))
             where f ps x = x <$ do
                     let p:_ = ps
                     modify $ \(m,as,bs) ->
                       let ins a b c = insert (fromKList ps) (a,b,c) m
                       in if isKeyIn (fromKList ps) m then (m,as,bs) else case x of
                       TypeCons c -> let short = guard (length ps>1) >> pure (head bs)
-                                    in (ins (Just c) short (showPat (showC c) [let (pri,ms,s) = mlookup (e^.l'rangeSet (second (+[TypeIndex c i]) p)) paths
-                                                                               in fromMaybe ((if hasPrecedence i c pri then format "(%s)" else id) s) ms
+                                    in (ins (Just c) short (showPat (showC c) [let p' = second (+[TypeIndex c i]) p
+                                                                               in case lookup (e^.l'rangeSet p') paths of
+                                                                                 Just (pri,ms,s) -> fromMaybe ((if hasPrecedence i c pri then format "(%s)" else id) s) ms
+                                                                                 Nothing -> "#<path:"+showPath p'+">"
                                                                               | i <- [0..typeClassNArgs c-1]]),
                                         as,maybe id (pure tail) short bs)
                       PolyType | length ps>1 -> (ins Nothing Nothing (head as),tail as,bs)
@@ -223,6 +236,10 @@ instance Identifier s => Show (Type s) where
           showNT NT_Expr = "#expr"
           showNT NT_Array = "#array"
           showNT (NT_RigidType t) = t
+          showPath (r,p) = show r+":"+foldMap showPComp p
+            where showPComp In = "I"
+                  showPComp Out = "O"
+                  showPComp (TypeIndex c n) = format "(%s,%s)" (show c) (show n)
           pathList = paths^.ascList <&> \(x,(_,y,z)) -> (x,(y,z))
           namesFrom cs = "":fold (deZip (for cs (\c -> Zip (map (c:) (namesFrom cs)))))
           arguments = let x = intercalate "," [format "(%d)%s" i (snd s) | (ps,s) <- pathList, (ArgumentRoot i,[]) <- keys ps]
@@ -248,23 +265,25 @@ zipTypes zipNodes (Type ta) (Type tb) =
         mergeSkol (SkolemType n,SkolemType _) = SkolemType n
         mergeSkol (PolyType,SkolemType n) = SkolemType (n+nska+1)
         mergeSkol (a,b) = a+b
-        saturate vis e =
-          case [(c,unifyShapes (keysSet m) shl shr)
-               | (c,m) <- e^.i'equivRel.i'domains.ascList
-               , (_,(shl,shr)) <- take 1 (m^.ascList)
-               , not (isKeyIn c vis)] of
-            [] -> return e
-            ((c,f):_) -> f e >>= \e' -> saturate (vis + keysSet (e'^.l'domain c)) e'
+        saturate vis rel =
+          case [(can,unifyShapes (keysSet dom) shl shr rel)
+               | (can,dom) <- rel^.i'equivRel.i'domains.ascList
+               , (_,(shl,shr)) <- take 1 (dom^.ascList)
+               , not (isKeyIn can vis)] of
+            [] -> return rel
+            ((can,unify):_) -> unify >>= \(invalids,rel') -> saturate ((vis + keysSet (rel'^.l'domain can))-invalids) rel'
 
-        unifyShapes ks shl shr e = do
+        unifyShapes ks shl shr rel = do
           zipNodes shl shr
-          let unis = case shl+shr of
+          let nodeSets = case shl+shr of
                 TypeCons s -> map (\i -> map (second (+[TypeIndex s i])) ks) [0..typeClassNArgs s-1]
                 _ -> []
-          return $ foldr (unifyNodes . keys) e unis
+          return $ foldr (unifyNodes . keys) (zero,rel) nodeSets
         
-        unifyNodes l@(c:_) e = e & l'range c %~ (+fromKList l)
-        unifyNodes _ e = e
+        unifyNodes nodes@(can:_) (invalids,rel) =
+          (l'range can) (\r -> (invalids+keysSet (nodesM-r),nodesM+r)) rel
+          where nodesM = fromKList nodes
+        unifyNodes _ x = x
 
 type TypeSkel s = Free ((,) (TypeClass s):.:[]) (TypeShape s)
 
@@ -273,12 +292,18 @@ poly :: TypeSkel s
 poly = Pure PolyType
 infixr 3 -->
 a --> b = Join (Compose (Function,[a,b]))
+
+lnSkel :: Ord s => TypePath s -> TypePath s -> TypeSkel s -> Equiv (TypeShape s) (TypePath s) -> Equiv (TypeShape s) (TypePath s)
 lnSkel p p' = \x -> case x of
   Join (Compose (c,as)) -> set (link p p') (Just (TypeCons c))
                            . compose (zipWith (\i a -> let down = (+[TypeIndex c i])
                                                        in lnSkel (second down p) (second down p') a) [0..] as)
   Pure sh -> warp (link p p') (Just . (sh+) . fold)
+
+ln :: Ord s => [TypeIndex s] -> [TypeIndex s] -> TypeSkel s -> Equiv (TypeShape s) (TypePath s) -> Equiv (TypeShape s) (TypePath s)
 ln p p' = lnSkel (TypeRoot,p) (TypeRoot,p')
+
+ln' :: Ord s => [TypeIndex s] -> TypeSkel s -> Equiv (TypeShape s) (TypePath s) -> Equiv (TypeShape s) (TypePath s)
 ln' p = ln p p
 
 mapTypePaths :: Ord s => (TypePath s -> Maybe (TypePath s)) -> Type s -> Type s
@@ -340,8 +365,8 @@ rigidTypeFun n = zero
         
 -- | Create a pair of constructor/destructor types
 abstractStructTypes :: Ord s => s -> [String] -> [String] -> Type s -> (Type s,Type s)
-abstractStructTypes c pub priv t@(Type e) = (Type e,Type e) & mk True <#> mk False
-  where (classPos,_) = (traverseTypeShapes k t^..state) (c'map zero)
+abstractStructTypes c pub priv (Type e) = (Type e,Type e) & mk True <#> mk False
+  where (classPos,_) = (traverseTypeShapes k (Type e)^..state) (c'map zero)
           where k ps sh@(NativeType (NT_RigidType s))
                   | isPrivate s = do
                       for_ ps $ \(p,_) -> mat p.l'1 =- True

@@ -27,7 +27,10 @@ import Control.DeepSeq
 import Curly.Core.Types
 import GHC.Conc (par)
 
+pattern PatBuiltin :: Semantic e i (s, Free f (Symbol s')) => Type s' -> Builtin -> e
 pattern PatBuiltin t b <- PatSymbol (_,Pure (Builtin t b))
+
+pattern TypeConstraints :: Ord s => [(s, [Set Int])] -> [(s, [Set Int])] -> Type s
 pattern TypeConstraints a b <- (typeConstraints -> (a,b))
 
 -- | A symbol is either an argument referring to its nth parent, or a builtin
@@ -73,11 +76,11 @@ data Strictness = Delayed String ExprStrictness
 instance Serializable Strictness
 instance Format Strictness
 instance Documented Strictness where
-  document st = docTag' "strictness" [Pure (sh 0 [] st)]
+  document st = docTag' "strictness" [Pure (sh (0 :: Int) [] st)]
     where sh n env (Delayed s e) = let env' = newVar s env
-                                   in par 0 n $ format "\\%s. %s" (head env') (shS 0 env' e)
+                                   in paren 0 n $ format "\\%s. %s" (head env') (shS 0 env' e)
           sh _ env (HNF h []) = shH env h
-          sh n env (HNF h xs) = par 1 n $ intercalate " " (shH env h : map (shS 2 env) xs)
+          sh n env (HNF h xs) = paren 1 n $ intercalate " " (shH env h : map (shS 2 env) xs)
           shS n env ([],e) = sh n env e
           shS n env (es,e) = format "[%s] %s" (intercalate "," (map (sh n env) es)) (sh n env e)
           shH env (StH_Val n) = case drop n env of
@@ -88,8 +91,8 @@ instance Documented Strictness where
                                   in format "(fix %s = %s)" (head env') (shS 0 env' e)
           newVar s env | elem s env = newVar (s+"'") env
                        | otherwise = s:env
-          par n m x | n>=m = x
-                    | otherwise = format "(%s)" x
+          paren n m x | (n :: Int)>=m = x
+                      | otherwise = format "(%s)" x
 
 strictnessArg :: Traversal (Int,Int) Int Strictness Strictness
 strictnessArg k = descend 0
@@ -148,15 +151,15 @@ i'NameNode = i'Compose.iso NameNode (\(NameNode a) -> a)
 -- | A fully-resolved, annotated expression
 type AnnExpr s = Free (AnnNode s) (Symbol s)
 instance Identifier s => Semantic (AnnExpr s) s (Symbol s) where
-  semNode = iso f g
-    where f (Pure s) = SemSymbol s
-          f (Join (AnnNode { _shape = Lambda s e })) = SemAbstract s e
-          f (Join (AnnNode { _shape = Apply f x })) = SemApply f x
-          g (SemApply f x) = Join (AnnNode i m r t st (Apply f x))
+  semNode = iso go back
+    where go (Pure s) = SemSymbol s
+          go (Join (AnnNode { _shape = Lambda s e })) = SemAbstract s e
+          go (Join (AnnNode { _shape = Apply f x })) = SemApply f x
+          back (SemApply f x) = Join (AnnNode i m r t st (Apply f x))
             where (i,m,r,t,st) = applyAnns f x
-          g (SemAbstract s e) = Join (AnnNode i m r t st (Lambda s e))
+          back (SemAbstract s e) = Join (AnnNode i m r t st (Lambda s e))
             where (i,m,r,t,st) = lambdaAnns s e
-          g (SemSymbol s) = Pure s
+          back (SemSymbol s) = Pure s
 
 type NameTail s = Free (NameNode s) (Symbol s)
 -- | A partially resolved expression. Each level corresponds to a different module.
@@ -165,7 +168,7 @@ instance forall s. Identifier s => Semantic (NameExpr s) s (s,NameTail s) where
   semNode = iso f g
     where f e = case e^..i'NameNode of
             Join (AnnNode { _shape = Apply a b }) -> SemApply (a^.i'NameNode) (b^.i'NameNode)
-            Join (AnnNode { _shape = Lambda s e }) -> SemAbstract s (e^.i'NameNode)
+            Join (AnnNode { _shape = Lambda s body }) -> SemAbstract s (body^.i'NameNode)
             Pure s -> SemSymbol s
           g (SemSymbol s) = Pure s^.i'NameNode
           g (SemAbstract s e) = 
@@ -195,9 +198,9 @@ instance forall s. Identifier s => Semantic (NameExpr s) s (s,NameTail s) where
                     | otherwise =
                       let targ@(TypeConstraints _ tds) = freezeType t
                           im = fold
-                               $ zipWith (\i (s,is) -> [((s,ind,t),(t,mkSymbol (s,Pure (Argument i))))
+                               $ zipWith (\i (s,is) -> [((s,ind,t'),(t',mkSymbol (s,Pure (Argument i))))
                                                        | ind <- is
-                                                       , let t = mapTypePathsMonotonic (keepContext i) targ]) [0..]
+                                                       , let t' = mapTypePathsMonotonic (keepContext i) targ]) [0..]
                                $ reverse tds
                           keepContext i (ContextRoot j,p) | i==j = Just (ImplicitRoot 0,p)
                           keepContext _ _ = Nothing
@@ -212,12 +215,12 @@ instance forall s. Identifier s => Semantic (NameExpr s) s (s,NameTail s) where
                   stripDeducts :: NameExpr s -> NameExpr s
                   stripDeducts e
                     | nonempty bds =
-                      let [a] = map pureIdent ["a"]
+                      let [sym] = map pureIdent ["a"]
                           arg = Pure . Argument
                       in set t'exprType tb'
-                         $ abstractSyms (bcs+[a]) $ nnApply (applySyms (0,1+length bcs) (1,bcs) e)
+                         $ abstractSyms (bcs+[sym]) $ nnApply (applySyms (0,1+length bcs) (1,bcs) e)
                          $ abstractSyms bds
-                         $ mkSymbol (a,arg (length bds))
+                         $ mkSymbol (sym,arg (length bds))
                     | otherwise = e
 
 newtype RawNameExpr s = RawNameExpr { _rawNameExpr :: NameExpr s }
@@ -226,14 +229,16 @@ instance Identifier s => Semantic (RawNameExpr s) s (s,NameTail s) where
     where f (RawNameExpr e) = case e^.semNode of
             SemSymbol s -> SemSymbol s
             SemApply a b -> SemApply (RawNameExpr a) (RawNameExpr b)
-            SemAbstract s e -> SemAbstract s (RawNameExpr e)
+            SemAbstract s body -> SemAbstract s (RawNameExpr body)
           g e = RawNameExpr $ case e of
             SemSymbol s -> mkSymbol s
             SemApply (RawNameExpr a) (RawNameExpr b) -> nnApply a b
-            SemAbstract s (RawNameExpr e) -> nnAbstract s e
+            SemAbstract s (RawNameExpr body) -> nnAbstract s body
 
+nnApply :: Annotated (NameNode s a) s => NameNode s a -> NameNode s a -> NameNode s a
 nnApply a b = Join (AnnNode i m r zero st (Apply (a^..i'NameNode) (b^..i'NameNode)))^.i'NameNode
   where (i,m,r,_,st) = applyAnns a b
+nnAbstract :: Annotated (NameNode s a) s => s -> NameNode s a -> NameNode s a
 nnAbstract s e = Join (AnnNode i m r zero st (Lambda s (e^..i'NameNode)))^.i'NameNode
   where (i,m,r,_,st) = lambdaAnns s e 
 
@@ -284,79 +289,81 @@ mapRefs sym = descend 0
           SemAbstract s e' -> nnAbstract s (descend (n+1) e')
           SemApply f x -> nnApply (descend n f) (descend n x)
 
+isComplexStrictness :: Strictness -> Bool
 isComplexStrictness (HNF (StH_Val n) xs) = or [n==n' && length xs > length xs' && and (zipWith (==) xs xs')
                                             | (_,HNF (StH_Val n') xs') <- xs]
                                          || any (isComplexStrictness . snd) xs
 isComplexStrictness (HNF (StH_Fix _ _) _) = True
-isComplexStrictness (HNF h xs) = any (isComplexStrictness . snd) xs
+isComplexStrictness (HNF _ xs) = any (isComplexStrictness . snd) xs
 isComplexStrictness (Delayed _ e) = isComplexStrictness (snd e)
 
 optimize :: forall s. Identifier s => (Builtin -> s) -> NameExpr s -> NameExpr s
-optimize showB e = if envVar "optimize" "CURLY_OPTIMIZE"=="optimize"
-                   then set t'exprType (exprType e) $ _rawNameExpr $ opt ([],[]) e
-                   else e
-  where prettyNE e = pretty (mapParams identName (map (identName . fst) (semantic e) :: Expression s String) :: Expression String String)
-        prettyM m = format "[%s]" (intercalate "," (map (maybe "?" prettyNE) m)) :: String
-        prettyV v = format "[%s]" (intercalate "," (map (\(b,x) -> show b+":"+prettyNE x) v)) :: String
-        opt (m,v) e = case sem e of
-          SemSymbol (s,Pure (Argument n)) ->
-            let transNode d x = case sem x of
-                  SemSymbol (s,Pure (Argument n'')) | n''>=d -> mkSymbol (s,Pure (Argument (n'+n''))) 
-                  SemSymbol s -> mkSymbol s
-                  SemApply f x -> mkApply (transNode d f) (transNode d x)
-                  SemAbstract s e -> mkAbstract s (transNode (d+1) e)
-                n' = transTail n
-            in case drop n m of
-              Just x':_ -> (if nonempty v then opt ([],v) . _rawNameExpr else id) (transNode 0 x')
-              _ -> foldl' mkApply (mkSymbol (s,Pure (Argument n'))) (map snd v)
-          SemSymbol (s,Pure (Builtin t b)) -> optBuiltin (s,t,b) v
-          SemSymbol sym@(_,Join x) -> case (leftmost x,v) of
-            ((n,SemAbstract _ e'),(b,_):_) | isInline b n e' -> opt (m,v) x
-            ((_,SemSymbol (_,Pure (Builtin _ _))),_) -> opt (m,v) x
-            ((_,SemSymbol (_,Join _)),_) -> opt (m,v) x
-            _ -> foldl' mkApply (mkSymbol sym) (map snd v)
-          SemAbstract s e' -> case v of
-            (b,x):v' | isInline b 0 e' -> opt (Just x:m,v') e'
-                     | otherwise -> mkApply (etaReduce v' s e') x
-            [] -> etaReduce [] s e'
-          SemApply f x -> opt (m,(vh,x'):v) f
-            where x' = opt (m,[]) x
-                  vh = case sem x' of SemSymbol _ -> True ; _ -> False
-          where transTail n = n-length [() | Just _ <- take n m]
-                isInline b n e' = b || mlookup (Argument n) (exprRefs e') <= 1
-                                  || (not (isComplexStrictness (snd (exprStrictness e))))
-                etaReduce v s e = let e' = opt (Nothing:m,v) (e :: NameExpr s) in
-                  case sem e' of
-                    SemApply f (sem -> SemSymbol (_,Pure (Argument 0)))
-                      | mlookup (Argument 0) (exprRefs (_rawNameExpr f)) == 0
-                        -> opt ([Just undefined],[]) (_rawNameExpr f)
-                    _ -> mkAbstract s e'
-        leftmost (sem -> y) = case y of
-          SemApply f _ -> first (+1) (leftmost f)
-          _ -> (0,y)
-        isComm B_AddInt B_AddInt = True
-        isComm B_AddString B_AddString = True
-        isComm _ _ = False
-        mkBuiltin t b = mkSymbol (showB b,Pure (Builtin t b))
-        mkNumber t n = mkBuiltin t (B_Number n)
-        optBuiltin (_,t,B_ShowInt) [(_,PatBuiltin _ (B_Number n))] = mkBuiltin t (B_String (show n))
-        optBuiltin (_,_,B_AddInt) [(_,PatBuiltin t (B_Number n)),(_,PatBuiltin _ (B_Number n'))] = mkNumber t (n+n')
-        optBuiltin (_,_,B_MulInt) [(_,PatBuiltin t (B_Number n)),(_,PatBuiltin _ (B_Number n'))] = mkNumber t (n*n')
-        optBuiltin (_,_,B_SubInt) [(_,PatBuiltin t (B_Number n)),(_,PatBuiltin _ (B_Number n'))] = mkNumber t (n-n')
-        optBuiltin (_,_,B_DivInt) [(_,PatBuiltin t (B_Number n)),(_,PatBuiltin _ (B_Number n'))] = mkNumber t (n`div`n')
-        optBuiltin (s,t,B_AddInt) [(x1,PatApply2 (PatBuiltin _ B_AddInt) x (PatBuiltin ts (B_Number a)))
-                                  ,(x2,PatBuiltin _ (B_Number b))]
-          = optBuiltin (s,t,B_AddInt) [(x1,x),(x2,mkBuiltin ts (B_Number (a+b)))]
-        
-        optBuiltin (_,_,B_AddString) [(_,PatBuiltin t (B_String x)),(_,PatBuiltin _ (B_String y))] = mkBuiltin t (B_String (x+y))
-        optBuiltin (s,t,B_AddString) [(x1,PatApply2 (PatBuiltin _ B_AddString) x (PatBuiltin ts (B_String a)))
-                                     ,(x2,PatBuiltin _ (B_String b))]
-          = optBuiltin (s,t,B_AddString) [(x1,x),(x2,mkBuiltin ts (B_String (a+b)))]
+optimize showB = \e -> if envVar "optimize" "CURLY_OPTIMIZE"=="optimize"
+                       then set t'exprType (exprType e) $ _rawNameExpr $ opt ([],[]) e
+                       else e
+  where
+    -- prettyNE e = pretty (mapParams identName (map (identName . fst) (semantic e) :: Expression s String) :: Expression String String)
+    -- prettyM m = format "[%s]" (intercalate "," (map (maybe "?" prettyNE) m)) :: String
+    -- prettyV v = format "[%s]" (intercalate "," (map (\(b,x) -> show b+":"+prettyNE x) v)) :: String
+    opt (m,v) = sem >>> \case
+      SemSymbol (s,Pure (Argument n)) ->
+        let transNode d = sem >>> \case
+              SemSymbol (sid,Pure (Argument n'')) | n''>=d -> mkSymbol (sid,Pure (Argument (n'+n''))) 
+              SemSymbol sym -> mkSymbol sym
+              SemApply f x -> mkApply (transNode d f) (transNode d x)
+              SemAbstract sid e -> mkAbstract sid (transNode (d+1) e)
+            n' = transTail n
+        in case drop n m of
+          Just x':_ -> (if nonempty v then opt ([],v) . _rawNameExpr else id) (transNode 0 x')
+          _ -> foldl' mkApply (mkSymbol (s,Pure (Argument n'))) (map snd v)
+      SemSymbol (s,Pure (Builtin t b)) -> optBuiltin (s,t,b) v
+      SemSymbol sym@(_,Join x) -> case (leftmost x,v) of
+        ((n,SemAbstract _ e'),(b,_):_) | isInline b n e' -> opt (m,v) x
+        ((_,SemSymbol (_,Pure (Builtin _ _))),_) -> opt (m,v) x
+        ((_,SemSymbol (_,Join _)),_) -> opt (m,v) x
+        _ -> foldl' mkApply (mkSymbol sym) (map snd v)
+      SemAbstract s e' -> case v of
+        (b,x):v' | isInline b 0 e' -> opt (Just x:m,v') e'
+                 | otherwise -> mkApply (etaReduce v' s e') x
+        [] -> etaReduce [] s e'
+      SemApply f x -> opt (m,(vh,x'):v) f
+        where x' = opt (m,[]) x
+              vh = case sem x' of SemSymbol _ -> True ; _ -> False
+      where transTail n = n-length [() | Just _ <- take n m]
+            isInline b n e' = b || mlookup (Argument n) (exprRefs e') <= 1
+                              || (not (isComplexStrictness (snd (exprStrictness e'))))
+            etaReduce v' s e = let e' = opt (Nothing:m,v') (e :: NameExpr s) in
+              case sem e' of
+                SemApply f (sem -> SemSymbol (_,Pure (Argument 0)))
+                  | mlookup (Argument 0) (exprRefs (_rawNameExpr f)) == 0
+                    -> opt ([Just undefined],[]) (_rawNameExpr f)
+                _ -> mkAbstract s e'
+    leftmost (sem -> y) = case y of
+      SemApply f _ -> first (+1) (leftmost f)
+      _ -> (0,y)
+    isComm B_AddInt B_AddInt = True
+    isComm B_AddString B_AddString = True
+    isComm _ _ = False
+    mkBuiltin t b = mkSymbol (showB b,Pure (Builtin t b))
+    mkNumber t n = mkBuiltin t (B_Number n)
+    optBuiltin (_,t,B_ShowInt) [(_,PatBuiltin _ (B_Number n))] = mkBuiltin t (B_String (show n))
+    optBuiltin (_,_,B_AddInt) [(_,PatBuiltin t (B_Number n)),(_,PatBuiltin _ (B_Number n'))] = mkNumber t (n+n')
+    optBuiltin (_,_,B_MulInt) [(_,PatBuiltin t (B_Number n)),(_,PatBuiltin _ (B_Number n'))] = mkNumber t (n*n')
+    optBuiltin (_,_,B_SubInt) [(_,PatBuiltin t (B_Number n)),(_,PatBuiltin _ (B_Number n'))] = mkNumber t (n-n')
+    optBuiltin (_,_,B_DivInt) [(_,PatBuiltin t (B_Number n)),(_,PatBuiltin _ (B_Number n'))] = mkNumber t (n`div`n')
+    optBuiltin (s,t,B_AddInt) [(x1,PatApply2 (PatBuiltin _ B_AddInt) x (PatBuiltin ts (B_Number a)))
+                              ,(x2,PatBuiltin _ (B_Number b))]
+      = optBuiltin (s,t,B_AddInt) [(x1,x),(x2,mkBuiltin ts (B_Number (a+b)))]
+    
+    optBuiltin (_,_,B_AddString) [(_,PatBuiltin t (B_String x)),(_,PatBuiltin _ (B_String y))] = mkBuiltin t (B_String (x+y))
+    optBuiltin (s,t,B_AddString) [(x1,PatApply2 (PatBuiltin _ B_AddString) x (PatBuiltin ts (B_String a)))
+                                 ,(x2,PatBuiltin _ (B_String b))]
+      = optBuiltin (s,t,B_AddString) [(x1,x),(x2,mkBuiltin ts (B_String (a+b)))]
 
-        optBuiltin (s,t,b) [(x1,x),(x2,PatApply2 (PatBuiltin _ b') y z)]
-          | isComm b b' = optBuiltin (s,t,b) [(x1,opt ([],[]) $ _rawNameExpr (mkBuiltin t b'`mkApply`x`mkApply`y))
-                                             ,(x2,z)]
-        optBuiltin (s,t,b) v = foldl' mkApply (mkSymbol (s,Pure (Builtin t b))) (map snd v)
+    optBuiltin (s,t,b) [(x1,x),(x2,PatApply2 (PatBuiltin _ b') y z)]
+      | isComm b b' = optBuiltin (s,t,b) [(x1,opt ([],[]) $ _rawNameExpr (mkBuiltin t b'`mkApply`x`mkApply`y))
+                                         ,(x2,z)]
+    optBuiltin (s,t,b) v = foldl' mkApply (mkSymbol (s,Pure (Builtin t b))) (map snd v)
 
 solveConstraints :: Identifier s => InstanceMap s (Type s,NameExpr s) -> NameExpr s -> NameExpr s
 solveConstraints im = solve
@@ -365,13 +372,13 @@ solveConstraints im = solve
               insts t =
                 let TypeConstraints cs _ = t
                 in zipWith (\j (i,x) -> (i-j,x)) [0..]
-                   [(i,e) | (i,(c,is)) <- zip [0..] cs
-                          , let ti = mapTypePathsMonotonic (keepRoot i (const True)) t
-                          , e <- take 1 [
-                            e
-                            | ind <- is
-                            , Just e <- [lookup (c,ind,ti) im]
-                            , ti`isSubtypeOf`mapTypePathsMonotonic (keepRoot 0 (`isKeyIn`ind)) (fst e)]]
+                   [(i,e') | (i,(c,is)) <- zip [0..] cs
+                           , let t' = mapTypePathsMonotonic (keepRoot i (const True)) t
+                           , e' <- take 1 [
+                              e'
+                              | ind <- is
+                              , Just e' <- [lookup (c,ind,ti) im]
+                              , t'`isSubtypeOf`mapTypePathsMonotonic (keepRoot 0 (`isKeyIn`ind)) (fst e')]]
               keepRoot i keep (ImplicitRoot j,p) | i==j = case p of
                 [] -> Just (ImplicitRoot 0,p)
                 TypeIndex _ n:_ | keep n -> Just (ImplicitRoot 0,p)
@@ -425,14 +432,14 @@ shape = by thunk $ do
 
 -- | The class of annotated expressions, from which some information may be retrieved.
 class Identifier s => Annotated e s | e -> s where
-  exprId :: e -> Int
+  exprIdent :: e -> Int
   exprMass :: e -> Int
   exprRefs :: e -> Map (Symbol s) Int
   exprType :: e -> Type s
   exprStrictness :: e -> ExprStrictness
 instance Identifier s => Annotated (AnnExpr s) s where
-  exprId (Join ann) = _ident ann
-  exprId (Pure s) = Left s^..shape
+  exprIdent (Join ann) = _ident ann
+  exprIdent (Pure s) = Left s^..shape
   exprMass (Join ann) = _mass ann
   exprMass (Pure _) = 1
   exprRefs (Join ann) = _refs ann
@@ -444,20 +451,20 @@ instance Identifier s => Annotated (AnnExpr s) s where
   exprStrictness (Join ann) = _strictness ann
   exprStrictness (Pure (Argument n)) = pure (HNF (StH_Val n) [])
   exprStrictness (Pure (Builtin _ b)) = pure $ case b of
-    B_AddInt -> binOp B_AddInt
-    B_MulInt -> binOp B_MulInt
-    B_DivInt -> binOp B_DivInt
-    B_SubInt -> binOp B_SubInt
-    B_AddString -> binOp B_AddString
-    B_StringLength -> monOp B_StringLength
-    B_ShowInt -> monOp B_ShowInt
-    B_CmpInt_LT -> binOp B_CmpInt_LT
-    B_CmpInt_EQ -> binOp B_CmpInt_EQ
-    b -> HNF StH_Void []
-    where binOp b = Delayed "x" $ pure $ Delayed "y" $ do
+    B_AddInt -> binOp 
+    B_MulInt -> binOp 
+    B_DivInt -> binOp 
+    B_SubInt -> binOp 
+    B_AddString -> binOp
+    B_StringLength -> monOp
+    B_ShowInt -> monOp
+    B_CmpInt_LT -> binOp
+    B_CmpInt_EQ -> binOp
+    _ -> HNF StH_Void []
+    where binOp = Delayed "x" $ pure $ Delayed "y" $ do
             tell [arg 0, arg 1]
             pure (HNF StH_Void [])
-          monOp b = Delayed "x" $ do 
+          monOp = Delayed "x" $ do 
             tell [arg 0]
             pure (HNF StH_Void [])
           arg n = HNF (StH_Val n) []
@@ -469,7 +476,7 @@ nameProp np anp = fix $ \nnp a -> case a^..i'NameNode of
   Pure (_,Pure x) -> anp (Pure x)
 
 instance Identifier s => Annotated (NameExpr s) s where
-  exprId = nameProp _ident exprId
+  exprIdent = nameProp _ident exprIdent
   exprMass = nameProp _mass exprMass
   exprRefs = nameProp _refs exprRefs
   exprType = nameProp _type exprType
@@ -483,7 +490,7 @@ t'exprType = fix $ \node -> from i'NameNode.(t'Join.annType
 
 lambdaAnns :: forall e s. Annotated e s => s -> e -> (Int,Int,Map (Symbol s) Int,Type s,ExprStrictness)
 lambdaAnns s e = (i,m,r,lambdaType (exprType e),pure (Delayed (identName s) (exprStrictness e)))
-  where i = Right (Lambda () (exprId e))^..shape
+  where i = Right (Lambda () (exprIdent e))^..shape
         m = exprMass e + 1
         r = delete (Argument 0) (exprRefs e) & ascList.each.l'1.argument %~ subtract 1
         
@@ -492,45 +499,13 @@ lambdaType te = extractFirstArgument te
 
 applyAnns :: forall e s. Annotated e s => e -> e -> (Int,Int,Map (Symbol s) Int,Type s,ExprStrictness)
 applyAnns a b = (i,m,r,applyType (exprType a) (exprType b),st)
-  where i = Right (Apply (exprId a) (exprId b))^..shape
+  where i = Right (Apply (exprIdent a) (exprIdent b))^..shape
         m = exprMass a + exprMass b + 1
         r = exprRefs a *+ exprRefs b
-        applyStrictness esb sa = case sa of
-          Delayed _ est -> traverseSt (substD Nothing 0) est
-          HNF x l -> pure (HNF x (l+[esb]))
-          where traverseSt :: (Strictness -> ExprStrictness) -> ExprStrictness -> ExprStrictness
-                traverseSt k (es,e) = (tell =<< traverse k es) >> k e
-
-                substD_abs isFix n = substD (map (+1) isFix) (n+1)
-                
-                substD isFix n (Delayed s est) = pure (Delayed s (traverseSt (substD_abs isFix n) est))
-                substD isFix n (HNF h ests) = case h of
-                  StH_Val arg ->
-                    case (or [arg==arg'
-                              && length ests > length ests'
-                              && all (uncurry (==)) (zip ests ests')
-                             | (_,HNF (StH_Val arg') ests') <- ests],
-                          compare arg n,
-                          snd esb) of
-                      (False,EQ,_) ->
-                        foldl' (\esf esx -> do
-                                   sf <- esf
-                                   applyStrictness (traverseSt (substD isFix n) esx) sf)
-                        (esb & (l'1.each .+ l'2).strictnessArg %~ \(d,v) -> if v >= d then v+n else v)
-                        ests
-                      (True,EQ,Delayed s e) -> pure $ case isFix of
-                        Just m -> HNF (StH_Val m) []
-                        Nothing -> HNF (StH_Fix s (traverseSt (substD (Just 0) n) e)) (drop 1 ests')
-                      (_,cmpn,_) -> pure $ HNF (StH_Val (maybe 0 (\m -> if arg>=m then 1 else 0) isFix
-                                                         + if cmpn==LT then arg else arg-1)) ests'
-                  StH_Void -> pure $ HNF StH_Void []
-                  StH_Fix s e -> pure $ HNF (StH_Fix s (traverseSt (substD_abs isFix n) e)) ests'
-                  where ests' = map (traverseSt (substD isFix n)) ests
-
         st = applyStrictness (exprStrictness b) =<< exprStrictness a
 applyType :: forall s. Identifier s => Type s -> Type s -> Type s
 applyType ta tb = tret
-  where tret = force ta`par`force tb`par`mapTypePathsMonotonic dropTop tsum
+  where tret = force ta`par`force tb`par`mapTypePathsMonotonic dropTop (debug tsum)
         ~(hasErr,tsum) = traverseTypeShapes go (functionFrom (length (fst (typeConstraints ta))) tb + ta)
           where go ps x@(TypeMismatch _ _) = tell (any isDeleted ps) >> return x
                 go ps x = pure (if hasErr && (TypeRoot,[Out])`elem`ps then HiddenTypeError else x)
@@ -541,3 +516,38 @@ applyType ta tb = tret
         dropTop (TypeRoot,(In:_)) = Nothing
         dropTop (TypeRoot,Out:p) = Just (TypeRoot,p)
         dropTop x = Just x
+        
+applyStrictness :: ExprStrictness -> Strictness -> ExprStrictness
+applyStrictness esb sa = case sa of
+  Delayed _ est -> traverseSt (substD Nothing 0) est
+  HNF x l -> pure (HNF x (l+[esb]))
+  where traverseSt :: (Strictness -> ExprStrictness) -> ExprStrictness -> ExprStrictness
+        traverseSt k (es,e) = (tell =<< traverse k es) >> k e
+
+        substD_abs isFix n = substD (map (+1) isFix) (n+1)
+        
+        substD isFix n (Delayed s est) = pure (Delayed s (traverseSt (substD_abs isFix n) est))
+        substD isFix n (HNF h ests) = case h of
+          StH_Val arg ->
+            case (or [arg==arg''
+                      && length ests > length ests''
+                      && all (uncurry (==)) (zip ests ests'')
+                     | (_,HNF (StH_Val arg'') ests'') <- ests],
+                  compare arg n,
+                  snd esb) of
+              (False,EQ,_) ->
+                foldl' (\esf esx -> do
+                           sf <- esf
+                           applyStrictness (traverseSt (substD isFix n) esx) sf)
+                (esb & (l'1.each .+ l'2).strictnessArg %~ \(d,v) -> if v >= d then v+n else v)
+                ests
+              (True,EQ,Delayed s e) -> pure $ case isFix of
+                Just m -> HNF (StH_Val m) []
+                Nothing -> HNF (StH_Fix s (traverseSt (substD (Just 0) n) e)) (drop 1 ests')
+              (_,cmpn,_) -> pure $ HNF (StH_Val (maybe 0 (\m -> if arg>=m then 1 else 0) isFix
+                                                 + if cmpn==LT then arg else arg-1)) ests'
+          StH_Void -> pure $ HNF StH_Void []
+          StH_Fix s e -> pure $ HNF (StH_Fix s (traverseSt (substD_abs isFix n) e)) ests'
+          where ests' = map (traverseSt (substD isFix n)) ests
+
+        

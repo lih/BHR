@@ -1,30 +1,30 @@
 module Curly.Core.Peers where
 
-import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
 import Curly.Core
-import Curly.Core.Documentation
-import Curly.Core.Library
 import Data.IORef 
 import GHC.Conc (threadDelay)
 import IO.Network.Socket
 import Language.Format
 import System.IO (hSetBuffering,BufferMode(..))
 
-data PeerPacket = DeclareInstance String (WithResponse (Either String PortNumber))
-                | RedeclareInstance String PortNumber (WithResponse Bool)
-                | AskInstance String (WithResponse (Either String PortNumber))
-                | AskInstances (WithResponse [String])
-                | AskLibrary LibraryID (WithResponse Bytes)
+type InstanceName = String
+type PeerErrorMessage = String
+data PeerPacket = DeclareInstance InstanceName (WithResponse (Either PeerErrorMessage PeerPort))
+                | RedeclareInstance InstanceName PeerPort (WithResponse Bool)
+                | AskInstance InstanceName (WithResponse (Either PeerErrorMessage PeerPort))
+                | AskInstances (WithResponse [InstanceName])
                 deriving Generic
-instance Serializable PortNumber where
-  encode = encode . c'int . fromIntegral
-instance Format PortNumber where
-  datum = fromIntegral . c'int <$> datum
+
+newtype PeerPort = PeerPort { getPeerPortNumber :: PortNumber }
+instance Serializable PeerPort where
+  encode = encode . c'int . fromIntegral . getPeerPortNumber
+instance Format PeerPort where
+  datum = PeerPort . fromIntegral . c'int <$> datum
 instance Serializable PeerPacket
 instance Format PeerPacket
 
-processInstances :: IORef (Set String)
+processInstances :: IORef (Set InstanceName)
 processInstances = newIORef zero^.thunk
 
 peerServer :: IO ()
@@ -42,32 +42,33 @@ peerServer = do
             modifyIORef srvState (delete inst)
           
   void $ forkIO $ forever $ do
-    (h,addr) <- accept sock
+    (h,_) <- accept sock
     forkIO $ do
-      runConnection_ True h $ fix $ \again -> receive >>= \x -> case x of
-        DeclareInstance s t -> do
-          port <- liftIO $ runAtomic srvState $ get >>= \m -> case lookup s m of
-            Just _ -> return $ Left ("Error: The instance '"+s+"' is already declared")
-            _ -> let p = foldr1 (\p ans -> if isKeyIn p (commute m) then ans else p) [curlyPort+1..]
-                 in Right p <$ put (insert s p m) 
-          sending t port
+      runConnection_ True h $ fix $ \again -> receive >>= \case
+        DeclareInstance name t -> do
+          port <- liftIO $ runAtomic srvState $ get >>= \m -> case lookup name m of
+            Just _ -> return $ Left ("Error: The instance '"+name+"' is already declared")
+            _ -> let firstAvailablePort = foldr1 (\p ans -> if isKeyIn p (commute m) then ans else p) [curlyPort+1..]
+                 in Right firstAvailablePort <$ put (insert name firstAvailablePort m) 
+          sending t (PeerPort <$> port)
           case port of
-            Right _ -> liftIO $ startTimeout s
+            Right _ -> liftIO $ startTimeout name
             _ -> unit
-        RedeclareInstance s p t -> do
+        RedeclareInstance name (PeerPort p) t -> do
           success <- liftIO $ runAtomic srvState $ get >>= \m ->
-            if isKeyIn p (commute m) || isKeyIn s m then return False else True <$ put (insert s p m)
+            if isKeyIn p (commute m) || isKeyIn name m then return False else True <$ put (insert name p m)
           
-          liftIO $ if success then startTimeout s >> sending t True
-            else runAtomic timeouts (modify $ touch s) >> threadDelay 4000000 >> sending t False
+          liftIO $ if success then startTimeout name
+            else runAtomic timeouts (modify $ touch name) >> threadDelay 4000000
+          sending t success
           again
-        AskInstance s t -> do
+        AskInstance name t -> do
           m <- liftIO $ readIORef srvState
-          sending t (maybe (Left $ "Error: Non-existent instance: "+s) Right (lookup s m))
+          sending t (maybe (Left $ "Error: Non-existent instance: "+name) (Right . PeerPort) (lookup name m))
         AskInstances t -> do
           m <- liftIO $ readIORef srvState
-          pi <- liftIO $ readIORef processInstances
-          let (ours,others) = partition (`elem`pi) (keys m)
+          procI <- liftIO $ readIORef processInstances
+          let (ours,others) = partition (`elem`procI) (keys m)
           sending t (c'list others + ours)
       
 peerClient :: IO Handle

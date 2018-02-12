@@ -19,7 +19,8 @@ module Curly.Core.Documentation(
   ) where
 
 import Definitive
-import Language.Format
+import Language.Format hiding (letter)
+import IO.Network.Socket (PortNumber)
 
 -- | A documentation node (similar to a HTML node, but simpler)
 data DocNode a = DocTag String [(String,String)] [a]
@@ -56,7 +57,7 @@ instance Format Metadata where datum = coerceDatum Metadata
 instance DataMap Metadata String (Free (Map String) String) where 
   at i = from i'Metadata.at i
 instance Show Metadata where
-  show (Metadata m) = showM m
+  show = \(Metadata m) -> showM m
     where showM m = format "{%s}" (intercalate " " [format "%s:%s" (show a) (showV v)
                                                    | (a,v) <- m^.ascList])
           showV (Pure s) = show s
@@ -64,15 +65,15 @@ instance Show Metadata where
 instance Read Metadata where
   readsPrec _ = readsParser (map Metadata brack)
     where val = map Pure readable <+? map Join brack
-          brack = fromAList <$> between (single '{') (single '}') (sepBy' assoc (single ' '))
-            where assoc = liftA2 (,) readable (single ':' >> val)
+          brack = fromAList <$> between (single '{') (single '}') (sepBy' field (single ' '))
+            where field = liftA2 (,) readable (single ':' >> val)
 instance Documented Metadata where
   document m = Pure (show m)
 
 type DocParams = Forest (Map String) Documentation
 type DocPatterns = Map String ([String],Documentation)
 evalDocWithPatterns :: DocPatterns -> DocParams -> Documentation -> Maybe Documentation
-evalDocWithPatterns pats vars = eval vars
+evalDocWithPatterns pats = eval
   where eval vars = eval'
           where 
             eval' (Pure x) = return (Pure x)
@@ -102,6 +103,7 @@ evalDocWithPatterns pats vars = eval vars
                       guard (a==b)
                       sequence_ (zipWith (liftOp cmp) xs ys)
                     liftOp _ _ _ = Nothing
+                    toCmp :: String -> [Integer :+: String] -> [Integer :+: String] -> Bool
                     toCmp "<" = (<)
                     toCmp ">" = (>)
                     toCmp "<=" = (<=)
@@ -116,10 +118,10 @@ evalDocWithPatterns pats vars = eval vars
                       return (Join $ DocTag a [] zs)
                     cmp _ _ = Nothing
                 join $ liftA2 cmp (eval' ea) (eval' eb)
-            eval' x@(Join (DocTag "call" _ xs@(_:_))) = do
+            eval' (Join (DocTag "call" _ xs@(_:_))) = do
               p:args <- traverse eval' xs
-              p <- p^?t'Pure
-              (pargs,pat) <- pats^.at p
+              pname <- p^?t'Pure
+              (pargs,pat) <- pats^.at pname
               callTag args pargs pat
             eval' (Join (DocTag t as xs)) = do
               xs' <- traverse eval' xs
@@ -133,7 +135,7 @@ evalDocWithPatterns pats vars = eval vars
         wildcards "*" = unit
         wildcards ('*':'*':t) = wildcards ('*':t)
         wildcards ('*':t@(c:_)) = do
-          skipMany1' (satisfy (/=c))`sepBy`many1' (single c)
+          _ <- skipMany1' (satisfy (/=c))`sepBy`many1' (single c)
           wildcards t
         wildcards (c:t) = single c >> wildcards t
         wildcards [] = eoi
@@ -141,15 +143,19 @@ evalDocWithPatterns pats vars = eval vars
 evalDoc :: DocParams -> Documentation -> Maybe Documentation
 evalDoc = evalDocWithPatterns zero
 
+nodoc :: String -> Documentation
 nodoc msg = Join (DocTag "nodoc" [] [Pure msg])
+mkDoc :: String    -- ^ The root tag name
+         -> String -- ^ Documentation in textual format
+         -> Documentation
 mkDoc t d = Join . DocTag t [] $ fromMaybe [] $ matches Just (between spc spc (sepBy' docAtom spc)) d
 spc :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => ParserT s m ()
 spc = skipMany' (oneOf " \t\n")
 docAtom :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => ParserT s m Documentation
 docAtom = tag <+? txt
-  where letter p = token >>= \c -> case c of
+  where letter p = token >>= \case
           '\\' -> token
-          _ | (c`isKeyIn`reserved) || not (p c) -> zero
+          c | (c`isKeyIn`reserved) || not (p c) -> zero
             | otherwise -> return c
         reserved = c'set (fromKList " \t\n{}\\")
         nameTo cs = many1' (letter (\c -> not (c`isKeyIn`res)))
@@ -176,7 +182,7 @@ docLine :: (ParseToken c, ParseStream c s, TokenPayload c ~ Char, Monad m)
            => String -> [(String,String)] -> ParserT s m Documentation
 docLine n as = Join . DocTag n as <$> many1' (skipMany' (oneOf " \t") >> docAtom)
 showRawDoc :: Documentation -> String
-showRawDoc x = case x of
+showRawDoc = \case
   Join (DocTag t as xs) -> "{" + foldMap quoteChar t + foldMap showAttr as + foldMap showSub xs + "}"
   Pure s -> foldMap quoteChar s
   where quoteChar ' ' = "\\ "
@@ -378,6 +384,7 @@ instance FormatArg Int where argClass _ = 'd'
 instance FormatArg Float where argClass _ = 'f'
 instance FormatArg Double where argClass _ = 'f'
 instance FormatArg String where argClass _ = 's'; showFormat = id
+instance FormatArg PortNumber where argClass _ = 'p'
 
 -- | A function that mimics sprintf-style formatting for Haskell
 format :: FormatType r => String -> r

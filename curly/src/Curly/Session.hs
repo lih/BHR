@@ -202,7 +202,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["repository","commit",b] -> completeBranchName curlyPublisher b
           ("repository":"commit":_:t) -> completeVCSFlags t
           ["repository","branch",b] -> completeBranchName curlyPublisher b
-          ["repository","branch",_,c] -> completeWord ["fork","alias"] c
+          ["repository","branch",_,c] -> completeWord ["fork","alias","rename","delete"] c
           ["repository","branch",_,c,u] | c`elem`["fork","alias"] -> completeKeyName u
           ["repository","branch",_,c,u,b] | c`elem`["fork","alias"] -> completeBranchName u b
           ("repository":_) -> []
@@ -440,7 +440,7 @@ targetServer = case getConf confServer of
       x <- exchange (AskInstance inst)
       case x of
         Left err -> liftIO (putStrLn err) >> zero
-        Right p' -> liftIO (connectTo srv p')
+        Right (PeerPort p') -> liftIO (connectTo srv p')
     maybe (error $ "Cannot connect to instance "+inst+"@"+srv+":"+show p) return h'
   Nothing -> return LocalServer
 

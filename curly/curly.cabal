@@ -37,6 +37,7 @@ data-files:
   mime/curly.xml
   proto/vc/http
   proto/vc/https
+  freeze.sh
 
 library
   default-language:    Haskell2010

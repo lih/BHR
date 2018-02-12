@@ -12,6 +12,9 @@ data EC = EC {
   getp,getr,geta,getb :: Integer
   }
 
+type ECP = (Integer,Integer)
+
+baseCurve :: EC
 baseCurve = p256
   where p256 = EC l p r a b 
           where l = 256 ::  Int
@@ -19,6 +22,7 @@ baseCurve = p256
                 r = 115792089210356248762697446949407573529996955224135760342422259061068512044369
                 a = 115792089210356248762697446949407573530086143415290314195533631308867097853948
                 b = 41058363725152142129326129780047268409114441015993725554835256314039467401291
+basePoint :: ECP
 basePoint = p256
   where p256 = (x,y)
           where x = 48439561293906451759052585252797914202762949526041747995844080717082404635286
@@ -39,6 +43,7 @@ modinv a m = let (x,y,_) = eeukl a m
                 then mod y m
                 else undefined
 
+pdouble :: ECP -> ECP
 pdouble (x1,y1) = 
   let alpha = geta baseCurve
       p = getp baseCurve
@@ -47,6 +52,7 @@ pdouble (x1,y1) =
       y3 = (lambda*(x1-x3)-y1) `mod` p
   in (x3,y3)
 
+padd :: ECP -> ECP -> ECP
 padd a@(x1,y1) b@(x2,y2) 
   | x1==x2,y1==(-y2) = (x1,y2)
   | a==b = pdouble a
@@ -57,6 +63,7 @@ padd a@(x1,y1) b@(x2,y2)
       in (x3,y3)
   where p = getp baseCurve
 
+pmul :: ECP -> Integer -> ECP
 pmul b k' = 
   let p = getp baseCurve
       k = k' `mod` (p - 1)

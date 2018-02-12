@@ -36,13 +36,13 @@ repositoryDoc = unlines [
               "  {ul {li {em -add <path>...} Adds the libraries under <path> to the branch}",
               "      {li {em -(keep|drop) (<library-id>|<search-pattern>|(maximum|minimum) <template> by <template>)} ",
               "          {ln Filters the branch according to a pattern.}}}}"]),
-    li (fold ["{em repository branch <branch> (fork|alias) <key-name> <source-branch>}",
+    li (fold ["{em repository branch <branch> ((fork|alias) <key-name> <source-branch>|rename <new-name>|delete)}",
               "{p Create a new branch that points to the same commit a another.}",
               "{p The 'alias' option creates an alias branch rather than a fork.",
               "    Alias branches will always be resolved to the latest commit on their source branch.}"]),
-    li (fold ["{em repository get (source|library) <filename> (<library-id>|<search-pattern>)}",
+    li (fold ["{em repository get (source|library) <filename> (#<library-id>|<search-pattern>)}",
               " {p Retrieve a library or its source and saves it to a file}"]),
-    li (fold ["{em repository checkout <source-prefix> (<library-id>|<search-pattern>)}",
+    li (fold ["{em repository checkout <source-prefix> (#<library-id>|<search-pattern>)}",
               "{p Reconstruct a working source tree for the given library}"])
     ],
   "}"]
@@ -211,7 +211,7 @@ repositoryCmd = withDoc repositoryDoc $ False <$ do
       guardWarn Sev_Error "Cannot modify a branch without admin access" (?access >= Admin)
       branch <- expected "branch name" (nbhspace >> dirArg)
       let branchFork = do
-            isLink <- nbhspace >> (fill False (several "fork") <+? fill True (several "alias"))
+            isLink <- fill False (several "fork") <+? fill True (several "alias")
             user <- expected "key id" (nbhspace >> dirArg)
             srcBranch <- expected "branch name" (nbhspace >> dirArg)
             map (lookup user) getKeyStore >>= \x -> case x of
@@ -222,30 +222,32 @@ repositoryCmd = withDoc repositoryDoc $ False <$ do
                   else do 
                   bs' <- getBranches conn pub
                   return (set (at branch) (bs'^.at srcBranch) bs)
+          branchRen = do
+            several "rename"
+            newName <- nbhspace *> dirArg <* ack 
+            modifyBranches $ return . (join $ \bs -> set (at newName) (bs^.at branch) . delete branch)
+          branchDel = do
+            several "delete" <* ack
+            modifyBranches $ return . delete branch
             
-      branchFork
+      nbhspace >> (branchFork <+? branchRen <+? branchDel)
 
     "browse" -> do
       guardWarn Sev_Error "you must have almighty acces to browse new libraries" (?access>=Almighty)
       nbsp
-      sel <- (\d -> do
-                 libs <- availableLibs
-                 return [x | (x,m) <- libs, nonempty (showDummyTemplate m d)]) <$> (docAtom <*= guard . has t'Join)
-             <+? (\i -> return [i]) <$> (dirArg >*> readable)
-      ls <- liftIO sel
-      case ls of
-        [i] -> ?subSession [(Nothing,Mount [] (Library i))]
-        _ -> guardWarn Sev_Error "the pattern should select a single library to browse" False
+      l <- libID
+      ?subSession [(Nothing,Mount [] (Library l))]
   
     _ -> warn Sev_Error "Expected 'commit', 'list', 'get-library' or 'get-source'" >> zero
-  where libID = searchID <+? (dirArg >*> readable)
+  where ack = lookingAt (hspace >> (eol+eoi))
+        libID = (single '#' >> (dirArg >*> readable)) <+? searchID
         createFileDir f = createDirectoryIfMissing True (dropFileName f)
 
         ioParser m = liftIO (try (return Nothing) (Just<$>m)) >>= maybe zero return
             
-        searchID = docAtom >>= \d -> do
-          guard (has t'Join d)
+        searchID = ((docAtom <*= guard . has t'Join) <+? (snd <$> packageSearch)) >>= \tpl -> do
           ls <- liftIO availableLibs
-          case fold [showDummyTemplate m d >> return l | (l,m) <- ls] of
-            Just l -> return l
-            Nothing -> guardWarn Sev_Error (format "Error: no library matches the search pattern %s" (show d)) False >> zero
+          case fold [convert (showDummyTemplate m tpl >> return l) | (l,m) <- ls] of
+            [l] -> return l
+            [] -> guardWarn Sev_Error (format "Error: couldn't find a library matching the search pattern '%s'" (showRawDoc tpl)) False >> zero
+            _ -> guardWarn Sev_Error (format "Error: multiple libraries match the search pattern '%s'" (showRawDoc tpl)) False >> zero

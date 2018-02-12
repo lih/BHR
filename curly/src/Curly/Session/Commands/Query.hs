@@ -87,6 +87,7 @@ showCmd = withDoc showDoc . fill False $ do
             (["flavor"],Pure $ Pure "Expression"),
             (["name"],Pure $ Pure n),
             (["type"],Pure $ document (exprType v)),
+            (["raw-type"],Pure $ Pure $ show (exprType v & \(Type e) -> e)),
             (["impl"],Pure $ Pure $ showImpl v),
             (["strictness"],Pure $ document (snd $ exprStrictness v))
             ] zero

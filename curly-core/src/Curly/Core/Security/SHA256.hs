@@ -8,7 +8,7 @@ import qualified Foreign.Marshal.Alloc as F
 import Data.ByteString.Lazy (toChunks)
 import Data.ByteString (useAsCStringLen,packCStringLen)
 
-data SHA256_CTX = SHA256_CTX
+data SHA256_CTX
 
 foreign import ccall "sha256_init" sha256_init :: F.Ptr SHA256_CTX -> IO ()
 foreign import ccall "sha256_update" sha256_update :: F.Ptr SHA256_CTX -> F.Ptr F.CChar -> F.CInt -> IO ()

@@ -11,7 +11,7 @@ module Language.Parser (
   Stream(..),emptyStream,
 
   -- ** Converting to/from Parsers
-  parserT,parser,ioParser,matchesT,matches,readsParser,lookingAt,
+  parserT,parser,ioParser,matchesT,matches,readsParser,lookingAt,notLookingAt,
 
   -- * The MonadParser class
   MonadParser(..),ParseToken(..),ParseStream(..),
@@ -29,7 +29,7 @@ module Language.Parser (
   -- * Useful combinators
   many,many1,sepBy,sepBy1,skipMany,skipMany1,
   many',many1',sepBy',sepBy1',skipMany',skipMany1',
-  chainl,chainl',chainr,chainr',option,option'
+  chainl,chainl',chainr,chainr',option,option',optionMaybe,optionMaybe'
   ) where
 
 import Definitive hiding (take)
@@ -98,6 +98,11 @@ lookingAt :: MonadParser s m p => p a -> p a
 lookingAt p = do
   s <- runStreamState get
   p <* runStreamState (put s)
+notLookingAt :: MonadParser s m p => p a -> p ()
+notLookingAt p = do
+  s <- runStreamState get
+  optionMaybe' p >>= maybe unit (const noParse)
+  runStreamState (put s)
 
 ioParser :: Parser a b -> (a -> IO b)
 ioParser p s = case (p^..parser) s of
@@ -187,11 +192,13 @@ keyword :: (Eq (TokenPayload c), MonadParser s m p, Foldable t, ParseStream c s,
 keyword a l = a <$ traverse_ single l
 
 -- |Try to consume a parser. Return a default value when it fails.
-option :: MonadParser s m p => a -> p a -> p a
+option,option' :: MonadParser s m p => a -> p a -> p a
 option a p = p <+> pure a
--- |Try to consume a parser. Return a default value when it fails.
-option' :: MonadParser s m p => a -> p a -> p a
 option' a p = p <+? pure a
+
+optionMaybe,optionMaybe' :: MonadParser s m p => p a -> p (Maybe a)
+optionMaybe p = option Nothing (map Just p)
+optionMaybe' p = option' Nothing (map Just p)
 
 -- |Succeed only at the End Of Input.
 eoi :: (MonadParser s m p, ParseStream c s) => p ()

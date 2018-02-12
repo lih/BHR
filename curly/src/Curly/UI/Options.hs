@@ -11,7 +11,7 @@ module Curly.UI.Options (
   TargetParams,confServer,confPrelude,confBanner,confInstance,confThreads,defaultConf,getConf,withPrelude,
 
   -- * Misc
-  curlyOpts,packageID,inputSource,curlyFileName,noCurlySuf,visible,symPath,showSymPath
+  curlyOpts,packageID,packageSearch,inputSource,curlyFileName,noCurlySuf,visible,symPath,showSymPath
   ) where
 
 import Definitive
@@ -220,6 +220,21 @@ showSymPath p = intercalate "." (map (foldMap quote) p)
   where quote '.' = "\\."
         quote c = [c]
 
+packageSearch :: (ParseStream c s, Monad m, TokenPayload c ~ Char, MonadParser s m p) => p ((String,Maybe String,Maybe String),Template)
+packageSearch = do
+  keyname <- optionMaybe' (visible ":" <* single ':')
+  branch <- optionMaybe' (visible ":" <* single ':')
+  name <- searchForward (several "-v" <+? eol <+? nbhspace <+? eoi)
+  version <- optionMaybe' (several "-v" >> visible "")
+  let eqtag ts v = docTag' "=" [docTag' "$" (map Pure ts),Pure v]
+  return $ ((name,keyname,version),) $ docTag' "and"
+    $ eqtag ["name"] name
+    : convert (map (eqtag ["repository","branch-name"]) branch)
+    + convert (map (eqtag ["repository","key-name"]) keyname)
+    + convert (map (eqtag ["version"]) version)
+  where searchForward p = search ""
+          where search acc = (fill (reverse acc) $ lookingAt p) <+? (notLookingAt p >> token >>= \c -> search (c:acc))
+ 
 inputSource base = do
   p <- symPath "="
   between hspace hspace (several "=")
@@ -241,8 +256,7 @@ inputSource base = do
           m <- option' (n+".cache") (sep >> visible "")
           return (Resource (base</>n) (base</>m))
         search = like "package" >> sep >> do
-          tpl <- (docAtom <*= guard . has t'Join)
-                 <+? (visible "" <&> \x -> docTag' "=" [docTag' "$" [Pure "name"],Pure x])
+          tpl <- (docAtom <*= guard . has t'Join) <+? (snd <$> packageSearch)
           return (Library $ packageID tpl^.thunk)
         lib = like "library" >> sep >> (fileLib <+? map Library readable)
           where fileLib = single '@' >> map LibraryFile (visible "")
@@ -254,7 +268,8 @@ packageID tpl = do
   case [l | (l,d) <- ls
           , nonempty (showDummyTemplate d tpl)] of
     [l] -> return l
-    _ -> error $ format "Could not find package matching %s" (showRawDoc tpl)
+    [] -> error $ format "No package found when search for '%s'" (showRawDoc tpl)
+    _ -> error $ format "Multiple packages found matching '%s'. Please narrow your search parameters." (showRawDoc tpl)
 
 data CurlyPlex = CurlyPlex {
   _mounts :: [([String],InputSource)],

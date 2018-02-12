@@ -128,6 +128,11 @@ deriving instance (Eq a,Eq (Coforest f a)) => Eq (Cofree f a)
 deriving instance (Ord a,Ord (Coforest f a)) => Ord (Cofree f a)
 deriving instance (Show a,Show (Coforest f a)) => Show (Cofree f a)
 
+instance Lens1 a a (Cofree f a) (Cofree f a) where
+  l'1 k (Step x f) = k x <&> \x' -> Step x' f
+instance Lens2 (f (Cofree f a)) (f (Cofree f a)) (Cofree f a) (Cofree f a) where
+  l'2 k (Step x f) = k f <&> Step x
+
 type Infinite a = Cofree Id a
 type Colist a = Cofree Maybe a
 

@@ -40,7 +40,7 @@ module Algebra.Core(
   Constraint,c'listOf,c'list,c'void,c'int,c'char,c'string,c'float,c'_,
   
   -- * Miscellaneous functions
-  const,(&),is,fix,uncurry0,uncurry,uncurry3,uncurry4,
+  const,(&),fix,uncurry0,uncurry,uncurry3,uncurry4,
 
   first,second,
 
@@ -516,8 +516,6 @@ deriving instance Monoid (Interleave a)
 (&) :: a -> (a -> b) -> b
 (&) = flip ($)
 infixl 0 &
-is :: a -> (a -> Bool) -> Bool
-is = (&)
 
 infixr 1 +++
 (+++) :: Split k => (a -> k c c) -> (b -> k d d) -> (a:+:b) -> k (c,d) (c,d)

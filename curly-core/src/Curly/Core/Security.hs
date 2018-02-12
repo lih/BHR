@@ -82,6 +82,7 @@ instance Serializable a => Show (Zesty a) where
 instance Format a => Read (Zesty a) where
   readsPrec _ = readsParser ((readable <&> \(B64Chunk c) -> zest (c^..chunk)) >*> (Zesty<$>datum))
 
+fpSize :: Int
 fpSize = 8
 instance Show KeyFingerprint where show (KeyFingerprint f) = show (B64Chunk f)
 instance FormatArg KeyFingerprint where argClass _ = 'k'
@@ -96,12 +97,14 @@ instance Format PublicKey where datum = coerceDatum PublicKey
 instance Serializable KeyFingerprint where encode (KeyFingerprint f) = f^.chunkBuilder
 instance Format KeyFingerprint where datum = KeyFingerprint<$>getChunk fpSize
 
+chunkToInteger :: Chunk -> Integer
 chunkToInteger c = fromMaybe 0 $ matches Just datum
                    $ serialize (chunkSize c) + c^..chunk
 
 genPrivateKey :: MonadIO m => m PrivateKey
 genPrivateKey = liftIO $ PrivateKey . chunkToInteger <$> getEntropy 32
 
+curveOrder :: Integer
 curveOrder = EC.getr EC.baseCurve
 
 signBytes :: MonadIO m => PrivateKey -> Bytes -> m Signature

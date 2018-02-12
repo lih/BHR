@@ -8,7 +8,7 @@ import Curly.Core.Documentation
 import Definitive
 import Language.Format
 import qualified Curly.Core.Security.SHA256 as SHA256
-import System.Process (readProcess, withCreateProcess)
+import System.Process (withCreateProcess)
 import qualified System.Process as Sys
 import Data.IORef
 import Control.Concurrent.MVar
@@ -44,16 +44,17 @@ instance Serializable o => Eq (VCKey o) where a==b = compare a b==EQ
 instance Serializable o => Ord (VCKey o) where compare = comparing serialize
 instance Functor VCKey where
   map f (OtherKey o) = OtherKey (f o)
-  map f (LibraryKey a b) = LibraryKey a b
-  map f (AdditionalKey a b c) = AdditionalKey a b c
-  map f (CommitKey a b) = CommitKey a b
-  map f (BranchesKey a b) = BranchesKey a b
+  map _ (LibraryKey a b) = LibraryKey a b
+  map _ (AdditionalKey a b c) = AdditionalKey a b c
+  map _ (CommitKey a b) = CommitKey a b
+  map _ (BranchesKey a b) = BranchesKey a b
 
 class MonadIO vc => MonadVC vc s | vc -> s where
   vcStore :: Serializable a => s -> (WithResponse a -> VCKey ()) -> a -> vc ()
   vcLoad :: Format a => s -> (WithResponse a -> VCKey ()) -> vc (Maybe a)
   runVC :: vc a -> IO a
 
+keyName :: (WithResponse a -> VCKey ()) -> String
 keyName k = show (B64Chunk (serialize (k WithResponse :: VCKey ())^.chunk))
 
 newtype Dummy_VC a = Dummy_VC (IO a)
@@ -116,6 +117,7 @@ instance MonadVC Client_VC Client_Handle where
 
 newtype Combined_VC vc1 vc2 a = Combined_VC ((vc1 :.: vc2) a)
                               deriving (Functor,SemiApplicative,Unit,Applicative)
+combined_lift1 :: (Unit vc2, Functor vc1) => vc1 a -> Combined_VC vc1 vc2 a
 combined_lift1 vc1 = Combined_VC (Compose (map return vc1))
 instance (MonadVC vc1 _c1, MonadVC vc2 _c2) => Monad (Combined_VC vc1 vc2) where
   join (Combined_VC (Compose vc1212)) = Combined_VC $ Compose $ liftIO $ do
@@ -138,6 +140,7 @@ pMaybe _ = WithResponse
 maybeP :: WithResponse a -> WithResponse (Maybe a)
 maybeP _ = WithResponse
 
+vcServer :: (?write :: Bytes -> IO (), MonadIO m) => VCSBackend -> ParserT Bytes m ()
 vcServer (VCSB_Native _ st run) = do
   (b,k) <- receive
   logLine Verbose ("Received request "+show (b,k))
@@ -168,13 +171,16 @@ instance Semigroup VCSBackend where
 instance Eq VCSBackend where a == b = compare a b == EQ
 instance Ord VCSBackend where
   compare (VCSB_Native s _ _) (VCSB_Native s' _ _) = compare s s'
+dummyBackend :: VCSBackend
 dummyBackend = VCSB_Native [] () (\(Dummy_VC io) -> io)
 nativeBackend :: MonadIO m => String -> PortNumber -> m VCSBackend
 nativeBackend h p = do
   conn <- liftIO (connectTo h p)
   lock <- liftIO (newMVar ())
   return (VCSB_Native ["curly-vc://"+h+":"+show p] (Client_Handle lock conn) (\(Client_VC io) -> io))
+fileBackend :: FilePath -> VCSBackend
 fileBackend p = VCSB_Native ["file://"+p] p (\(File_VC io) -> io)
+protoBackend :: String -> String -> VCSBackend
 protoBackend pr p = VCSB_Native [pr+"://"+p] (pr,p) (\(Proto_VC io) -> io)
 instance Show VCSBackend where
   show (VCSB_Native s _ _) = intercalate " " s
@@ -210,7 +216,7 @@ getBranch conn = deepBranch'
           deepBranch' (lookup b bs)
 
 getCommit :: MonadIO m => VCSBackend -> Hash -> m (Map LibraryID Metadata)
-getCommit conn c = liftIO $ getAll (Just c)
+getCommit conn = \c -> liftIO $ getAll (Just c)
   where 
     getAll (Just c) = cachedCommit c $ do
       comm <- vcbLoad conn (CommitKey c)

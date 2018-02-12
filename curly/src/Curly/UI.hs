@@ -208,10 +208,9 @@ parseCurlyArgs args = fromMaybe [] $ matches Just (tokenize (map2 Right curlyOpt
           Just t -> Right t
           _ -> Left s
         url = do
-          proto <- many1' (noneOf ":")
-          path <- single ':' >> remaining
-          let lid = packageID (docTag' "=" [docTag' "$" [Pure "name"],Pure path])^.thunk
-          (pure proto >*> (like "package" >> eoi)) >> return [Mount [path] (Library lid)]
+          like "package"
+          ((path,_,_),tpl) <- single ':' >> packageSearch
+          return [Mount [path] (Library $ packageID tpl^.thunk)]
             
 
 type CurlyConfig = [(Maybe String,CurlyOpt)]
@@ -261,7 +260,7 @@ readCurlyConfig cliargs = fold <$> traverse (fileArgs [] <|> return . map (Nothi
 
                 delDefault | file`isKeyIn`cliFiles = fromKList <#> fromKList
                            | otherwise = warp (at "command".i'isJust) not . fromKList <#> fromKList
-                configFile s = fold <$> sepBy' (localOpt condDesc <+? condClause) (skipMany' (nbhspace+eol))
+                configFile s = space >> fold <$> sepBy' (localOpt condDesc <+? condClause) (skipMany' (nbhspace+eol))
                   where clause = localOpt (foldl1' (<+?) [cmd n arg | Option _ ns arg _ <- curlyOpts, n <- ns])
                                  <+? include
                                  <+? localOpt echo
