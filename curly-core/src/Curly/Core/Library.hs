@@ -72,7 +72,7 @@ instance Traversable (ModDir s) where
   sequence (ModDir l) = ModDir <$> traverse (\(s,a) -> (s,)<$>a) l
 
 atM :: Eq s => s -> a -> Traversal' (ModDir s a) a
-atM s a k (ModDir d) = map ModDir $ for d' $ \(s',a') -> (s',) <$> if s'==s then k a else return a'
+atM s a k (ModDir d) = map ModDir $ for d' $ \(s',a') -> (s',) <$> if s'==s then k a' else return a'
   where d' | has (at s.traverse) d = d
            | otherwise = (s,a):d
 atMs :: Eq s => [s] -> Traversal' (Free (ModDir s) a) (Free (ModDir s) a)
