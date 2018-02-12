@@ -10,11 +10,11 @@ bundle:
 	mkdir $@
 
 bundle/%.sh: %.sh | bundle
-	cp $< $@
+	cp -a $< $@
 bundle/%.woff2: %.woff2 | bundle
-	cp $< $@
+	cp -a $< $@
 bundle/%.ttf: %.ttf | bundle
-	cp $< $@
+	cp -a $< $@
 bundle/style.css: style.scss | bundle
 	sassc $< > $@
 bundle/%.html: %.md template.html | bundle
