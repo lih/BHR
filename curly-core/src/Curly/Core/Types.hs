@@ -219,6 +219,7 @@ instance Identifier s => Show (Type s) where
                                    | otherwise -> (ins Nothing Nothing ".",as,bs)
                       _ -> (ins Nothing Nothing "∅",as,bs)
           hasPrecedence 0 Function (Just Function) = True
+          hasPrecedence _ _ (Just c) | typeClassNArgs c==0 = False
           hasPrecedence _ _ Nothing = False
           hasPrecedence _ x (Just y) = x > y
           showPat "_" as = intercalate " " as
@@ -257,23 +258,29 @@ instance Identifier s => Documented (Type s) where
 
 zipTypes :: (Monad m,Identifier s) => (TypeShape s -> TypeShape s -> m ()) -> Type s -> Type s -> m (Type s)
 zipTypes zipNodes (Type ta) (Type tb) =
-  Type . tagEdges mergeSkol <$> saturate (ta' + tagEdges (zero,) tb)
+  map Type
+  $ traverseEquivEdges (\_ (shl,shr) -> mergeSkol shl shr <$ zipNodes shl shr)
+  $ saturate (ta' + tagEdges (zero,) tb)
   where tagEdges f = mapEquivEdgesMonotonic Just (Just . f)
         (Max nska,ta') = tell (Max (-1)) >> traverseEquivEdges go ta
           where go _ x@(SkolemType n) = tell (Max n) >> pure (x,zero)
                 go _ x = pure (x,zero)
-        mergeSkol (SkolemType n,SkolemType _) = SkolemType n
-        mergeSkol (PolyType,SkolemType n) = SkolemType (n+nska+1)
-        mergeSkol (a,b) = a+b
+
+        mergeSkol (SkolemType n) (SkolemType _) = SkolemType n
+        mergeSkol PolyType (SkolemType n) = SkolemType (n+nska+1)
+        mergeSkol a b = a+b
+
         nextPath c i = second (+[TypeIndex c i])
         isPathPrefix (r,p) (r',p') = r==r' && let (ph',pt') = splitAt (length p) p' in ph'==p && nonempty pt'
         withoutPrefixes l = [p' | (p,p') <- zip (head l:l) l
                                 , not (isPathPrefix p p')]
+
+        unifyNodes nodes@(can:_) = l'range can %~ (+fromKList nodes)
+        unifyNodes _ = id
+
         pathSet = c'set . yb ascList . map (,undefined)
         saturate rel =
-          case [(map (nextPath c i . fst) domL+nextDom,
-                 snd (head domL),
-                 snd <$> convert nextDomL)
+          case [map (nextPath c i . fst) domL+nextDom
                | (can,dom) <- rel^.i'equivRel.i'domains.ascList
                , let domL = dom^.ascList
                , TypeCons c <- take 1 $ map (uncurry (+) . snd) domL
@@ -282,14 +289,8 @@ zipTypes zipNodes (Type ta) (Type tb) =
                      nextDomL = rel^.l'domain (nextPath c i can).ascList
                      nextDom = map fst nextDomL
                , nonempty (pathSet projDom - pathSet nextDom)]
-          of [] -> return rel
-             (paths,(shl,shr),msh) : _ -> do
-               zipNodes shl shr
-               maybe unit (uncurry zipNodes) msh
-               saturate (unifyNodes paths rel)
-
-        unifyNodes nodes@(can:_) = l'range can %~ (+fromKList nodes)
-        unifyNodes _ = id
+          of paths : _ -> saturate (unifyNodes paths rel)
+             [] -> rel
 
 type TypeSkel s = Free ((,) (TypeClass s):.:[]) (TypeShape s)
 
