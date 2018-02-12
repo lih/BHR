@@ -257,7 +257,7 @@ instance Identifier s => Documented (Type s) where
 
 zipTypes :: (Monad m,Identifier s) => (TypeShape s -> TypeShape s -> m ()) -> Type s -> Type s -> m (Type s)
 zipTypes zipNodes (Type ta) (Type tb) =
-  Type . tagEdges mergeSkol <$> saturate zero (ta' + tagEdges (zero,) tb)
+  Type . tagEdges mergeSkol <$> saturate (ta' + tagEdges (zero,) tb)
   where tagEdges f = mapEquivEdgesMonotonic Just (Just . f)
         (Max nska,ta') = tell (Max (-1)) >> traverseEquivEdges go ta
           where go _ x@(SkolemType n) = tell (Max n) >> pure (x,zero)
@@ -265,25 +265,31 @@ zipTypes zipNodes (Type ta) (Type tb) =
         mergeSkol (SkolemType n,SkolemType _) = SkolemType n
         mergeSkol (PolyType,SkolemType n) = SkolemType (n+nska+1)
         mergeSkol (a,b) = a+b
-        saturate vis rel =
-          case [(can,unifyShapes (keysSet dom) shl shr rel)
+        nextPath c i = second (+[TypeIndex c i])
+        isPathPrefix (r,p) (r',p') = r==r' && let (ph',pt') = splitAt (length p) p' in ph'==p && nonempty pt'
+        withoutPrefixes l = [p' | (p,p') <- zip (head l:l) l
+                                , not (isPathPrefix p p')]
+        pathSet = c'set . yb ascList . map (,undefined)
+        saturate rel =
+          case [(map (nextPath c i . fst) domL+nextDom,
+                 snd (head domL),
+                 snd <$> convert nextDomL)
                | (can,dom) <- rel^.i'equivRel.i'domains.ascList
-               , (_,(shl,shr)) <- take 1 (dom^.ascList)
-               , not (isKeyIn can vis)] of
-            [] -> return rel
-            ((can,unify):_) -> unify >>= \(invalids,rel') -> saturate ((vis + keysSet (rel'^.l'domain can))-invalids) rel'
+               , let domL = dom^.ascList
+               , TypeCons c <- take 1 $ map (uncurry (+) . snd) domL
+               , i <- [0..typeClassNArgs c-1]
+               , let projDom = map (nextPath c i) (withoutPrefixes $ map fst domL)
+                     nextDomL = rel^.l'domain (nextPath c i can).ascList
+                     nextDom = map fst nextDomL
+               , nonempty (pathSet projDom - pathSet nextDom)]
+          of [] -> return rel
+             (paths,(shl,shr),msh) : _ -> do
+               zipNodes shl shr
+               maybe unit (uncurry zipNodes) msh
+               saturate (unifyNodes paths rel)
 
-        unifyShapes ks shl shr rel = do
-          zipNodes shl shr
-          let nodeSets = case shl+shr of
-                TypeCons s -> map (\i -> map (second (+[TypeIndex s i])) ks) [0..typeClassNArgs s-1]
-                _ -> []
-          return $ foldr (unifyNodes . keys) (zero,rel) nodeSets
-        
-        unifyNodes nodes@(can:_) (invalids,rel) =
-          (l'range can) (\r -> (invalids+keysSet (nodesM-r),nodesM+r)) rel
-          where nodesM = fromKList nodes
-        unifyNodes _ x = x
+        unifyNodes nodes@(can:_) = l'range can %~ (+fromKList nodes)
+        unifyNodes _ = id
 
 type TypeSkel s = Free ((,) (TypeClass s):.:[]) (TypeShape s)
 

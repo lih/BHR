@@ -505,7 +505,7 @@ applyAnns a b = (i,m,r,applyType (exprType a) (exprType b),st)
         st = applyStrictness (exprStrictness b) =<< exprStrictness a
 applyType :: forall s. Identifier s => Type s -> Type s -> Type s
 applyType ta tb = tret
-  where tret = force ta`par`force tb`par`mapTypePathsMonotonic dropTop (debug tsum)
+  where tret = force ta`par`force tb`par`mapTypePathsMonotonic dropTop tsum
         ~(hasErr,tsum) = traverseTypeShapes go (functionFrom (length (fst (typeConstraints ta))) tb + ta)
           where go ps x@(TypeMismatch _ _) = tell (any isDeleted ps) >> return x
                 go ps x = pure (if hasErr && (TypeRoot,[Out])`elem`ps then HiddenTypeError else x)
