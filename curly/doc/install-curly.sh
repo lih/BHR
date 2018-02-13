@@ -31,5 +31,5 @@ fi
 get_url "$curly_url" | { mkdir -p "$install_dir"; trace tar -xJ --checkpoint=40 --checkpoint-action=dot -C "$install_dir"; }
 if [ -n "$bin_dir" ]; then
     mkdir -p "$bin_dir"
-    trace ln -fs "$install_dir/curly-0.59.1/curly" "$bin_dir/curly"
+    trace ln -fs "$install_dir/curly-0.59.1.1/curly" "$bin_dir/curly"
 fi

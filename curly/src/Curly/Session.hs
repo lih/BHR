@@ -206,6 +206,8 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["repository","branch",_,c,u] | c`elem`["fork","alias"] -> completeKeyName u
           ["repository","branch",_,c,u,b] | c`elem`["fork","alias"] -> completeBranchName u b
           ("repository":_) -> []
+          ["clean",p] -> completeAbsPath w False p
+          ["pattern",p] -> completeWord (keys pats) p
           ["configure",p] -> completeWord [show n+":"+s | (n,s) <- zip [0..] (curlyFiles ?curlyConfig)] p
           ["compareTypes",x] -> completeWord ["shape","constraints"] x
           ["cd",p] -> completeAbsPath w True p

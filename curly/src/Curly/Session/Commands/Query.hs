@@ -93,8 +93,19 @@ showCmd = withDoc showDoc . fill False $ do
             ] zero
       serveStrLn (docString ?terminal ?style (fromMaybe (nodoc $ "Cannot show pattern "+showRawDoc pat)
                                               (evalDocWithPatterns ?patterns params pat)))
-patternCmd = withDoc "{section {title Define Formatting Patterns} {p {em Usage:} pattern PATH = PATTERN} {p Defines a new query pattern accessible with \\{pattern PATH\\}}}" . fill False $ do
+patternDoc = unlines [
+  "{section {title Define Formatting Patterns} {p {em Usage:} pattern NAME ARG... = PATTERN {em OR} pattern NAME}",
+  "  {p Defines a new query pattern accessible with \\{pattern PATTERN PARAM...\\}}",
+  "  {p If you only specify the pattern name, its current definition will be printed instead.}}"]
+patternCmd = withDoc patternDoc . fill False $ do
   ph:pt <- many1' (nbhspace >> dirArg <*= guard . (/="="))
-  between nbhspace nbhspace (several "=")
-  pat <- docLine "pat" []
-  liftIO $ runAtomic ?sessionState (patterns.at ph =- Just (pt,pat))
+  let setPat = do
+        between nbhspace nbhspace (several "=")
+        pat <- docLine "pat" []
+        liftIO $ runAtomic ?sessionState (patterns.at ph =- Just (pt,pat))
+      showPat = do
+        pat <- liftIO $ runAtomic ?sessionState (getl (patterns.at ph))
+        case pat of
+          Just (_,pat) -> serveStrLn (format "pattern %s%s = %s" ph (foldMap (" "+) pt) (showRawDoc pat))
+          Nothing -> serveStrLn (format "The pattern %s doesn't exist." ph)
+  setPat <+? showPat
