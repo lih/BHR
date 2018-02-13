@@ -9,7 +9,7 @@ module Curly.Core.Documentation(
   -- * Rendering documentation
   -- ** Styles
   TagStyle(..),TermColor(..),TagDisplay(..),Style,defaultStyle,
-  tagColor,tagDisplay,tagIsBold,tagIsUnderlined,tagIndent,tagPrefix,tagIsItalic,
+  tagColor,tagDisplay,tagIsBold,tagIsUnderlined,tagIndent,tagPrefix,tagIsItalic,tagWordWrap,
   -- ** Rendering
   Terminal(..),DummyTerminal(..),docString,pretty,
   -- * Metadata
@@ -210,12 +210,13 @@ data TagStyle = TagStyle {
   _tagIsItalic :: Maybe Bool,
   _tagPrefix :: Maybe String,
   _tagIndent :: Maybe Int,
-  _tagIsRawText :: Maybe Bool
+  _tagIsRawText :: Maybe Bool,
+  _tagWordWrap :: Maybe Int
   }
 instance Semigroup TagStyle where
-  TagStyle c bl bo u it p i r + TagStyle c' bl' bo' u' it' p' i' r' = TagStyle (c'+c) (bl'+bl) (bo'+bo) (u'+u) (it'+it) (p'*p+p+p') (i'+i) (r'+r)
+  TagStyle c bl bo u it p i r w + TagStyle c' bl' bo' u' it' p' i' r' w' = TagStyle (c'+c) (bl'+bl) (bo'+bo) (u'+u) (it'+it) (p'*p+p+p') (i'+i) (r'+r) (w'+w)
 instance Monoid TagStyle where
-  zero = TagStyle zero zero zero zero zero zero zero zero
+  zero = TagStyle zero zero zero zero zero zero zero zero zero
 
 type Style = Map String TagStyle
  
@@ -235,6 +236,8 @@ tagIsUnderlined :: Lens' TagStyle (Maybe Bool)
 tagIsUnderlined = lens _tagIsUnderlined (\x y -> x { _tagIsUnderlined = y })
 tagIsRawText :: Lens' TagStyle (Maybe Bool)
 tagIsRawText = lens _tagIsRawText (\x y -> x { _tagIsRawText = y })
+tagWordWrap :: Lens' TagStyle (Maybe Int)
+tagWordWrap = lens _tagWordWrap (\x y -> x { _tagWordWrap = y })
 
 defaultStyle :: Style
 defaultStyle = fromAList $ map (second ($zero)) $ [
@@ -272,7 +275,8 @@ instance Terminal DummyTerminal where
 data StyleState = StyleState {
   _showState :: ShowState,
   _activeStyle :: (Bool,TagStyle),
-  _indentDepth :: Int
+  _indentDepth :: Int,
+  _column :: Int
   }
 showState :: Lens' StyleState ShowState
 showState = lens _showState (\x y -> x { _showState = y })
@@ -280,11 +284,26 @@ activeStyle :: Lens' StyleState (Bool,TagStyle)
 activeStyle = lens _activeStyle (\x y -> x { _activeStyle = y })
 indentDepth :: Lens' StyleState Int
 indentDepth = lens _indentDepth (\x y -> x { _indentDepth = y })
+column :: Lens' StyleState Int
+column = lens _column (\x y -> x { _column = y })
 
 docString :: Terminal trm => trm -> Style -> Documentation -> String
-docString trm stl d = getId ((doc' d^..i'RWST) ((),StyleState BeginP zero 0)) & \(_,_,t) -> t
+docString trm stl d = getId ((doc' d^..i'RWST) ((),StyleState BeginP zero 0 0)) & \(_,_,t) -> t
   where addStyles s s' = (s+s') & set tagPrefix (s'^.tagPrefix + s^.tagPrefix) 
         tagStl t as = foldl' addStyles zero [stl^.at c.folded | ("class",c) <- (("class",t):as)]
+        tellText txt = do
+          ind <- getl indentDepth
+          wrp <- getl (activeStyle.l'2.tagWordWrap)
+          col <- getl column
+          let indtxt = withIndent ind txt
+              newtxt = if maybe False (\w -> adjustCol indtxt col > w) wrp
+                       then '\n':take ind (repeat ' ')+dropWhile (`elem`" \t") indtxt
+                       else indtxt
+          tell newtxt
+          column =~ adjustCol newtxt
+        adjustCol ('\n':t) _ = adjustCol t 0
+        adjustCol (_:t) col = adjustCol t (col+1)
+        adjustCol [] col = col
         doc' (Join (DocTag t as subs)) = do
           activeStyle.l'2 =~ compose [tagDisplay %- Nothing,tagIndent %- Nothing]
           pref <- saving activeStyle $ saving indentDepth $ do
@@ -307,25 +326,25 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),StyleState BeginP zero 0)) & 
           case st of
             EndP b -> do
               tell (if b then "\n\n" else "\n")
+              column =- 0
               showState =- BeginP
             InP -> do
               r <- getl (activeStyle.l'2.tagIsRawText)
-              if fromMaybe False r then unit else tell " "
+              if fromMaybe False r then unit else tellText " "
             _ -> unit
           styleStart
-          ind <- getl indentDepth
-          tell (withIndent ind t)
+          tellText t
           showState =- InP
         subDoc docs = traverse_ doc' docs
 
         boolSt b k = maybe unit (\x -> if x then k else unit) b
         styleStart = do
-          (isSet,TagStyle (cf,cb) bl bo u it p _ _) <- getl activeStyle
+          (isSet,TagStyle (cf,cb) bl bo u it p _ _ _) <- getl activeStyle
           unless isSet $ do
             activeStyle.l'1 =- True
             maybe unit setDisplay bl
             indent
-            maybe unit (\pre -> tell pre >> (activeStyle.l'2.tagPrefix =- Nothing)) p
+            maybe unit (\pre -> tellText pre >> (activeStyle.l'2.tagPrefix =- Nothing)) p
             tell (restoreDefaultColors trm)
             maybe unit (tell . setForegroundColor trm) cf
             maybe unit (tell . setBackgroundColor trm) cb
@@ -334,7 +353,7 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),StyleState BeginP zero 0)) & 
             boolSt it (tell $ setItalic trm True)
             
         styleEnd = do
-          (isSet,TagStyle (fg,bg) bl bo u it _ _ _) <- getl activeStyle
+          (isSet,TagStyle (fg,bg) bl bo u it _ _ _ _) <- getl activeStyle
           when isSet $ do
             maybe unit endDisplay bl
             boolSt bo (tell $ setBold trm False)
@@ -346,7 +365,7 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),StyleState BeginP zero 0)) & 
           st <- getl showState
           pref <- getl (activeStyle.l'2.tagPrefix)
           case st of
-            BeginP -> getl indentDepth >>= \n -> tell (take (n - maybe 0 length pref) (repeat ' '))
+            BeginP -> getl indentDepth >>= \n -> tellText (take (n - maybe 0 length pref) (repeat ' '))
             _ -> unit
         withIndent n = go
           where go "" = ""

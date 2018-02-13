@@ -53,12 +53,16 @@ editCmd = viewCmd editDoc zero onPath $ \path (by leafPos -> r) -> case r of
             Just s -> liftIOWarn $ editSource s (0,0) reloadMountain
             _ -> zero
 
-showDoc = "{section {title Formatted Query} {p {em Usage:} show PATH PATTERN} {p Show the function at PATH according to the given pattern}}"
+showDoc = unlines [
+  "{section {title Formatted Query} {p {em Usage:} show (PATH|\\\\(EXPR\\\\)) [PATTERN]}",
+  "  {p Show information about functions under PATH, or an ad-hoc expression}",
+  "  {p The pattern will default to '\\{call show-default\\}' if left unspecified.}}"
+  ]
 showCmd = withDoc showDoc . fill False $ do
   epath <- map Right (nbhspace >> between (single '(') (single ')') (withParsedString (expr AnySpaces)))
            <+? map Left ((nbhspace >> ((several "{}" >> getSession wd) <+? absPath ""))
                          <+? (lookingAt (hspace >> eol) >> getSession wd))
-  pat <- option' (docTag' "call" [Pure "default"])
+  pat <- option' (docTag' "call" [Pure "show-default"])
          (nbhspace >> ((docAtom <*= guard . has t'Join) <+? map (docTag' "call" . pure . Pure) dirArg))
   withMountain $ withPatterns $ withStyle $ case epath of
     Left path -> let ctx = fold $ c'list $ localContext^??atMs path in do

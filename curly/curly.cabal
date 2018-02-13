@@ -25,19 +25,19 @@ data-files:
   bash/completions/curly.arg.shf
   bash/completions/curly.script.shf
   bash/completions/curly.sh
-  bash/completions/cyfile
   bash/completions/defcomp.curly-script.shf
+  default.curly
+  dns-lookup.sh
   emacs/curly-conf-mode.el
   emacs/curly-mode.el
+  freeze.sh
   install.sh
-  dns-lookup.sh
   kate/highlight-curly.xml
   list
   make/curly.mk
   mime/curly.xml
   proto/vc/http
   proto/vc/https
-  freeze.sh
 
 library
   default-language:    Haskell2010

@@ -43,7 +43,8 @@ styleCmd = withDoc styleDoc $ False <$ do
          styleSpec "italic"    tagIsItalic     boolean <+?
          styleSpec "bold"      tagIsBold       boolean <+?
          styleSpec "indent"    tagIndent       number <+?
-         styleSpec "prefix"    tagPrefix       (quotedString '"')
+         styleSpec "prefix"    tagPrefix       (quotedString '"') <+?
+         styleSpec "word-wrap" tagWordWrap     number
   liftIOWarn (modifyIORef ?sessionState (style.at tag.folded %~ stl))
 
 -- | A list of colors gotten from 'http://www.color-hex.com/color-names.html'

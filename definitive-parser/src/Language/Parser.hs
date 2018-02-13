@@ -235,7 +235,7 @@ noneOf t = satisfy (\e -> not (e`elem`t))
 
 -- |Parse a litteral decimal number
 number :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char,Num n) => p n
-number = fromInteger.read <$> many1 digit
+number = fromInteger.read <$> many1' digit
 -- |Parse a single decimal digit
 digit :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p Char
 digit = satisfy isDigit

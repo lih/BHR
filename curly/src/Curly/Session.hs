@@ -174,7 +174,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           [cmd] -> completeCommand cmd
           ["help",cmd] -> completeCommand cmd
           ("help":_) -> []
-          ["style",_,tp] -> completeWord ["color","bgcolor","display","underline","italic","bold","indent","prefix"] tp
+          ["style",_,tp] -> completeWord ["color","bgcolor","display","underline","italic","bold","indent","prefix","word-wrap"] tp
           ["style",_,"display",tp] -> completeWord ["none","line","block","inline"] tp
           ["style",_,x,tp] | x`elem`["underline","bold","italic"] -> completeWord ["none","true","false"] tp
                            | x`elem`["color","bgcolor"] -> completeWord ("none":keys colorNames) tp
