@@ -13,7 +13,7 @@ module Curly.Core.Types (
   mapTypePaths,mapTypePathsMonotonic,traverseTypeShapes,mapTypeShapes,
   selectConstraints,clearContexts,abstractStructTypes,abstractImplicitType,
   functionFrom,
-  freezeType,thawType,isComplexType,compareConstrainedness,isSubtypeOf,
+  freezeType,thawType,isComplexType,compareConstrainedness,isSubtypeOf,constraintType,
   -- * Implicit instances
   InstanceMap,isValidInstanceMap
   )
@@ -444,6 +444,19 @@ abstractImplicitType (c,is) as = mapTypeShapes g . warp i'typeRel addCons . mapT
         ct = ClassType (length as) is c
         rootInds = c'map (fromAList (zip as [0..]))
         addCons = lnSkel (ImplicitRoot 0,[]) (ImplicitRoot 0,[]) (Pure $ TypeCons ct)
+
+constraintType :: Ord s => s -> Int -> Type s
+constraintType t nargs = zero
+                         & compose [ln' p ((poly --> poly) --> poly)
+                                    . ln (p+[In,In]) (p+[In,Out]) poly
+                                    . ln (p+[In,In]) (retp+[In,TypeIndex tc i]) poly
+                                   | i <- [0..nargs-1]
+                                   , let p = take i (repeat Out)]
+                         . ln' retp (poly --> poly)
+                         . ln (retp+[In]) (retp+[Out]) (Join (Compose (tc,[])))
+                         & Type
+  where retp = take nargs (repeat Out)
+        tc = NamedType nargs t
 
 -- | `functionFrom t` is the type (t -> *)
 functionFrom :: Ord s => Int -> Type s -> Type s

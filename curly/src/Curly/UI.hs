@@ -198,19 +198,19 @@ watchSources = do
   sequence_ [watchFile f reloadMountain | (_,LibraryFile f) <- ?curlyPlex^.mounts]
   sequence_ [watchFile f reloadMountain | (_,Resource f _) <- ?curlyPlex^.mounts]
 
-parseCurlyArgs :: [String] -> [String :+: [CurlyOpt]]
+parseCurlyArgs :: [String] -> [String :+: CurlyOpt]
 parseCurlyArgs args = fromMaybe [] $ matches Just (tokenize (map2 Right curlyOpts) naked) args
-  where naked ('%':s) = Right [Target (Execute s)]
-        naked ('+':s) = Right [Flag s]
-        naked ('@':s) = Right [Target (SetServer (readServer s))]
-        naked (':':s) = Right [Target (SetInstance s)]
+  where naked ('%':s) = Right $ Target (Execute s)
+        naked ('+':s) = Right $ Flag s
+        naked ('@':s) = Right $ Target (SetServer (readServer s))
+        naked (':':s) = Right $ Target (SetInstance s)
         naked s = case matches Just url s of
           Just t -> Right t
           _ -> Left s
         url = do
           like "package"
           ((path,_,_),tpl) <- single ':' >> packageSearch
-          return [Mount [path] (Library $ packageID tpl^.thunk)]
+          return $ Mount [path] (Library $ packageID tpl^.thunk)
             
 
 type CurlyConfig = [(Maybe String,CurlyOpt)]
@@ -236,12 +236,12 @@ curlyDataFileName n = withMVar getDataFileName_ref $ \gdfn -> do
 i'isJust :: Monoid m => Iso' (Maybe m) Bool
 i'isJust = iso (maybe False (const True)) (\b -> if b then Just zero else Nothing)
 
-withCurlyConfig :: [String :+: [CurlyOpt]] -> ((?curlyConfig :: CurlyConfig) => IO a) -> IO a
+withCurlyConfig :: [String :+: CurlyOpt] -> ((?curlyConfig :: CurlyConfig) => IO a) -> IO a
 withCurlyConfig a x = do
   c <- readCurlyConfig a
   let ?curlyConfig = c in x
-readCurlyConfig :: [String :+: [CurlyOpt]] -> IO CurlyConfig
-readCurlyConfig cliargs = fold <$> traverse (fileArgs [] <|> return . map (Nothing,)) cliargs
+readCurlyConfig :: [String :+: CurlyOpt] -> IO CurlyConfig
+readCurlyConfig cliargs = foldMap (map (second ($zero))) <$> traverse (fileArgs [] <|> return . pure . (Nothing,) . const) cliargs
   where dropHeadDot ('.':'/':t) = dropHeadDot t
         dropHeadDot x = x
         cliFiles = c'set $ fromKList (map dropHeadDot (cliargs^??each.t'1))
@@ -253,55 +253,72 @@ readCurlyConfig cliargs = fold <$> traverse (fileArgs [] <|> return . map (Nothi
               file' <- followSymlinks file
               fromMaybe [] <$> matchesT Just (configFile file') config
           where sourceFile = (several "module"+several "symbol") <&> \_ ->
-                  [(Nothing,Mount [bareName file] (Source [] file (file+"l")))]
+                  [(Nothing,const $ Mount [bareName file] (Source [] file (file+"l")))]
                 objFile = several "#!/lib/cyl!#" <&> \_ ->
-                  [(Nothing,Mount [bareName file] (LibraryFile file))]
+                  [(Nothing,const $ Mount [bareName file] (LibraryFile file))]
                 bareName s = takeFileName s & \x -> fromMaybe x (noCurlySuf x)
 
-                delDefault | file`isKeyIn`cliFiles = fromKList <#> fromKList
-                           | otherwise = warp (at "command".i'isJust) not . fromKList <#> fromKList
+                delDefault | file`isKeyIn`cliFiles = fromKList <#> fromAList
+                           | otherwise = delete "command" . fromKList <#> fromAList
                 configFile s = space >> fold <$> sepBy' (localOpt condDesc <+? condClause) (skipMany' (nbhspace+eol))
-                  where clause = localOpt (foldl1' (<+?) [cmd n arg | Option _ ns arg _ <- curlyOpts, n <- ns])
+                  where condDesc = do
+                          cond <- single '?' >> visible ""
+                          desc <- skipMany' nbhspace >> many' (do x <- fill Nothing eol <+? map Just token
+                                                                  maybe zero return x)
+                          return [const $ FlagDescription cond desc]
+                        condClause = (<+? clause) $ do
+                          single '+'
+                          let incParam = liftA2 (,) (visible ":,") (many' (single ':' >> visible ",:"))
+                              excParam = single '!' >> visible ","
+                          (exc,inc) <- delDefault . partitionEithers <$> sepBy1' (map Left excParam <+? map Right incParam) (single ',')
+                          let cond k params = Conditional inc exc $ CurlyCondOpt (\params' -> k (params'+params))
+                          hspace >> condClause <&> map (second cond)
+                        clause = localOpt (foldl1' (<+?) [cmd n arg | Option _ ns arg _ <- curlyOpts, n <- ns])
                                  <+? include
                                  <+? localOpt echo
                                  <+? localOpt exe
                                  <+? localOpt flag
                                  <+? localOpt longPrelude
                                  <+? [] <$ many1' (satisfy (/='\n'))
-                        condDesc = do
-                          cond <- single '?' >> visible ""
-                          desc <- skipMany' nbhspace >> many' (do x <- fill Nothing eol <+? map Just token
-                                                                  maybe zero return x)
-                          return [FlagDescription cond desc]
-                        localOpt = map2 (Just s,)
-                        condClause = (<+? clause) $ do
-                          single '+'
-                          (exc,inc) <- delDefault . partitionEithers <$> sepBy1' (option' Right (Left <$ single '!') <*> visible ",") (single ',')
-                          let cond = Conditional inc exc
-                          hspace >> condClause <&> map (second cond)
+
                         base = init $ dropFileName s
+                        localOpt = map2 (Just s,)
+                        adjustTgt = t'Target.targetFilepaths %~ (base</>)
+
                         include = do
                           several "include" >> nbhspace
                           p <- sepBy' (visible "=") nbhspace <* hspace <* single '=' <* hspace
                           ts <- lift . fileArgs (mnt+p) =<< map (base</>) (visible "")
-                          return (ts <&> l'2.t'Mount %~ ((p+) <#> t'Source.l'1 %~ (p+)))
-                        echo = several ">" >> pure . Target . Echo base<$>option' "" (nbhspace >> many' (satisfy (/='\n')))
-                        exe = single '%' >> nbhspace >> foldl1' (<+?) [cmdLine f | Option _ ["execute"] (ReqArg f _) _ <- curlyOpts]
-                        flag = several "flag" >> nbhspace >> pure . Flag <$> visible ""
+                          return (ts <&> l'2 %~ map (t'Mount %~ ((p+) <#> t'Source.l'1 %~ (p+))))
+
+                        docTail def m = do
+                          tpl <- docFormat "splice" "\n"
+                          return [\params -> fromMaybe (Target $ Echo (format "%s %s (with %s)" def (showRawDoc tpl) (show params)))
+                                             (matches Just m . pretty =<< evalDoc params tpl)]
+                        echo = several ">" >> hspace >> docTail "" (Target . Echo<$>option' "" (many' (satisfy (/='\n'))))
+                        exe = single '%' >> nbhspace >> foldl1' (<+?) [pure . const . f <$> many' (noneOf "\n")
+                                                                      | Option _ ["execute"] (ReqArg f _) _ <- curlyOpts]
+                        flag = several "flag" >> nbhspace >> docTail "Couldn't parse flag" (Flag <$> visible "")
                         longPrelude = do
                           several "prelude" >> hspace >> eol
                           let getLines x = (x <$ lookingAt (several "end prelude"))
                                            <+? (do l <- many' (satisfy (/='\n')) <* eol
                                                    getLines (l:x))
-                          map (Target . AddPrelude) . reverse <$> getLines []
+                          map (const . Target . AddPrelude) . reverse <$> getLines []
+
                         inp = several "mount" 
                         tgt = several "target" + single '-'
-                        cmd "mount" _ = inp >> nbhspace >> pure . uncurry Mount<$>inputSource base
-                        cmd n (NoArg x) = tgt >> nbhspace >> x <$ several n
+                        cmd "mount" _ = do
+                          inp >> nbhspace
+                          docTail "Couldn't parse mount" $ do uncurry Mount <$> inputSource base
+                        cmd n (NoArg x) = tgt >> nbhspace >> [const x] <$ several n
                         cmd n (ReqArg f _) = tgt >> nbhspace >> several n >> nbhspace >> cmdLine f
-                        cmd n (OptArg f _) = tgt >> nbhspace >> several n >> nbhspace >> option' (f Nothing) (cmdLine (f . Just))
-                        cmdLine f = map adjustTgt . f . intercalate " "<$>sepBy1' (visible "") nbhspace
-                        adjustTgt = t'Target.targetFilepaths %~ (base</>)
+                        cmd n (OptArg f _) = do
+                          tgt >> nbhspace >> several n >> nbhspace
+                          option' [const $ f Nothing] (cmdLine (f . Just))
+                        cmdLine f = docTail "Couldn't parse target"
+                                    $ do adjustTgt . f . intercalate " "<$>sepBy1' (visible "") nbhspace
+                        
 
 withCurlyPlex :: MonadIO m => CurlyConfig -> ((?curlyPlex :: CurlyPlex) => m a) -> m a
 withCurlyPlex opts x = do
@@ -310,25 +327,37 @@ withCurlyPlex opts x = do
 
 curlyPlex :: CurlyConfig -> IO CurlyPlex
 curlyPlex args = do
-  ret <- composing addOpt (snd<$>args) <$> newCurlyPlex
+  ret <- composing (addOpt zero) (snd<$>args) <$> newCurlyPlex
   let ?curlyPlex = ret in reloadMountain
   return ret
-  where addOpt (Mount p s) = mounts %~ (+[(p,s)])
-        addOpt (Target t) = targets %~ (+[t])
-        addOpt (Conditional inc exc o) | isValidCond flags inc exc = addOpt o
-        addOpt _ = id
-        isValidCond flags inc exc = (nonempty (inc*flags) || empty inc) && empty (exc*flags)
+  where addOpt env (Mount p s) = mounts %~ (+[(p,s)])
+        addOpt env (Target t) = targets %~ (+[t])
+        addOpt env (Conditional inc exc (CurlyCondOpt o)) = case isValidCond flags inc exc of
+          Just checked -> let env' l = compose [insert n (Pure (Pure v)) | (ns,vs) <- l, (n,v) <- zip ns vs] env
+                          in composing (\l -> addOpt (env' l) (o (env' l))) $ do
+                            for (toList checked) $ \(ns,vss) -> (ns,) <$> let ks = keys (c'set vss)
+                                                                          in if empty ks then [[]] else ks
+          Nothing -> id
+        addOpt _ _ = id
+        isValidCond flags inc exc = let checked = zipWith (,) inc flags
+                                    in do guard $ (nonempty checked || empty inc) && empty (exc*keysSet flags)
+                                          return checked
         allFlags cur | cur==next = cur
                      | otherwise = allFlags next
           where next = composing addFlag (snd<$>args) cur
-                addFlag (Flag f) = touch f
-                addFlag (Conditional inc exc o) | isValidCond cur inc exc = addFlag o
+                addFlag (Flag f) = insertFlag f
+                addFlag (Conditional inc exc (CurlyCondOpt o))
+                  | maybe False (const True) (isValidCond cur inc exc) = addFlag (o zero)
                 addFlag _ = id
-        flags = allFlags (touch "command"
+        insertFlag f = case matches Just (liftA2 (,) (visible ":") (many' (single ':' >> visible ":"))) f of
+          Just (f',args) -> mat f' %~ touch args
+          Nothing -> touch f
+        flags = allFlags (c'map
+                          $ touch "command"
                           $ (if all (has t'setting) [t | (Nothing,Target t) <- args]
                                 && not (or [True | (_,Flag _) <- args])
                              then touch "default" else id)
-                          $ (c'set.fromKList) [f | (_,Flag f) <- args])
+                          $ compose [insertFlag f | (_,Flag f) <- args] zero)
 
 curlyFiles :: CurlyConfig -> [FilePath]
 curlyFiles args = reverse $ foldr go (const []) [s | (Just s,_) <- args] (c'set zero)

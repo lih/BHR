@@ -1,28 +1,29 @@
 #!/usr/bin/env curly
-+clean % clean
 +!nodefault prelude
 style modName bold true
 style modName display block
-
-pattern default = {summary}
-pattern simple = {or
-  "{ident {$ name}}{or " {header v{$ version}}" ""}: {doc {$ synopsis}}"
-  {nodoc (no description available)}}
-
-pattern summary = {header {$ flavor}} {ident {$ name}}: {$ type} {or {when {= {$ flavor} Expression} {ln {$ impl}}} {nothing}}
 style type color orange-2
 style ident color green-2
-
-pattern extended = {summary} : {$ strictness}
 style strictness color light-blue-3
-
-pattern description = {p {ln {header Function} {ident {$ name}}: {$ type}} {ln {header Strictness} {$ strictness}} {p.docP {$ doc}}}
 style doc color white
 style docP indent 2
 style header color gray-30
-
-pattern impl = {implT {$ impl}}
 style implT color gray-40
 
-pattern operator = {= {$ name} *_*}
+pattern show-default = {summary}
+pattern summary = {header {$ flavor}} {ident {$ name}}: {$ type} {or {when {= {$ flavor} Expression} {ln {impl}}} {nothing}}
+pattern extended = {summary} : {$ strictness}
+pattern description = {p {ln {header Function} {ident {$ name}}: {$ type}} {ln {header Strictness} {$ strictness}} {p.docP {$ doc}}}
+pattern impl = {implT {$ impl}}
+
+pattern list-default = {simple}
+pattern simple = {or
+  "{ident {$ name}}{or " {header v{$ version}}" ""}: {doc {$ synopsis}}"
+  {nodoc (no description available)}}
 end prelude
+
++install:pkg          > Installing package {$ pkg} to {env HOME}/.local/bin
++install:pkg,run:pkg  mount pkg.{$ pkg} = package {$ pkg}
++install:pkg:fun      - translate {env HOME}/.local/bin/{$ pkg} = pkg.{$ pkg}.{or {$ fun} main}
+
++run:pkg:fun - execute run pkg.{$ pkg}.{or {$ fun} main}

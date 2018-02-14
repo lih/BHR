@@ -154,8 +154,9 @@ repositoryCmd = withDoc repositoryDoc $ False <$ do
       liftIOWarn $ modifyIORef libraryVCS (+ r)
 
     "list" -> do
-      template <- option' Nothing (Just . (\x -> case x of Pure p -> docTag' p []; _ -> x)
-                                   <$> (nbhspace >> docAtom))
+      template <- option' (docTag' "call" [Pure "list-default"])
+                  ((\case Pure p -> docTag' p []; x -> x)
+                   <$> (nbhspace >> docAtom))
       mkeyid <- expected "key name" (option' Nothing (nbhspace >> Just<$>dirArg))
       branch <- option' Nothing (Just <$> (nbhspace >> dirArg))
       lookingAt (hspace >> (eol+eoi))
@@ -163,7 +164,7 @@ repositoryCmd = withDoc repositoryDoc $ False <$ do
         Nothing -> do
           liftIOWarn $ withStyle $ withPatterns $ do
             ls <- availableLibs
-            for_ [(l,d) | (l,Just d) <- map (second (\d -> maybe (Just $ show d) (showTemplate ?terminal ?style ?patterns d) template)) ls] $ \(l,d) -> do
+            for_ [(l,d) | (l,Just d) <- map (second (\d -> showTemplate ?terminal ?style ?patterns d template)) ls] $ \(l,d) -> do
               serveStrLn $ format "%s %s" (show l) d
         Just keyid -> do
           key <- lookup keyid <$> getKeyStore
@@ -175,7 +176,7 @@ repositoryCmd = withDoc repositoryDoc $ False <$ do
             (Just pub,Just b) -> withMountain $ withStyle $ withPatterns $ do
               bs <- maybe (return zero) (getCommit conn) =<< getBranch conn (Just (Left (pub,b)))
               forl_ (ascList.each) bs $ \(lid,m) -> do
-                for_ (maybe (Just $ show m) (showTemplate ?terminal ?style ?patterns m) template) $ \s -> 
+                for_ (showTemplate ?terminal ?style ?patterns m template) $ \s -> 
                   serveStrLn $ format "%s %s" (show lid) s
 
     "get" -> do

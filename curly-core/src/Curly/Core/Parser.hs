@@ -348,7 +348,7 @@ lambdaArg = letBinding + funPrefix + do
           register n
           return [Left (n,Just (foldr mkLet e args))]
         typeBinding = do
-          ((_,_),(ctor,ctt),(dtor,dtt)) <- typeDecl
+          (_,_,(_,_),(ctor,ctt),(dtor,dtt)) <- typeDecl
           lift $ l'typeMap =~ insert ctor (typeExpr ctt) . insert dtor (typeExpr dtt)
           register ctor ; register dtor
           return []
@@ -449,11 +449,14 @@ curlyLine = expected "Curly source definition ('define', 'type', 'family', 'impo
           d <- docLine "doc" []
           return (descSymbol n d)
         typeLine = do
-          ((pre,post),(ctor,ctt),(dtor,dtt)) <- typeDecl
+          (tname,(cname,arity),(pre,post),(ctor,ctt),(dtor,dtt)) <- typeDecl
           let rng = mkRange pre post
-          register ctor; register dtor
+              tt = constraintType (pureIdent tname) arity
+              
+          register ctor; register dtor; register tname
           return (defTypeSym ctor False rng ctt (expr_constructor ctt)
-                  . defTypeSym dtor False rng dtt (expr_destructor dtt))
+                  . defTypeSym dtor False rng dtt (expr_destructor dtt)
+                  . defTypeSym cname False rng tt (compose [expr_constant | _ <- [1..arity]] expr_identity))
         classLine = "family" >> do
           cl <- nbsp >> varName
           indices <- many' $ between "[" "]" $ sepBy1' varName ","
@@ -511,15 +514,17 @@ typeSum = do
   post <- currentPos
   return (pre,(\l -> foldl1' (+) [exprType (exprIn l e) | e <- exprs]),post)
 
-typeDecl :: Monad m => OpParser m ((SourcePos, SourcePos),
+typeDecl :: Monad m => OpParser m (String,(String,Int),
+                                   (SourcePos, SourcePos),
                                    (String, Type GlobalID),
                                    (String, Type GlobalID))
 typeDecl = "type" >> nbsp >> do
-  mctor <- option' Nothing $ map Just $ do
-    varName <* nbsp <* opKeyword ":" <* nbsp
+  mctor <- optionMaybe' (varName <* nbsp <* opKeyword ":" <* nbsp)
+  mcstr <- optionMaybe' (varName <* nbsp <* opKeyword ":" <* nbsp)
   tname <- varName
   cargs <- many' (nbsp *> varName <*= guard . (/="="))
   let ctor = fromMaybe tname mctor
+      cstr = fromMaybe ("c'"+ctor) mcstr
   nbsp >> opKeyword "=" >> nbsp
   dtor <- varName
   dargs <- many' (nbsp *> varName <*= guard . (/=":"))
@@ -532,7 +537,7 @@ typeDecl = "type" >> nbsp >> do
   l <- lift $ getl l'library
   let tp_l = tp (defRigidSymbols args l)
       (tpc,tpd) = abstractStructTypes (pureIdent tname) cargs dargs tp_l
-  return ((pre,post),(ctor,tpc),(dtor,tpd))
+  return (tname,(cstr,length cargs),(pre,post),(ctor,tpc),(dtor,tpd))
 
 (<##>) :: Lens s t a a -> Lens s' t' a b -> Lens (s,s') (t,t') a b
 l1 <##> l2 = lens (liftA2 (,) (by l1) (by l2)) (\a (t,t') -> set l2 t' (set l1 t a))

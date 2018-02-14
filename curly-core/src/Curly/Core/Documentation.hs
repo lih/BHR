@@ -3,7 +3,7 @@ module Curly.Core.Documentation(
   -- * The Documentation format
   DocNode(..),Documentation,Documented(..),
   docNodeAttrs,docNodeSubs,
-  docTag,docTag',nodoc,mkDoc,showRawDoc,docAtom,docLine,
+  docTag,docTag',nodoc,mkDoc,showRawDoc,docAtom,docLine,docFormat,
   DocParams,DocPatterns,
   evalDoc,evalDocWithPatterns,
   -- * Rendering documentation
@@ -21,6 +21,7 @@ module Curly.Core.Documentation(
 import Definitive
 import Language.Format hiding (letter)
 import IO.Network.Socket (PortNumber)
+import System.Environment (lookupEnv)
 
 -- | A documentation node (similar to a HTML node, but simpler)
 data DocNode a = DocTag String [(String,String)] [a]
@@ -84,8 +85,11 @@ evalDocWithPatterns pats = eval
             eval' (Join (DocTag "$*" [] xs)) = do
               xs' <- traverse eval' xs
               path <- for xs' $ \x -> x^?t'Pure
-              v <- Join vars^?at path.t'Just.t'Pure
-              return (Pure $ show v)
+              v <- Join vars^?at path.t'Just.t'Join
+              return (Pure $ show (Metadata $ map2 pretty v))
+            eval' (Join (DocTag "env" [] [x])) = do
+              x' <- eval' x
+              Pure <$> lookupEnv (pretty x')^.thunk
             eval' (Join (DocTag "or" [] xs)) = foldMap eval' xs
             eval' (Join (DocTag "when" [] [x,y])) = eval' x >> eval' y
             eval' (Join (DocTag "unless" [] [x,y])) = maybe (Just ()) (const Nothing) (eval' x) >> eval' y
@@ -151,8 +155,15 @@ mkDoc :: String    -- ^ The root tag name
 mkDoc t d = Join . DocTag t [] $ fromMaybe [] $ matches Just (between spc spc (sepBy' docAtom spc)) d
 spc :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => ParserT s m ()
 spc = skipMany' (oneOf " \t\n")
+
 docAtom :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => ParserT s m Documentation
-docAtom = tag <+? txt
+docFormat :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => String -> [Char] -> ParserT s m Documentation
+docAtom = fst docAtom'
+docFormat = snd docAtom'
+
+docAtom' :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) =>
+           (ParserT s m Documentation,String -> [Char] -> ParserT s m Documentation)
+docAtom' = (tag <+? txt,strSplice)
   where letter p = token >>= \case
           '\\' -> token
           c | (c`isKeyIn`reserved) || not (p c) -> zero
@@ -169,15 +180,17 @@ docAtom = tag <+? txt
           (tn,an):ns <- liftA2 (,) tagName (many' attribute) `sepBy1'` single '+'
           subs <- spc >> sepBy' docAtom spc
           return (Join $ DocTag tn an $ foldr (\(t,attrs) sub -> [Join $ DocTag t attrs sub]) subs ns)
-        txt = (Pure <$> many1' (letter (/='"'))) <+? strSplice
-          where strSplice = between (single '"') (single '"') $ do
-                  h <- option' id ((:) . Left <$> many1' strChar)
-                  t <- many' (map Left (many1' strChar) <+? map Right tag)
-                  return $ case h t of
-                    [Left s] -> Pure s
-                    l -> Join $ DocTag "splice" [] (map (Pure <|> id) l)
-                strChar = satisfy (\x -> not (x`elem`"\"{\\"))
+        txt = (Pure <$> many1' (letter (/='"'))) <+? between (single '"') (single '"') (strSplice "splice" "\"")
+        strSplice tname delim = do
+          h <- option' id ((:) . Left <$> many1' strChar)
+          t <- many' (map Left (many1' strChar) <+? map Right tag)
+          return $ case h t of
+            [Left s] -> Pure s
+            l -> Join $ DocTag tname [] (map (Pure <|> id) l)
+          where strChar = satisfy (\x -> not (x`elem`(delim+"{\\")))
                           <+? single '\\' >> token
+
+
 docLine :: (ParseToken c, ParseStream c s, TokenPayload c ~ Char, Monad m)
            => String -> [(String,String)] -> ParserT s m Documentation
 docLine n as = Join . DocTag n as <$> many1' (skipMany' (oneOf " \t") >> docAtom)
@@ -190,7 +203,7 @@ showRawDoc = \case
         showAttr (x,v) = ":" + foldMap quoteChar x + "=" + foldMap quoteChar v
         showSub x = " "+showRawDoc x
 
-data ShowState = BeginP | InP | EndP Bool
+data ShowState = BeginP | InP Bool | EndP Bool
 data TagDisplay = Inline | Block Bool
 data TermColor = Black     
                | Red     
@@ -323,18 +336,19 @@ docString trm stl d = getId ((doc' d^..i'RWST) ((),StyleState BeginP zero 0 0)) 
           styleStart
         doc' (Pure t) = do
           st <- getl showState
+          (_,stl') <- getl activeStyle
+          let isRaw = fromMaybe False (stl'^.tagIsRawText)
           case st of
             EndP b -> do
               tell (if b then "\n\n" else "\n")
               column =- 0
               showState =- BeginP
-            InP -> do
-              r <- getl (activeStyle.l'2.tagIsRawText)
-              if fromMaybe False r then unit else tellText " "
+            InP wasRaw -> do
+              if isRaw && wasRaw then unit else tellText " "
             _ -> unit
           styleStart
           tellText t
-          showState =- InP
+          showState =- InP isRaw
         subDoc docs = traverse_ doc' docs
 
         boolSt b k = maybe unit (\x -> if x then k else unit) b

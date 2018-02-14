@@ -4,7 +4,7 @@ module Curly.UI.Options (
   CurlyPlex(..),mounts,targets,mountainCache,jitContext,newCurlyPlex,
 
   -- * Inputs and targets
-  CurlyOpt(..),InputSource(..),Target(..),
+  CurlyOpt(..),CurlyCondOpt(..),InputSource(..),Target(..),
   t'Mount,t'Target,t'Source,t'Help,t'setting,targetFilepaths,readServer,showOpts,
 
   -- * Per-target threaded configuration
@@ -24,11 +24,17 @@ import Curly.System
 import Control.Concurrent (ThreadId)
 import Data.IORef (IORef,newIORef)
 
+newtype CurlyCondOpt = CurlyCondOpt (DocParams -> CurlyOpt)
+instance Show CurlyCondOpt where
+  show (CurlyCondOpt f) = show (f zero)
+instance Eq CurlyCondOpt where a == b = compare a b == EQ
+instance Ord CurlyCondOpt where compare = comparing (\(CurlyCondOpt f) -> f zero)
+
 data CurlyOpt = Mount [String] InputSource
               | Target Target
               | Flag String
               | FlagDescription String String
-              | Conditional (Set String) (Set String) CurlyOpt
+              | Conditional (Map String [String]) (Set String) CurlyCondOpt
               deriving (Eq,Ord,Show)
 t'Mount :: Traversal' CurlyOpt ([String],InputSource)
 t'Mount k (Mount s i) = k (s,i) <&> \(s',i') -> Mount s' i'
@@ -45,7 +51,7 @@ data InputSource = Source [String] String String
 instance Show InputSource where
   show (Source p s c) = "source"+showSub+" "+s+" "+c
     where showSub | empty p = ""
-                  | otherwise = "["+intercalate " " p+"] "
+                  | otherwise = "["+intercalate "." p+"] "
   show (Resource p c) = "resource "+p+" "+c
   show (Library i) = "library "+show i
   show (LibraryFile f) = "library @"+f
@@ -70,7 +76,7 @@ data Target = Help | Version
             | SetServer (Maybe (InstanceName,HostName,PortNumber))
             | SetInstance InstanceName
             | ServeInstance | ListInstances
-            | Echo FilePath String
+            | Echo String
             | Translate FilePath System [String]
             deriving (Eq,Ord)
 instance Show Target where
@@ -88,9 +94,9 @@ instance Show Target where
   show (SetServer Nothing) = "at local"
   show (SetServer (Just (i,h,p))) = format "at %s:%p/%s" h p i
   show (SetInstance i) = "instance "+i
-  show (Echo _ s) = "echo "+s
-  show (Translate f s p) = format "translate %s @ %s = %s" f (show s) (intercalate " " p) 
-  show (Goody f) = "dump-data-file "+f
+  show (Echo s) = "echo "+s
+  show (Translate f s p) = format "translate %s @ %s = %s" f (show s) (intercalate "." p) 
+  show (Goody f) = "goody "+f
   
 instance FormatArg Target where argClass _ = 'T'
 t'Help :: Traversal' Target ()
@@ -169,10 +175,10 @@ curlyOpts = [
   Option ['l'] ["list-instances"] (NoArg (target ListInstances)) "List all available instances on the selected server (the previous --at target)"
   ]
   where tryParse err p s = fromMaybe (error (err s)) (matches Just p s)
-        mkMount = tryParse (format "Couldn't parse mount option '%s'") (inputSource "." <&> pure . uncurry Mount)
+        mkMount = tryParse (format "Couldn't parse mount option '%s'") (inputSource "." <&> uncurry Mount)
         mkTranslate = tryParse (format "Coudn't parse translate option '%s' (expected FILE=MODULE:...:FUNCTION)") translate
         sepOpt dsc = Option [] [] (NoArg (target Help)) ("--- " + dsc + " ---")
-        target t = [Target t]
+        target t = Target t
           
         translate = do
           n <- visible "@=" <* hspace

@@ -44,8 +44,13 @@ main = cli "curly" $ do
   let prefixes "" = []
       prefixes f = let (h,t) = splitFileName f in f:prefixes (init h)
   args <- parseCurlyArgs <$> getArgs
-  additional <- liftA2 (\x y -> convert x + convert y)
-                (firstExistingFile [curlyUserDir</>"default.curly"])
+  let defaultConfig = curlyUserDir</>"default.curly"
+  do ex <- doesFileExist defaultConfig
+     unless ex $ do
+       createFileDirectory defaultConfig
+       txt <- (readString =<< curlyDataFileName "default.curly")
+       writeString defaultConfig txt
+  additional <- map (\x -> [defaultConfig] + convert x)
                 (firstExistingFile (if any (has t'1) args then [] else map (+"/.curly") (prefixes cwd)))
   
   let fullArgs = map Left additional + args
@@ -95,25 +100,10 @@ runTargets targetList = do
 
 runTarget :: (?commandLineScripts :: [String], ?curlyConfig :: CurlyConfig, ?curlyPlex :: CurlyPlex, ?programName :: String,?targetParams :: TargetParams) => Target -> IO TargetType
 runTarget Version = ioTgt $ putStrLn $ format "Curly, version %s. Crafted with love by Marc O. Coiffier." VERSION_curly
-runTarget (Echo base x) = ioTgt $ do
-  let echoLine = many' (Pure <$> many1' (noneOf "${}")
-                        <+? splice)
-      splice = between (several "${") (single '}') (Join <$> echoLine)
-      runEchoLine (Pure s) = return s
-      runEchoLine (Join l) = do
-        s' <- fold <$> traverse runEchoLine l
-        case words s' of
-          "run":p:args -> readProcess p args ""
-          "path":[p] -> return (base</>p)
-          "env":[v] -> return (envVar "" v)
-          "env":[v,def] -> return (envVar def v)
-          cmd -> error $ format "Unrecogized command '%s'" (intercalate " " cmd)
-  case matches Just echoLine x of
-    Just el -> traverse runEchoLine el >>= putStrLn . fold
-    Nothing -> error "Invalid echo line"
-       
+runTarget (Echo x) = ioTgt $ putStrLn x
+
 runTarget Help = ioTgt $ do
-  let argFlags (Conditional i e arg) = i+e+argFlags arg
+  let argFlags (Conditional i e (CurlyCondOpt arg)) = keysSet i+e+argFlags (arg zero)
       argFlags (FlagDescription n _) = singleton' n
       argFlags _ = zero
       extraFlags = [(n,d) | (_,FlagDescription n d) <- ?curlyConfig]
@@ -144,7 +134,7 @@ runTarget Help = ioTgt $ do
   putStrLn $ format "Publisher key: %s%s" curlyPublisher (valOrigin "CURLY_PUBLISHER")
   putStr "\n"
   putStrLn $ format "Mounts:%s" (if nonempty (?curlyPlex^.mounts) then "" else " none")
-  for_ (?curlyPlex^.mounts) $ putStrLn . uncurry (format "  * %s = %I" . intercalate " ")
+  for_ (?curlyPlex^.mounts) $ putStrLn . uncurry (format "  * %s = %I" . intercalate ".")
   let showTgts = c'list $ select (/=Help) $ ?curlyPlex^.targets
   putStrLn $ format "Targets:%s" (if nonempty showTgts then "" else " none")
   traverse_ (putStrLn . format "  * %T") showTgts

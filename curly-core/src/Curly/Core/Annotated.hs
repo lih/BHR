@@ -12,7 +12,7 @@ module Curly.Core.Annotated(
   -- * Named expressions
   NameNode,NameExpr,RawNameExpr(..),NameTail,i'NameNode,t'exprType,
   -- ** Useful pre-defined expressions
-  expr_identity,expr_constructor,expr_destructor,
+  expr_identity,expr_constant,expr_constructor,expr_destructor,
 
   -- * Expression post-processing
   optimize,solveConstraints
@@ -244,6 +244,8 @@ nnAbstract s e = Join (AnnNode i m r zero st (Lambda s (e^..i'NameNode)))^.i'Nam
 
 expr_identity :: Identifier s => RawNameExpr s
 expr_identity = mkAbstract (pureIdent "#0") (mkSymbol (pureIdent "#0",Pure (Argument 0)))
+expr_constant :: Identifier s => RawNameExpr s -> RawNameExpr s
+expr_constant = mkAbstract (pureIdent "_")
 expr_constructor :: Identifier s => Type s -> RawNameExpr s
 expr_constructor t
   | empty (cs+ds) = expr_identity
