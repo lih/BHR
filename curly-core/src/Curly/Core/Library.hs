@@ -6,7 +6,7 @@ module Curly.Core.Library(
   atM,atMs,fromPList,
   -- ** Leaves
   ModLeaf,SourcePos,SourceRange(..),
-  undefLeaf,undefSymLeaf,leafVal,leafDoc,leafPos,leafType,leafIsMethod,
+  undefLeaf,undefSymLeaf,leafVal,leafDoc,leafPos,leafType,leafStrictness,leafIsFamily,
   -- * Libraries
   GlobalID(..),isLibData,
   Metadata(..),Library,metadata,imports,exports,symbols,implicits,
@@ -32,17 +32,21 @@ import Data.IORef
 import Language.Format
 import Control.Concurrent (forkIO)
 import GHC.Conc (par)
-import Control.DeepSeq
 import Control.Concurrent.MVar
 
 curlyLibVersion :: Int
-curlyLibVersion = 10
+curlyLibVersion = 11
 
 newtype Chunked a = Chunked { getChunked :: a }
 instance Serializable a => Serializable (Chunked a) where
   encode (Chunked a) = encode (serialize a)
 instance Format a => Format (Chunked a) where
   datum = datum <&> \x -> maybe (error "Invalid chunked value") Chunked (matches Just (datum <* (guard . (==zero) =<< remaining)) x)
+newtype Extension a = Extension (Chunked a)
+                    deriving Serializable
+instance Format a => Format (Extension a) where
+  datum = coerceDatum Extension
+
 
 newtype ModDir s a = ModDir [(s,a)]
                       deriving (Semigroup,Monoid,Show)
@@ -104,7 +108,9 @@ data ModLeaf s a = ModLeaf {
   _leafDoc :: Documentation,
   _leafPos :: SourceRange,
   _leafType :: Type s,
-  _leafIsMethod :: Bool,
+  _leafIsFamily :: Bool,
+  _leafStrictness :: Strictness s,
+  _leafExtension :: Extension (),
   _leafVal :: a
   }
                  deriving Generic
@@ -113,12 +119,12 @@ instance Functor (ModLeaf s) where
 instance Foldable (ModLeaf s) where fold l = l^.leafVal
 instance Traversable (ModLeaf s) where sequence l = leafVal id l
 instance (Identifier s,Serializable s,Serializable a) => Serializable (ModLeaf s a) where
-  encode (ModLeaf a b c d e) = encode (Chunked a)+encode b+encode (Chunked c)+encode d+encode (Chunked e)
+  encode (ModLeaf a b c d e f g) = encode (Chunked a)+encode b+encode (Chunked c)+encode d+encode e+encode f+encode (Chunked g)
 instance (Identifier s,Format s,Format a) => Format (ModLeaf s a) where
-  datum = (\(Chunked a) b (Chunked c) d (Chunked e) -> ModLeaf a b c d e)
-          <$>datum<*>datum<*>datum<*>datum<*>datum
+  datum = (\(Chunked a) b (Chunked c) d e f (Chunked g) -> ModLeaf a b c d e f g)
+          <$>datum<*>datum<*>datum<*>datum<*>datum<*>datum<*>datum
 instance (Identifier s,Identifier s') => HasIdents s s' (ModLeaf s a) (ModLeaf s' a) where
-  ff'idents = leafType.ff'idents
+  ff'idents = leafAllSymbols.(l'1.ff'idents .+ l'2.ff'idents)
 
 type SourcePos = (Int,Int,Int)
 data SourceRange = SourceRange (Maybe String) SourcePos SourcePos
@@ -138,29 +144,19 @@ leafDoc :: Lens' (ModLeaf s a) Documentation
 leafDoc = lens _leafDoc (\x y -> x { _leafDoc = y })
 leafPos :: Lens' (ModLeaf s a) SourceRange
 leafPos = lens _leafPos (\x y -> x { _leafPos = y })
-leafIsMethod :: Lens' (ModLeaf s a) Bool
-leafIsMethod = lens _leafIsMethod (\x y -> x { _leafIsMethod = y })
-leafType :: Lens (Type s) (Type s') (ModLeaf s a) (ModLeaf s' a)
-leafType = lens _leafType (\x y -> x { _leafType = y })
+leafIsFamily :: Lens' (ModLeaf s a) Bool
+leafIsFamily = lens _leafIsFamily (\x y -> x { _leafIsFamily = y })
 leafVal :: Lens a b (ModLeaf s a) (ModLeaf s b)
 leafVal = lens _leafVal (\x y -> x { _leafVal = y })
+leafStrictness :: Lens' (ModLeaf s a) (Strictness s)
+leafStrictness = leafAllSymbols.l'2
+leafType :: Lens' (ModLeaf s a) (Type s)
+leafType = leafAllSymbols.l'1
+leafAllSymbols :: Lens (Type s,Strictness s) (Type s',Strictness s') (ModLeaf s a) (ModLeaf s' a)
+leafAllSymbols = lens (liftA2 (,) _leafType _leafStrictness) (\x (y,z) -> x { _leafType = y , _leafStrictness = z })
 
 type LeafExpr s = ModLeaf s (NameExpr s)
 
-data GlobalID = GlobalID String (Maybe (String,LibraryID))
-           deriving (Eq,Ord,Show,Generic)
-instance Documented GlobalID where
-  document = if envLogLevel>=Verbose
-             then \(GlobalID n l) -> Pure (n+showL l)
-             else \(GlobalID n _) -> Pure n
-    where showL (Just (n,l)) = "["+show l+":"+n+"]"
-          showL _ = "[]"
-instance Serializable GlobalID
-instance Format GlobalID
-instance NFData GlobalID
-instance Identifier GlobalID where
-  pureIdent n = GlobalID n Nothing
-  identName (GlobalID n _) = n
 type Context = Module (GlobalID,LeafExpr GlobalID)
 
 data Library = Library {
@@ -169,7 +165,8 @@ data Library = Library {
   _symbols :: Map String (LeafExpr GlobalID),
   _externalSyms :: Map String GlobalID,
   _implicits :: InstanceMap GlobalID (Maybe LibraryID,LeafExpr GlobalID),
-  _exports :: Context
+  _exports :: Context,
+  _libExtension :: Extension ()
   }
 
 metadata :: Lens' Library (Metadata)
@@ -186,9 +183,9 @@ exports :: Lens' Library Context
 exports = lens _exports (\x y -> x { _exports = y })
 
 instance Semigroup Library where
-  Library syn i s es is e + Library _ i' s' es' is' e' = Library syn (i+i') (s+s') (es+es') (is+is') (e+e')
+  Library syn i s es is e ext + Library _ i' s' es' is' e' _ = Library syn (i+i') (s+s') (es+es') (is+is') (e+e') ext
 instance Monoid Library where
-  zero = Library (Metadata zero) zero zero zero zero zero
+  zero = Library (Metadata zero) zero zero zero zero zero (Extension (Chunked ()))
 cylMagic :: String
 cylMagic = "#!/lib/cyl!# "
 newtype ParEncode t = ParEncode t
@@ -199,7 +196,7 @@ instance (Ord k,Format k,Format a) => Format (ParEncode (Map k a)) where
   datum = ParEncode . yb ascList<$>datum
 instance Serializable Library where
   encode l = foldMap encode cylMagic
-             + let (m,(a,b,c,d,e,f,g)) = l^.scoped.withStrMap
+             + let (m,(a,b,c,d,e,f,g,h)) = l^.scoped.withStrMap
                    syn = fromMaybe "" (a^?at "synopsis".t'Just.t'Pure)
                in foldMap encode (syn+"\n") + encode (curlyLibVersion,Compressed (m,
                                                                                   Chunked (delete "synopsis" a),
@@ -207,15 +204,14 @@ instance Serializable Library where
                                                                                   Chunked c,
                                                                                   d,
                                                                                   Chunked e,
-                                                                                  f,
-                                                                                  g))
+                                                                                  f,g,h))
 instance Format Library where
   datum = do
     traverse_ (\c -> datum >>= guard . (c==)) cylMagic
     syn <- many' (datum <*= guard . (/='\n')) <* (datum >>= guard . (=='\n'))
-    datum >>= \(vers,Compressed (m,Chunked a,Chunked b,Chunked c,d,Chunked e,f,g)) -> do
-      guard (vers == curlyLibVersion)
-      return $ (m,(insert "synopsis" (Pure syn) a,map getChunked b,c,d,e,f,g))^..scoped.withStrMap
+    datum >>= \(vers,Compressed (m,Chunked a,Chunked b,Chunked c,d,Chunked e,f,g,h)) -> do
+      guard (vers >= 11 && vers <= curlyLibVersion)
+      return $ (m,(insert "synopsis" (Pure syn) a,map getChunked b,c,d,e,f,g,h))^..scoped.withStrMap
 
 type ExprRep s = ModLeaf s (Expression s (s,Maybe (Symbol s)))
 type LibRep s = (Metadata,Module s
@@ -223,10 +219,10 @@ type LibRep s = (Metadata,Module s
                 ,Map String s
                 ,InstanceMap s (ExprRep s)
                 ,Set LibraryID
-                ,Module s)
+                ,Module s,Extension ())
 scoped :: Iso' Library (LibRep GlobalID)
 scoped = iso f g
-  where f (Library syn i s es is e) = (syn,map fst i,map2 toExpr s,es,map2 toExpr (filterInsts is),instDeps,map fst e)
+  where f (Library syn i s es is e ext) = (syn,map fst i,map2 toExpr s,es,map2 toExpr (filterInsts is),instDeps,map fst e,ext)
           where toSym (sid@(GlobalID _ (Just _)),Pure (Builtin _ (B_Bytes _))) = (sid,Nothing)
                 toSym (sid,Pure sym) = (sid,Just sym)
                 toSym (sid,_) = (sid,Nothing)
@@ -234,7 +230,7 @@ scoped = iso f g
                 toExpr = map toSym . c'Expression . semantic
                 filterInsts = map snd . warp ascList (\l -> [x | x@(_,(Nothing,_)) <- l])
                 instDeps = c'set $ fromKList [k | (Just k,_) <- toList is]
-        g (syn,i',s',es,is',isd,e') = Library syn i s es is e
+        g (syn,i',s',es,is',isd,e',ext) = Library syn i s es is e ext
           where symVal (GlobalID _ (Just (sname,l))) = fromMaybe (error $ "Couldn't find library "+show l) (findLib l)
                                                        ^.flLibrary.symbols.at sname.l'Just (undefSymLeaf sname (Just l))
                 symVal (GlobalID sname Nothing) = s^.at sname.l'Just (undefLeaf (format "Undefined local symbol %s" sname))
@@ -250,8 +246,8 @@ scoped = iso f g
 
 withStrMap :: Iso' (LibRep GlobalID) (Map Int GlobalID,LibRep Int)
 withStrMap = iso f g
-  where f (n,i,v,ev,iv,ivd,o) = let ((_,strs),(i',v',ev',iv',o')) = yb state foo zero
-                                in (toMap (commute strs),(n,i',v',ev',iv',ivd,o'))
+  where f (n,i,v,ev,iv,ivd,o,ext) = let ((_,strs),(i',v',ev',iv',o')) = yb state foo zero
+                                    in (toMap (commute strs),(n,i',v',ev',iv',ivd,o',ext))
           where strId s = id <~ \(sz,m) -> case lookup s m of
                   Just sid -> ((sz,m),sid)
                   _ -> ((sz+1,insert s sz m),sz)
@@ -271,7 +267,7 @@ withStrMap = iso f g
         c'GlobalID = c'_ :: Constraint GlobalID
         symIdents :: (Identifier s,Identifier s') => FixFold s s' (Symbol s) (Symbol s')
         symIdents = ff'idents
-        g (m,(n,i',v',ev',iv',ivd,o')) = (n,map idSym i',v,ev,iv,ivd,map idSym o')
+        g (m,(n,i',v',ev',iv',ivd,o',ext)) = (n,map idSym i',v,ev,iv,ivd,map idSym o',ext)
           where idSym :: Int -> GlobalID
                 idSym i = fromMaybe (error "Undefined identifier ID") (lookup i m)
                 exprSym l = (c'ExprRep c'GlobalID . warp ff'idents idSym
@@ -310,7 +306,10 @@ withPrevIdents _ (Join (ModDir d)) = Join (ModDir [(s,withPrevIdents s x) | (s,x
 mapIdents :: (String -> GlobalID -> GlobalID) -> (GlobalID -> GlobalID) -> String -> Context -> Context
 mapIdents sw f = mapC
   where mapDE = warp (leafType.ff'idents) f . warp leafVal mapE
-        mapE = warp (from i'NameNode) (map (first f)) . warp (t'exprType.ff'idents) f
+        mapE = warp (from i'NameNode) (map (first f . warp (l'2.t'Pure.t'Builtin.l'2) mapB))
+               . warp (t'exprType.ff'idents) f
+        mapB (B_Foreign vals def) = B_Foreign (map f vals) (f def)
+        mapB x = x
         mapC _ (Join (ModDir m)) = Join . ModDir $ warp each (\(s,e) -> (s,mapC s e)) m
         mapC s (Pure (i,e)) = Pure (sw s (f i),mapDE e)
 context :: Mountain -> Context
@@ -323,7 +322,8 @@ localContext = context ?mountain
 undefSym :: NameExpr GlobalID
 undefSym = mkSymbol (pureIdent "undefined",Pure (Builtin (builtinType B_Undefined) B_Undefined))
 undefLeaf :: String -> LeafExpr GlobalID
-undefLeaf msg = ModLeaf (nodoc msg) NoRange zero False undefSym
+undefLeaf msg = ModLeaf (nodoc msg) NoRange zero False noStrictness (Extension (Chunked ext)) undefSym
+  where ext = ()
 undefSymLeaf :: String -> Maybe LibraryID -> LeafExpr GlobalID
 undefSymLeaf s ml = undefLeaf (format "Undocumented symbol %s%s" s (case ml of Just l -> format " in %s" (show l)
                                                                                Nothing -> ""))
@@ -342,7 +342,7 @@ addExport e l = l & exports %~ (+resolve l e)
 setExports :: Module String -> Library -> Library
 setExports e l = l & exports %- resolve l e
 defSymbol :: Semantic e String (String,Maybe (NameExpr GlobalID)) => String -> SourceRange -> Maybe (Type GlobalID) -> Bool -> e -> Library -> Library
-defSymbol s r t isM e l = l & symbols.at s.l'Just (undefSymLeaf s Nothing) %~ set leafType tp . set leafVal e' . set leafPos r . set leafIsMethod isM
+defSymbol s r t isM e l = l & symbols.at s.l'Just (undefSymLeaf s Nothing) %~ set leafType tp . set leafVal e' . set leafPos r . set leafIsFamily isM
   where e' = optExprIn l e 
         tp = fromMaybe (exprType e') t
 
@@ -369,7 +369,7 @@ libSymbol _ (GlobalID _ (Just (i,lid))) = findLib lid >>= \l -> l^.flLibrary.sym
 
 builtinLibs :: [FileLibrary]
 builtinLibs = map (\l -> rawLibrary False l (serialize l) Nothing)
-              [blib_3,blib_2,blib_1,blib_0]
+              [blib_3]
   where
     blib_3 = blib_2 & set (sym ["string"] "showInt".leafDoc) (mkDoc "leafDoc" showIntDoc)
       where showIntDoc = "{section {title Show Number} {p Produces a string representation of its argument}}"

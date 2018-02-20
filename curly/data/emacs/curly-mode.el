@@ -43,14 +43,16 @@
 (defconst curly-mode-keywords
   (list
    (list "^\\(import\\|export\\|transport\\)\\(s?\\)\\>"
-	 '(0 font-lock-builtin-face) '(1 font-lock-builtin-face)
-	 '("\\(\\sw+\\){" (save-excursion
-			    (while (not (or (looking-at "\n") (eq (point) (point-max))))
-			      (forward-sexp) (skip-chars-forward " \t"))
-			    (point))
-	   nil
-	   (1 font-lock-constant-face)))
-   (list "\\(describe\\)\\s-+\\(\\sw+\\)\\s-*\\(as\\)"
+	 '(0 font-lock-builtin-face)
+	 '("\\(\\sw+\\){" nil nil (1 font-lock-type-face)))
+   (list "^\\(multi\\)\\s-+\\(\\sw+\\)\\s-*\\(=\\)\\s-+\\(\\sw*[^,[:blank:]]\\)"
+	 '(1 font-lock-builtin-face) '(2 font-lock-function-name-face)
+	 '(3 font-lock-builtin-face) '(4 font-lock-function-name-face)
+	 '("\\(,\\)\\s-*\\(\\sw+\\)\\s-+\\(\\sw*[^,[:blank:]]\\)" nil nil
+	   (1 font-lock-keyword-face) (2 font-lock-keyword-face) (3 font-lock-function-name-face)
+	   )
+	 )
+   (list "^\\(describe\\)\\s-+\\(\\sw+\\)\\s-*\\(as\\)"
          '(1 font-lock-builtin-face) '(2 font-lock-function-name-face) '(3 font-lock-builtin-face)
          '("." (save-excursion
                  (while (progn
@@ -60,32 +62,50 @@
                  (point))
            nil
            (0 font-lock-doc-face)))
-   (list "^\\(define\\|\\s-+\\)\\s-+\\(\\sw+\\)"
+   (list
+    (setq val (concat "\\(?:{\\|^\\)\\(type\\>\\)\\(?:\\s-+\\(\\sw+\\)\\s-+\\(:\\)\\)?"
+	    (curly-partial-tail '("\\sw+\\)\\(\\(?:\\s-+[^=[:blank:]]\\sw*\\)*"
+				  "="      "\\sw+"       ":"))))
+    
+    '(1 font-lock-builtin-face t t)
+    
+    '(2 font-lock-function-name-face t t) '(3 font-lock-builtin-face)
+    '(4 font-lock-type-face t t) '(5 font-lock-variable-name-face t t) '(6 font-lock-builtin-face t t)
+    '(7 font-lock-function-name-face t t) '(8 font-lock-builtin-face t t)
+
+    '("\\<or\\>" nil nil (0 font-lock-builtin-face t t)))
+   (list
+    (concat "^\\(family\\)" (curly-partial-tail '("\\sw+" "\\(?:[^:]\\sw*\\(?:\\s-+[^:]\\sw*\\)*\\)?" ":")))
+    '(1 font-lock-builtin-face) '(2 font-lock-type-face) '(3 font-lock-variable-name-face)
+    '(4 font-lock-builtin-face))
+
+   (list (concat "^\\(module\\)\\s-+\\(\\(?:[^ \t\n:]\\sw*\\s-+\\)+:\\)?\\([^\n]*\\)$")
+         '(1 font-lock-builtin-face t t) '(2 font-lock-builtin-face t t) '(3 font-lock-doc-face t t))
+
+   (list "^\\(define\\|operator\\|function\\|let\\)\\s-+\\(\\sw+\\)"
          '(1 font-lock-builtin-face) '(2 font-lock-function-name-face)
          '(curly-find-argument (save-excursion (curly-find-arguments-end) (point)) nil
                                (1 font-lock-variable-name-face nil t)
 			       (2 font-lock-function-name-face nil t)))
 
-   (list
-    (concat "\\(?:{\\|^\\)\\s-*\\(type\\>\\)" (curly-partial-tail '("\\sw+" ":" "\\sw+\\)\\(\\(?:\\s-+[^ \t\n=]\\sw*\\)*" "=" "\\sw+" ":")))
-    '(1 font-lock-builtin-face t t) '(2 font-lock-function-name-face t t) '(3 font-lock-builtin-face)
-    '(4 font-lock-type-face t t) '(5 font-lock-variable-name-face t t) '(6 font-lock-builtin-face t t)
-    '(7 font-lock-function-name-face t t) '(8 font-lock-builtin-face t t)
-    '("\\<and\\>" nil nil (0 font-lock-builtin-face t t)))
-   (list
-    (concat "^\\s-*\\(family\\)" (curly-partial-tail '("\\sw+" "\\(?:[^=]\\sw*\\(?:\\s-+[^=]\\sw*\\)*\\)?" ":")))
-    '(1 font-lock-builtin-face) '(2 font-lock-type-face) '(3 font-lock-variable-name-face)
-    '(4 font-lock-builtin-face))
 
-   (list (concat "^\\s-*\\(module\\)\\s-+\\(\\(?:[^ \t\n:]\\sw*\\s-+\\)+:\\)?\\([^\n]*\\)$")
-         '(1 font-lock-builtin-face t t) '(2 font-lock-builtin-face t t) '(3 font-lock-doc-face t t))
-   (list "\\(\"[^\"]*\"\\|\\<'[^']*'\\)" 0 font-lock-string-face)
+   (list "\\(\"[^\"]*\"\\)" 0 font-lock-string-face)
    (list "[{}]" 0 font-lock-function-name-face)
    (list "_" 0 font-lock-builtin-face)
    (cons "[()]" font-lock-builtin-face)
    (list "\\<=\\>" 0 font-lock-builtin-face t)
-   (list "^\\s-*#.*$" 0 font-lock-comment-face t)
    (list "[0-9][0-9]*" 0 font-lock-constant-face t)
+   (cons (lambda (lim)
+           (while (and
+                   (< (point) lim)
+                   (or (memq (get-char-code-property (char-after) 'general-category)
+                             '(Ll Lu Lo Lt Lm Mn Mc Me Nl))
+                       (memq (char-syntax (char-after)) '(?\( ?\) ? ))
+                       (and (>= (char-after) ?0) (<= (char-after) ?9))))
+             (forward-char))
+           (when (< (point) lim) (prog1 t
+                                   (set-match-data (list (point) (1+ (point)))))))
+         '(0 font-lock-constant-face))
    
    (list "{"
          '(curly-find-argument
@@ -97,17 +117,7 @@
 	   (1 font-lock-variable-name-face)
 	   (2 font-lock-function-name-face t t)))
 
-   (cons (lambda (lim)
-           (while (and
-                   (< (point) lim)
-                   (or (memq (get-char-code-property (char-after) 'general-category)
-                             '(Ll Lu Lo Lt Lm Mn Mc Me Nl))
-                       (memq (char-syntax (char-after)) '(?\( ?\) ? ))
-                       (and (>= (char-after) ?0) (<= (char-after) ?9))))
-             (forward-char))
-           (when (< (point) lim) (prog1 t
-                                   (set-match-data (list (point) (1+ (point)))))))
-         '(0 font-lock-keyword-face))))
+   (list "^\\s-*#.*$" 0 font-lock-comment-face t)))
 
 (defconst curly-mode-syntax-table
   (with-syntax-table (make-char-table 'syntax-table)
@@ -178,6 +188,7 @@
   :syntax-table curly-mode-syntax-table
   (run-mode-hooks 'curly-mode-hook)
   (set (make-local-variable 'font-lock-defaults) '(curly-mode-keywords t))
+  (set (make-local-variable 'font-lock-multiline) t)
   (set (make-local-variable 'indent-line-function) 'curly-indent-line)
   (set (make-local-variable 'comment-start) "#")
   (set (make-local-variable 'comment-end) "#")

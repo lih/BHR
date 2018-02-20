@@ -22,8 +22,8 @@ pattern simple = {or
   {nodoc (no description available)}}
 end prelude
 
-+install:pkg          > Installing package {$ pkg} to {env HOME}/.local/bin
-+install:pkg,run:pkg  mount pkg.{$ pkg} = package {$ pkg}
-+install:pkg:fun      - translate {env HOME}/.local/bin/{$ pkg} = pkg.{$ pkg}.{or {$ fun} main}
++install:pkg                  > Installing package {$ pkg} to {or {env PREFIX} "{env HOME}/.local/bin"}
++install:pkg:ver,run:pkg:ver  mount pkg.{$ pkg} = package {$ pkg}{or "-v${ver}" ""}
++install:pkg:ver:fun          - translate {or {env PREFIX} "{env HOME}/.local/bin"}/{$ pkg} = pkg.{$ pkg}.{or {$ fun} main}
 
-+run:pkg:fun - execute run pkg.{$ pkg}.{or {$ fun} main}
++run:pkg:ver:fun - execute run pkg.{$ pkg}.{or {$ fun} main}

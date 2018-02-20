@@ -389,7 +389,7 @@ raw = several
 
 curlyLine :: (Monad m, ?mountain :: Mountain) => OpParser m ()
 curlyLine = expected "Curly source definition ('define', 'type', 'family', 'import', 'export', ...)"
-            (swaying (foldr1 (<+?) [defLine,descLine,typeLine,classLine,comment,impLine,expLine,transLine,setLine,metaLine])
+            (swaying (foldr1 (<+?) [defLine,descLine,typeLine,classLine,comment,impLine,expLine,transLine,metaLine,foreignLine,setLine HorizSpaces])
              <* expected "end of line" (eol+eoi)
              >>= \f -> lift $ l'library =~ f)
   where withPlural p = p >> option' () "s"
@@ -422,12 +422,12 @@ curlyLine = expected "Curly source definition ('define', 'type', 'family', 'impo
           nbsp >> ":" >> nbsp
           v <- many1' (noneOf ['\n'])
           return (metadata.at ph.l'Just (Join zero) %~ insert pt (Pure v))
-        defLine = "define" >> nbsp >> setLine
-        setLine = (previousChar >>= \c -> guard (c==' '||c=='\t')) >> do
+        defLine = ("define" + "operator" + "function" + "let") >> nbsp >> setLine AnySpaces
+        setLine sp = do
           sym <- (("." >> ('.':) <$> many1' letter) <+? varName)
           old <- lift get
-          args <- fold <$> many' (nbsp >> lambdaArg)
-          _ <- floating (opKeyword "=")
+          args <- fold <$> many' (parseNBSpaces sp >> lambdaArg)
+          _ <- parseSpaces sp >> opKeyword "=" <* spc
           pre <- currentPos
           e <- expr HorizSpaces
           post <- currentPos
@@ -435,7 +435,7 @@ curlyLine = expected "Curly source definition ('define', 'type', 'family', 'impo
           register sym
           defAccessors (sym:map fst (toList e))
           return $ \l -> case l^.symbols.at sym of
-            Just lf | lf^.leafIsMethod ->
+            Just lf | lf^.leafIsFamily ->
                       let e' = optExprIn l (foldr mkLet e args)
                           t' = lf^.leafType
                                + mapTypePathsMonotonic (Just . warp (l'1.t'ImplicitRoot) (+1)) (exprType e')
@@ -464,7 +464,25 @@ curlyLine = expected "Curly source definition ('define', 'type', 'family', 'impo
           _ <- nbsp >> opKeyword ":"
           (pre,tp,post) <- nbsp >> typeSum
           defClass cl args indices (mkRange pre post) tp
+
+        foreignLine = "multi" >> do
+          nm <- nbsp >> varName
+          _ <- spc >> "=" <* spc
+          pre <- currentPos
+          defVar <- varName
+          addVars <- many' (hspc >> "," >> spc >> liftA2 (,) varName (nbsp >> varName))
+          post <- currentPos
+          let vlist = fromAList (map2 pureIdent addVars)
+              
+          return (\l -> let vtype = fromMaybe zero (l^?symbols.at defVar.t'Just.leafType)
+                            e = Pure (Builtin vtype (B_Foreign vlist (pureIdent defVar)))
+                        in l & symbols.at nm.l'Just (undefSymLeaf nm Nothing) %~
+                           set leafType vtype
+                           . set leafPos (mkRange pre post)
+                           . set leafVal (mkSymbol (pureIdent nm, e)))
+          
         comment = id <$ raw "#" <* skipMany' (satisfy (/='\n'))
+        
 
 defClass :: Monad m => String -> [String] -> [[String]] -> SourceRange
             -> (Library -> Type GlobalID)
@@ -499,7 +517,7 @@ defTypeSym :: String -> Bool -> SourceRange -> Type GlobalID -> RawNameExpr Glob
 defTypeSym n isM rng tp e = symbols.at n.l'Just (undefSymLeaf n Nothing) %~
                             set leafVal (set t'exprType tp (_rawNameExpr e))
                             . set leafPos rng
-                            . set leafType tp . set leafIsMethod isM
+                            . set leafType tp . set leafIsFamily isM
 
 defRigidSymbols :: [String] -> Library -> Library
 defRigidSymbols args = compose [defTypeSym a False NoRange (rigidTypeFun a) expr_identity
@@ -524,7 +542,7 @@ typeDecl = "type" >> nbsp >> do
   tname <- varName
   cargs <- many' (nbsp *> varName <*= guard . (/="="))
   let ctor = fromMaybe tname mctor
-      cstr = fromMaybe ("c'"+ctor) mcstr
+      cstr = fromMaybe ("t'"+ctor) mcstr
   nbsp >> opKeyword "=" >> nbsp
   dtor <- varName
   dargs <- many' (nbsp *> varName <*= guard . (/=":"))

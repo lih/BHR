@@ -4,8 +4,9 @@ module Curly.Core(
   ExprNode(..),Expression,
   Identifier(..),HasIdents(..),Builtin(..),
   SemanticT(..),Semantic(..),mkAbstract,mkSymbol,mkApply,sem,
-  LibraryID(..),
+  LibraryID(..),GlobalID(..),
   pattern PatSymbol,pattern PatAbstract,pattern PatApply,pattern PatApply2,
+  t'Symbol,t'Apply,t'Abstract,
   -- ** Utilities
   c'Expression,syntax,semantic,mapParams,
   -- * Environment
@@ -112,6 +113,16 @@ semantic e = case sem e of
   SemAbstract i e' -> mkAbstract i (semantic e')
   SemApply f x -> mkApply (semantic f) (semantic x)
 
+t'Symbol :: Semantic e i o => Traversal' e o
+t'Symbol k (sem -> SemSymbol s) = mkSymbol <$> k s
+t'Symbol _ x = pure x
+t'Apply :: Semantic e i o => Traversal' e (e,e)
+t'Apply k (sem -> SemApply f x) = uncurry mkApply<$>k (f,x)
+t'Apply _ x = pure x
+t'Abstract :: Semantic e i o => Traversal' e (i,e)
+t'Abstract k (sem -> SemAbstract s e) = uncurry mkAbstract<$>k (s,e)
+t'Abstract _ x = pure x
+
 -- | Tranform an expression into another, annotating it with contextual information.
 {-# INLINE syntax #-}
 syntax :: (Semantic e i o,Semantic e' i o'',Ord i) => (o -> o' -> o'') -> (o -> o') -> (o -> i) -> (Int -> o') -> e -> e'
@@ -163,7 +174,7 @@ instance Read B64Chunk where
 envVar :: String -> String -> String
 envVar d s = fromMaybe d (lookupEnv s^.thunk)
 
-curlyDirPath :: String -> String
+curlyDirPath :: FilePath -> FilePath
 curlyDirPath dir = (createDirectoryIfMissing True dir^.thunk)`seq`dir
 
 -- | The default Curly port for library proxies and the portmapper
@@ -171,18 +182,18 @@ curlyPort :: PortNumber
 curlyPort = fromMaybe 25465 $ matches Just number (envVar "" "CURLY_PORT")
 
 -- | A user-writable directory to store Curly configurations
-curlyUserDir :: String
+curlyUserDir :: FilePath
 curlyUserDir = curlyDirPath $ envVar "/tmp" "HOME"+"/.curly"
 
 -- | The path of the Curly key wallet
-curlyKeysFile :: String
+curlyKeysFile :: FilePath
 curlyKeysFile = curlyUserDir + "/keys"
 
 -- | The path to the user's cache directory
-curlyCacheDir :: String
+curlyCacheDir :: FilePath
 curlyCacheDir = curlyDirPath $ envVar (curlyUserDir + "/libraries") "CURLY_LIBCACHE"
 
-curlyCommitDir :: String
+curlyCommitDir :: FilePath
 curlyCommitDir = curlyDirPath (curlyUserDir + "/commits")
 
 -- | A Curly log level
@@ -236,10 +247,10 @@ connectTo h p = trylog (error $ format "Couldn't connect to host %s:%p" h p) $ d
 (*+) :: (Ord k,Semigroup m) => Map k m -> Map k m -> Map k m
 a *+ b = a*b+a+b
 
-cacheFileName :: String     -- ^ A base directory
-                 -> String  -- ^ A file name
-                 -> String  -- ^ An extension
-                 -> String
+cacheFileName :: FilePath     -- ^ A base directory
+                 -> String    -- ^ A file name
+                 -> String    -- ^ An extension
+                 -> FilePath
 cacheFileName base (c0:c1:cs@(_:_)) ext = base</>[c0,c1]</>cs+"."+ext
 cacheFileName base x ext = base</>x+"."+ext
 createFileDirectory :: FilePath -> IO ()
@@ -303,6 +314,8 @@ data Builtin = B_Undefined
 
              | B_FileDesc Int
              | B_Open | B_Read | B_Write | B_Close
+
+             | B_Foreign (Map String GlobalID) GlobalID
              deriving (Eq,Ord,Show,Generic)
 instance Documented Builtin where
   document = Pure . show'
@@ -339,3 +352,18 @@ instance Show LibraryID where
 instance Read LibraryID where
   readsPrec _ = readsParser (readable >>= \(B64Chunk c) -> LibraryID c <$ guard (chunkSize c==idSize))
 instance Documented LibraryID where document l = Pure (show l)
+
+data GlobalID = GlobalID String (Maybe (String,LibraryID))
+           deriving (Eq,Ord,Show,Generic)
+instance Documented GlobalID where
+  document = if envLogLevel>=Verbose
+             then \(GlobalID n l) -> Pure (n+showL l)
+             else \(GlobalID n _) -> Pure n
+    where showL (Just (n,l)) = "["+show l+":"+n+"]"
+          showL _ = "[]"
+instance Serializable GlobalID
+instance Format GlobalID
+instance NFData GlobalID
+instance Identifier GlobalID where
+  pureIdent n = GlobalID n Nothing
+  identName (GlobalID n _) = n

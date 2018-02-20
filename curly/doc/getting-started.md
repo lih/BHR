@@ -145,20 +145,22 @@ Curly Standard Repository provides a Main module that defines a
 function just like the one we need.
 
 To use it, you'll need to inform Curly of the existence of the
-repository, by importing its public key :
+repository, by importing its public key (this only needs to be done
+once) :
 
     curly -e 'key import curly-std curly-std.coiffier.net'
 
 After that, the package can be found by Curly under the name
-"Main". All we have to do is mount it and use the `main`{.curly}
+"hello". All we have to do is mount it and use the `main`{.curly}
 function that it exports, like so :
 
-    curly -M Main=package:Main -e 'run Main.main'
+    curly package:hello %'run hello.main'
     # to create an executable
-    curly -M Main=package:Main -t main=Main.main
+    curly package:hello -t hello.main
 
-Curly would also recognize `package:<name>` instead of the heavier `-M
-<name>=package:<name>` for the mount point.
+In the above commands, `package:hello` is a shorthand for `--mount
+hello=package:hello`, and `%<cmd>` is another form for `--execute
+<cmd>`.
 
 Going Further
 =============
@@ -223,15 +225,35 @@ The configuration format pretty straightforward :
 
     Constraints fall into two categories :
 
-      - constraints of the form `+<flag-1>,...,<flag-n>`{.curly} test
-        whether either of the flags was specified. For example, a
-        constraint of `+build,clean`{.curly} will activate its option
-        if Curly was invoked with either `+build`, `+clean` or both.
-
-      - contraints of the form `+!<flag-1>,...,<flag-n>`{.curly} test
+      - constraints of the form `+<flag-1>,...,<flag-n>`{.curly} are
+        _positive_, and serve to assert whether either of the flags
+        was specified. For example, a constraint of
+        `+build,clean`{.curly} will activate its option if Curly was
+        invoked with either `+build`, `+clean` or both.
+        
+        Each of the `<flag>`{.curly}s can optionally take additional
+        parameters that may be referenced within the flagged option,
+        using the [format syntax][format]. Thus, flags can be used to
+        group related actions, such as installing a package or running
+        a specific function.
+        
+        The following example shows how to write a simple installation
+        context, so that calling `curly +install:<pkg1>
+        ... +install:<pkgn>` will install all the requested executables
+        from named packages to a common location : 
+	
+        ~~~~~{.curly}
+        +install:pkg  mount {$ pkg} = package {$ pkg}
+        +install:pkg  > Installing package {$ pkg} to {env HOME}/.local/bin
+        +install:pkg  - translate {env HOME}/.local/bin/{$ pkg} = {$ pkg}.main
+        ~~~~~~~
+		
+      - contraints of the form `+!<flag-1>,...,!<flag-n>`{.curly} test
       	whether either of the flags was absent from the
       	command-line. In other words, it only fails when all the flags
       	are specified.
+
+[format]: curly-document.html
 
 ### Anchored paths in context files
 

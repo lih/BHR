@@ -484,6 +484,7 @@ thawType = mapTypeShapes fromRigid
 builtinType :: forall s. Identifier s => Builtin -> Type s
 builtinType b = (zero :: Type s) & i'typeRel %~ case b of
   B_Undefined     -> ln' [] poly
+  B_Foreign _ _   -> ln' [] poly
   B_Seq           -> ln' [] (poly --> poly --> poly)
                      . ln [Out,In] [Out,Out] poly
 

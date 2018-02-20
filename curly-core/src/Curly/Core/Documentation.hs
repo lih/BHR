@@ -98,7 +98,7 @@ evalDocWithPatterns pats = eval
                     merge (Pure x) (Pure y:t) = Pure (x+y):t
                     merge x t = x:t
             eval' (Join (DocTag op [] [ea,eb]))
-              | op`elem`["<",">","<=",">="] = do
+              | op`elem`["=","<",">","<=",">="] = do
                 let valList = many' (map Left number <+? map Right (many1' (satisfy (not . inRange '0' '9'))))
                     liftOp cmp x@(Pure a) (Pure b) = x <$ do
                       [a',b'] <- traverse (matches Just valList) [a,b]
@@ -108,13 +108,14 @@ evalDocWithPatterns pats = eval
                       sequence_ (zipWith (liftOp cmp) xs ys)
                     liftOp _ _ _ = Nothing
                     toCmp :: String -> [Integer :+: String] -> [Integer :+: String] -> Bool
+                    toCmp "=" = (==)
                     toCmp "<" = (<)
                     toCmp ">" = (>)
                     toCmp "<=" = (<=)
                     toCmp ">=" = (>=)
                     toCmp _ = undefined
                 join $ liftA2 (liftOp (toCmp op)) (eval' ea) (eval' eb)
-              | op=="=" = do
+              | op=="matches" = do
                 let cmp (Pure a) (Pure b) = Pure a <$ matches Just (wildcards b) a
                     cmp (Join (DocTag a _ xs)) (Join (DocTag b _ ys)) = do
                       guard (a==b)
@@ -139,8 +140,9 @@ evalDocWithPatterns pats = eval
         wildcards "*" = unit
         wildcards ('*':'*':t) = wildcards ('*':t)
         wildcards ('*':t@(c:_)) = do
-          _ <- skipMany1' (satisfy (/=c))`sepBy`many1' (single c)
+          _ <- skipMany' (satisfy (/=c))`sepBy`single c
           wildcards t
+        wildcards ('?':t) = token >> wildcards t
         wildcards (c:t) = single c >> wildcards t
         wildcards [] = eoi
         

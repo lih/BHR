@@ -6,6 +6,7 @@ import Language.Parser
 import System.IO (hSetEcho,hSetBuffering,BufferMode(..),openFile,IOMode(..))
 import Data.IORef
 import qualified System.Console.Terminal.Size as TSize
+import Control.DeepSeq (($!!))
 
 tty = (openFile "/dev/tty" ReadWriteMode <*= \h -> hSetBuffering h NoBuffering)^.thunk
 
@@ -63,7 +64,7 @@ readline prompt = between (hSetEcho tty False) (hSetEcho tty True) $ do
   (st',l) <- ((axiom complete^..parserT) inp^..stateT) (RLState zero zero hist zero)
   case l of
     [(rem,s)] -> do
-      writeIORef rl_stateref (rem,st'^.rlHistory,complete)
+      writeIORef rl_stateref (rem,hist,complete)
       return (Just s)
     _ -> return Nothing
   where axiom complete = axiom
@@ -112,7 +113,7 @@ readline prompt = between (hSetEcho tty False) (hSetEcho tty True) $ do
 
                 RawChar '\t' -> do
                   pref <- lift (getl rlPrefix)
-                  comps <- liftIO $ complete (reverse pref)
+                  comps <- liftIO $ try (return []) $ (return$!!) =<< complete (reverse pref)
                   let commonPrefix (x:xs) (y:ys) | x==y = x:commonPrefix xs ys
                       commonPrefix _ _ = []
                       withoutSuffix l@(x:t) s | length (commonPrefix l s) /= length l = x:withoutSuffix t s

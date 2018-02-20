@@ -26,9 +26,15 @@ a { text-decoration: none; color: grey;  }
 a:hover { text-decoration: underline; }
 
 pre { overflow: auto; }
-pre, code { font-family: 'Roboto Mono'; font-size: 90%; background: black; border-radius: 2px; border: 1px grey outset; color: lightgreen; padding: 0.1em 0.5em 0.1em 0.5em; }
+pre, code {
+    font-family: 'Roboto Mono'; font-size: 90%;
+    border-radius: 2px; border: 1px grey outset;
+    padding: 0.1em 0.5em 0.1em 0.5em;
+    background: lightgrey;
+}
 pre code { border: none; padding: 0; line-height: 130%; }
-.curly { background: white; color: black; }
+.terminal { color: lightgreen; background: black; }
+.curly { background: white; }
 
 nav {
     $border-size: 1px;

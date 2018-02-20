@@ -3,7 +3,7 @@ module Curly.Core.Annotated(
   module Curly.Core.Types,
 
   -- * Building blocks
-  Symbol(..),AnnNode(..),
+  Symbol(..),t'Argument,t'Builtin,AnnNode(..),Strictness,ExprStrictness,noStrictness,
 
   -- * Annotated expressions
   Annotated(..),annType,
@@ -61,21 +61,40 @@ instance NFData (Symbol s) where
   rnf (Argument n) = rnf n
   rnf (Builtin _ b) = rnf b
 
-type ExprStrictness = ([Strictness],Strictness)
+t'Argument :: Traversal' (Symbol s) Int
+t'Argument k (Argument n) = Argument <$> k n
+t'Argument _ x = pure x
+t'Builtin :: Traversal (Type s,Builtin) (Type s',Builtin) (Symbol s) (Symbol s')
+t'Builtin k (Builtin t b) = uncurry Builtin<$>k (t,b)
+t'Builtin _ (Argument n) = pure (Argument n)
 
-data StrictnessHead = StH_Void
-                    | StH_Val Int
-                    | StH_Fix String ExprStrictness
-                    deriving (Eq,Ord,Generic)
-instance Serializable StrictnessHead
-instance Format StrictnessHead
+type ExprStrictness s = ([Strictness s],Strictness s)
 
-data Strictness = Delayed String ExprStrictness
-                | HNF StrictnessHead [ExprStrictness]
+data StrictnessHead s = StH_Void
+                      | StH_Val Int
+                      | StH_Fix s (ExprStrictness s)
+                      deriving (Eq,Ord,Generic)
+instance HasIdents s s' (StrictnessHead s) (StrictnessHead s') where
+  ff'idents k (StH_Fix s (stss,sts)) = liftA3 (\x y z -> StH_Fix x (y,z))
+                                       (k s) ((each.ff'idents) k stss)
+                                       (ff'idents k sts)
+  ff'idents _ StH_Void = pure StH_Void
+  ff'idents _ (StH_Val n) = pure (StH_Val n)
+instance Serializable s => Serializable (StrictnessHead s)
+instance Format s => Format (StrictnessHead s)
+
+noStrictness :: Strictness s
+noStrictness = HNF StH_Void []
+
+data Strictness s = Delayed s (ExprStrictness s)
+                  | HNF (StrictnessHead s) [ExprStrictness s]
                 deriving (Eq,Ord,Generic)
-instance Serializable Strictness
-instance Format Strictness
-instance Documented Strictness where
+instance Serializable s => Serializable (Strictness s)
+instance Format s => Format (Strictness s)
+instance HasIdents s s' (Strictness s) (Strictness s') where
+  ff'idents k (Delayed s es) = liftA2 Delayed (k s) ((l'1.each.ff'idents .+ l'2.ff'idents) k es)
+  ff'idents k (HNF h stss) = liftA2 HNF (ff'idents k h) ((each.(l'1.each.ff'idents .+ l'2.ff'idents)) k stss)
+instance Identifier s => Documented (Strictness s) where
   document st = docTag' "strictness" [Pure (sh (0 :: Int) [] st)]
     where sh n env (Delayed s e) = let env' = newVar s env
                                    in paren 0 n $ format "\\%s. %s" (head env') (shS 0 env' e)
@@ -89,12 +108,13 @@ instance Documented Strictness where
           shH _   StH_Void = "_"
           shH env (StH_Fix s e) = let env' = newVar s env
                                   in format "(fix %s = %s)" (head env') (shS 0 env' e)
-          newVar s env | elem s env = newVar (s+"'") env
-                       | otherwise = s:env
+          newVar = newVar' . identName
+            where newVar' s env | elem s env = newVar' (s+"'") env
+                                | otherwise = s:env
           paren n m x | (n :: Int)>=m = x
                       | otherwise = format "(%s)" x
 
-strictnessArg :: Traversal (Int,Int) Int Strictness Strictness
+strictnessArg :: Traversal (Int,Int) Int (Strictness s) (Strictness s)
 strictnessArg k = descend 0
   where descend n (HNF (StH_Val n') ests) =
           HNF . StH_Val <$> k (n,n') <*> traverse (descendE n) ests
@@ -116,7 +136,7 @@ data AnnNode s a = AnnNode {
   _ident,_mass :: Int, 
   _refs :: Map (Symbol s) Int,
   _type :: Type s,
-  _strictness :: ExprStrictness,
+  _strictness :: ExprStrictness s,
   _shape :: ExprNode s a
   }
 annShape :: Lens (ExprNode s a) (ExprNode s b) (AnnNode s a) (AnnNode s b)
@@ -133,9 +153,10 @@ instance Foldable (AnnNode s) where
 instance Traversable (AnnNode s) where
   sequence = annShape sequence 
 instance (Identifier s,Identifier s') => HasIdents s s' (AnnNode s a) (AnnNode s' a) where
-  ff'idents k (AnnNode i m r t st s) = liftA3 (\t' r' s' -> AnnNode i m r' t' st s')
+  ff'idents k (AnnNode i m r t st s) = liftA4 (\t' r' st' s' -> AnnNode i m r' t' st' s')
                                        (forl ff'idents t k)
                                        (fromAList <$> forl (each.l'1.ff'idents) (ascList$^r) k)
+                                       (forl ((l'1.each .+ l'2).ff'idents) st k)
                                        (forl ff'idents s k)
 
 -- | A partially-resolved expression node
@@ -291,7 +312,7 @@ mapRefs sym = descend 0
           SemAbstract s e' -> nnAbstract s (descend (n+1) e')
           SemApply f x -> nnApply (descend n f) (descend n x)
 
-isComplexStrictness :: Strictness -> Bool
+isComplexStrictness :: Eq s => Strictness s -> Bool
 isComplexStrictness (HNF (StH_Val n) xs) = or [n==n' && length xs > length xs' && and (zipWith (==) xs xs')
                                             | (_,HNF (StH_Val n') xs') <- xs]
                                          || any (isComplexStrictness . snd) xs
@@ -438,7 +459,7 @@ class Identifier s => Annotated e s | e -> s where
   exprMass :: e -> Int
   exprRefs :: e -> Map (Symbol s) Int
   exprType :: e -> Type s
-  exprStrictness :: e -> ExprStrictness
+  exprStrictness :: e -> ExprStrictness s
 instance Identifier s => Annotated (AnnExpr s) s where
   exprIdent (Join ann) = _ident ann
   exprIdent (Pure s) = Left s^..shape
@@ -463,10 +484,10 @@ instance Identifier s => Annotated (AnnExpr s) s where
     B_CmpInt_LT -> binOp
     B_CmpInt_EQ -> binOp
     _ -> HNF StH_Void []
-    where binOp = Delayed "x" $ pure $ Delayed "y" $ do
+    where binOp = Delayed (pureIdent "x") $ pure $ Delayed (pureIdent "y") $ do
             tell [arg 0, arg 1]
             pure (HNF StH_Void [])
-          monOp = Delayed "x" $ do 
+          monOp = Delayed (pureIdent "x") $ do 
             tell [arg 0]
             pure (HNF StH_Void [])
           arg n = HNF (StH_Val n) []
@@ -490,8 +511,8 @@ t'exprType = fix $ \node -> from i'NameNode.(t'Join.annType
   where argType k (Builtin t b) = k t <&> \t' -> Builtin t' b
         argType _ (Argument n) = pure (Argument n)
 
-lambdaAnns :: forall e s. Annotated e s => s -> e -> (Int,Int,Map (Symbol s) Int,Type s,ExprStrictness)
-lambdaAnns s e = (i,m,r,lambdaType (exprType e),pure (Delayed (identName s) (exprStrictness e)))
+lambdaAnns :: forall e s. Annotated e s => s -> e -> (Int,Int,Map (Symbol s) Int,Type s,ExprStrictness s)
+lambdaAnns s e = (i,m,r,lambdaType (exprType e),pure (Delayed s (exprStrictness e)))
   where i = Right (Lambda () (exprIdent e))^..shape
         m = exprMass e + 1
         r = delete (Argument 0) (exprRefs e) & ascList.each.l'1.argument %~ subtract 1
@@ -499,7 +520,7 @@ lambdaAnns s e = (i,m,r,lambdaType (exprType e),pure (Delayed (identName s) (exp
 lambdaType :: forall s. Identifier s => Type s -> Type s
 lambdaType te = extractFirstArgument te
 
-applyAnns :: forall e s. Annotated e s => e -> e -> (Int,Int,Map (Symbol s) Int,Type s,ExprStrictness)
+applyAnns :: forall e s. Annotated e s => e -> e -> (Int,Int,Map (Symbol s) Int,Type s,ExprStrictness s)
 applyAnns a b = (i,m,r,applyType (exprType a) (exprType b),st)
   where i = Right (Apply (exprIdent a) (exprIdent b))^..shape
         m = exprMass a + exprMass b + 1
@@ -519,11 +540,11 @@ applyType ta tb = tret
         dropTop (TypeRoot,Out:p) = Just (TypeRoot,p)
         dropTop x = Just x
         
-applyStrictness :: ExprStrictness -> Strictness -> ExprStrictness
+applyStrictness :: forall s. Eq s => ExprStrictness s -> Strictness s -> ExprStrictness s
 applyStrictness esb sa = case sa of
   Delayed _ est -> traverseSt (substD Nothing 0) est
   HNF x l -> pure (HNF x (l+[esb]))
-  where traverseSt :: (Strictness -> ExprStrictness) -> ExprStrictness -> ExprStrictness
+  where traverseSt :: (Strictness s -> ExprStrictness s) -> ExprStrictness s -> ExprStrictness s
         traverseSt k (es,e) = (tell =<< traverse k es) >> k e
 
         substD_abs isFix n = substD (map (+1) isFix) (n+1)

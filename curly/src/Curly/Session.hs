@@ -131,7 +131,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
     pkt <- readChan clt
     plex <- readIORef compPlex
     let ?curlyPlex = plex in case pkt of
-      CompleteRequest ln -> withMountain $ do
+      CompleteRequest ln -> try (writeChan srv (CompleteResponse []) >> return True) $ withMountain $ do
         w <- getSession wd
         pats <- getSession patterns
         ks <- getKeyStore
