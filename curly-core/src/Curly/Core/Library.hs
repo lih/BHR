@@ -545,7 +545,7 @@ availableLibs = do
   conn <- readIORef libraryVCS
   ks <- getKeyStore
   allLibs <- for (ks^.ascList) $ \(kn,(_,k,_,_,_)) -> forkValue $ do
-    branches <- getBranches conn k
+    StampedBranches _ branches <- getBranches conn k
     for (keys branches) $ \b -> forkValue $ do
       mcomm <- getBranch conn (Just (Left (k,b)))
       maybe (return zero) (getCommit conn) mcomm

@@ -373,10 +373,10 @@ sourceLibs = symList $ fromPList [(p,sourceFile b (f,c) (getFile f^.thunk)) | (p
 curlyHistoryFile :: String
 curlyHistoryFile = curlyUserDir </> "history"
 
-getVCSBranches :: MonadIO m => String -> m Branches
+getVCSBranches :: MonadIO m => String -> m StampedBranches
 getVCSBranches name = liftIO $ do
   conn <- readIORef libraryVCS
   u <- lookup name <$> getKeyStore
   case u of
     Just (_,pub,_,_,_) -> getBranches conn pub
-    _ -> return zero
+    _ -> return (StampedBranches zero zero)

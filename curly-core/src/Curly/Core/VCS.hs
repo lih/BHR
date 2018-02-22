@@ -32,9 +32,19 @@ commitHash c = hashData (serialize c)
 
 type Commit = Compressed (Patch LibraryID Metadata,Maybe Hash)
 type Branches = Map String ((PublicKey,String):+:Hash)
+data StampedBranches = StampedBranches Int Branches
+                     deriving (Show,Generic)
+instance Serializable StampedBranches
+instance Format StampedBranches where
+  datum = liftA2 StampedBranches (option 0 datum) datum
+instance Lens1 Int Int StampedBranches StampedBranches where
+  l'1 = lens (\(StampedBranches x _) -> x) (\(StampedBranches _ x) y -> StampedBranches y x)
+instance Lens2 Branches Branches StampedBranches StampedBranches where
+  l'2 = lens (\(StampedBranches _ x) -> x) (\(StampedBranches x _) y -> StampedBranches x y)
+
 data VCKey o = LibraryKey LibraryID (WithResponse Bytes)
              | AdditionalKey LibraryID String (WithResponse (Signed (String,Bytes)))
-             | BranchesKey PublicKey (WithResponse (Signed (Hash,Branches)))
+             | BranchesKey PublicKey (WithResponse (Signed StampedBranches))
              | CommitKey Hash (WithResponse Commit)
              | OtherKey o
            deriving (Show,Generic)
@@ -203,8 +213,8 @@ instance Read VCSBackend where
 curlyPublisher :: String
 curlyPublisher = envVar "" "CURLY_PUBLISHER"
 
-getBranches :: MonadIO m => VCSBackend -> PublicKey -> m Branches
-getBranches conn pub = maybe zero (snd . unsafeExtractSigned) <$> vcbLoad conn (BranchesKey pub)
+getBranches :: MonadIO m => VCSBackend -> PublicKey -> m StampedBranches
+getBranches conn pub = maybe (StampedBranches zero zero) unsafeExtractSigned <$> vcbLoad conn (BranchesKey pub)
 
 getBranch :: MonadIO m => VCSBackend -> Maybe ((PublicKey,String):+:Hash) -> m (Maybe Hash)
 getBranch conn = deepBranch'
@@ -212,7 +222,7 @@ getBranch conn = deepBranch'
         deepBranch' (Just (Right h)) = return (Just h)
         deepBranch' (Just (Left (pub,b))) = deepBranch b pub
         deepBranch b pub = do
-          bs <- getBranches conn pub
+          StampedBranches _ bs <- getBranches conn pub
           deepBranch' (lookup b bs)
 
 getCommit :: MonadIO m => VCSBackend -> Hash -> m (Map LibraryID Metadata)

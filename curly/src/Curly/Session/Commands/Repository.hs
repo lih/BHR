@@ -58,9 +58,9 @@ repositoryCmd = withDoc repositoryDoc $ False <$ do
         _ -> serveStrLn (format "Error: the publisher %s doesn't have a private key" curlyPublisher) >> zero
       modifyBranches :: (Branches -> OpParser IO Branches) -> OpParser IO () 
       modifyBranches k = withKeys $ \pub priv -> do
-        bs <- getBranches conn pub
+        StampedBranches stamp bs <- getBranches conn pub
         x <- k bs
-        bs' <- signValue priv x
+        bs' <- signValue priv (StampedBranches (1+stamp) x)
         vcbStore conn (BranchesKey pub) bs'
       getSource file lid = do
         x <- vcbLoad conn (AdditionalKey lid "source")
@@ -171,7 +171,7 @@ repositoryCmd = withDoc repositoryDoc $ False <$ do
           case (map (by l'2) key,branch) of
             (Nothing,_) -> serveStrLn $ format "Error: Unknown key %s" keyid
             (Just pub,Nothing) -> withMountain $ do
-              m <- map (maybe zero unsafeExtractSigned) $ vcbLoad conn (BranchesKey pub)
+              StampedBranches _ m <- map (maybe (StampedBranches zero zero) unsafeExtractSigned) $ vcbLoad conn (BranchesKey pub)
               serveStrLn $ intercalate "\n" [format "%s: %s" n (show (Zesty c)) | (n,c) <- m^.ascList]
             (Just pub,Just b) -> withMountain $ withStyle $ withPatterns $ do
               bs <- maybe (return zero) (getCommit conn) =<< getBranch conn (Just (Left (pub,b)))
@@ -221,7 +221,7 @@ repositoryCmd = withDoc repositoryDoc $ False <$ do
               Just (_,pub,_,_,_) -> modifyBranches $ \bs -> do
                 if isLink then return (insert branch (Left (pub,srcBranch)) bs)
                   else do 
-                  bs' <- getBranches conn pub
+                  StampedBranches _ bs' <- getBranches conn pub
                   return (set (at branch) (bs'^.at srcBranch) bs)
           branchRen = do
             several "rename"
