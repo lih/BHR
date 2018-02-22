@@ -11,6 +11,7 @@ case "$1" in
 	    mkdir "curly-$ver"
 	    get_data "curly-$ver/curly-mode.el" emacs/curly-mode.el
 	    get_data "curly-$ver/curly-conf-mode.el" emacs/curly-conf-mode.el
+	    get_data "curly-$ver/curly-utils.el" emacs/curly-utils.el
 	    cat >"curly-$ver/curly-pkg.el" <<EOF
 (define-package
   "curly"

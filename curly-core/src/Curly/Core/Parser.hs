@@ -470,7 +470,7 @@ curlyLine = expected "Curly source definition ('define', 'type', 'family', 'impo
           _ <- spc >> "=" <* spc
           pre <- currentPos
           defVar <- varName
-          addVars <- many' (hspc >> "," >> spc >> liftA2 (,) varName (nbsp >> varName))
+          addVars <- many' (hspc >> "," >> spc >> liftA2 (,) (many1' (noneOf (c'list " \t\n"))) (nbsp >> varName))
           post <- currentPos
           let vlist = fromAList (map2 pureIdent addVars)
               

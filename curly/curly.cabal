@@ -30,6 +30,7 @@ data-files:
   dns-lookup.sh
   emacs/curly-conf-mode.el
   emacs/curly-mode.el
+  emacs/curly-utils.el
   freeze.sh
   install.sh
   kate/highlight-curly.xml
