@@ -10,10 +10,10 @@
     (if (eq (car pattern) '@)
 	`(let ((,(cadr pattern) ,expr)) (curly-if-match ,(cadr pattern) ,(car (cddr pattern)) ,then ,else))
       (let* ((var (if (symbolp expr) expr (make-symbol "var")))
-	     (body `(if (consp ,var)
-			(curly-if-match (car ,var) ,(car pattern)
-			  (curly-if-match (cdr ,var) ,(cdr pattern) ,then ,else)
-			  ,else)
+	     (body `(if (and (consp ,var) 
+			     (curly-if-match (car ,var) ,(car pattern)
+			       (curly-if-match (cdr ,var) ,(cdr pattern) (prog1 t (setq --ret-- ,then)))))
+			--ret--
 		      ,else)))
 	(if (symbolp expr) body
 	  `(let ((,var ,expr)) ,body)))))))
@@ -61,6 +61,7 @@
 	       (x x)
 	       ) args ""))
     (_ args)))
+
 (defmacro curly-regex (&rest args) (curly-re-construct args))
 (defmacro curly-keyword (re &rest args)
   "" (declare (indent 1))
