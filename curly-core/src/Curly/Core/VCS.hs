@@ -34,7 +34,7 @@ type Commit = Compressed (Patch LibraryID Metadata,Maybe Hash)
 type Branches = Map String ((PublicKey,String):+:Hash)
 data VCKey o = LibraryKey LibraryID (WithResponse Bytes)
              | AdditionalKey LibraryID String (WithResponse (Signed (String,Bytes)))
-             | BranchesKey PublicKey (WithResponse (Signed Branches))
+             | BranchesKey PublicKey (WithResponse (Signed (Hash,Branches)))
              | CommitKey Hash (WithResponse Commit)
              | OtherKey o
            deriving (Show,Generic)
@@ -204,7 +204,7 @@ curlyPublisher :: String
 curlyPublisher = envVar "" "CURLY_PUBLISHER"
 
 getBranches :: MonadIO m => VCSBackend -> PublicKey -> m Branches
-getBranches conn pub = maybe zero unsafeExtractSigned <$> vcbLoad conn (BranchesKey pub)
+getBranches conn pub = maybe zero (snd . unsafeExtractSigned) <$> vcbLoad conn (BranchesKey pub)
 
 getBranch :: MonadIO m => VCSBackend -> Maybe ((PublicKey,String):+:Hash) -> m (Maybe Hash)
 getBranch conn = deepBranch'

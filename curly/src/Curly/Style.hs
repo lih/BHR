@@ -6,10 +6,11 @@ import Definitive
 import Curly.Core.Documentation
 import qualified Control.Monad as Mon
 import qualified Prelude as P
- 
+import System.Environment (lookupEnv)
+
 csi = "\x1b["
 
-data ANSITerm = ANSITerm
+data ANSITerm = ANSITerm Bool
 tc2c :: Bool -> TermColor -> String
 tc2c True Black = "30m"
 tc2c False Black = "40m"
@@ -29,14 +30,19 @@ tc2c True White = "37m"
 tc2c False White = "47m"
 tc2c True (ColorNumber n) = "38;5;"+show n+"m"
 instance Terminal ANSITerm where
-  setBold ANSITerm b             = csi + if b then "1m" else "m"
-  setUnderlined ANSITerm b       = csi + if b then "4m" else "24m"
-  setItalic ANSITerm b           = csi + if b then "3m" else "23m"
-  setForegroundColor ANSITerm c  = csi + tc2c True c
-  setBackgroundColor ANSITerm c  = csi + tc2c False c
-  restoreDefaultColors ANSITerm  = csi + "39m"
+  setBold _ b             = csi + if b then "1m" else "m"
+  setUnderlined _ b       = csi + if b then "4m" else "24m"
+  setItalic _ b           = csi + if b then "3m" else "23m"
+  setForegroundColor (ANSITerm True) c = csi + tc2c True c
+  setForegroundColor _ _ = ""
+  setBackgroundColor (ANSITerm True) c = csi + tc2c False c
+  setBackgroundColor _ _ = ""
+  restoreDefaultColors (ANSITerm True) = csi + "39m"
+  restoreDefaultColors _ = ""
 
 setupTerm :: String -> IO ANSITerm
-setupTerm _ = return ANSITerm
+setupTerm "vt100" = return (ANSITerm False)
+setupTerm ('e':'t':'e':'r':'m':'-':_) = return (ANSITerm False)
+setupTerm _ =  return (ANSITerm True)
 setupTermFromEnv :: IO ANSITerm
-setupTermFromEnv = return ANSITerm
+setupTermFromEnv = setupTerm . fromMaybe "vt100" =<< lookupEnv "TERM" 

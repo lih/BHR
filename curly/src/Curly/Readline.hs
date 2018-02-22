@@ -38,7 +38,10 @@ cseq :: (ParseStream c s, MonadParser s m p, TokenPayload c ~ Char) => p Control
 cseq = esc <+? map RawChar token
   where esc = do
           single '\ESC'
-          (single '[' >> csi) <+? (Esc <$> token)
+          (single '[' >> csi) <+? (token >>= \case
+                                      'O' -> CSI [] <$> token
+                                      'P' -> CSI [] <$> token
+                                      x -> return (Esc x))
         csi = liftA2 CSI (sepBy' number (single ';')) token
 
 data RLState = RLState {
@@ -88,17 +91,44 @@ readline prompt = between (hSetEcho tty False) (hSetEcho tty True) $ do
                 rlPrefix =~ drop n; getl rlSuffix
               let prefl = length (take n pref)
               unless (prefl == 0) $ do putTTY (CUB [prefl])
-                                       putTTY (suf+take prefl (repeat ' ')) ; putTTY (CUB [prefl+length suf])
+                                       hidingCursor $ do
+                                         putTTY (suf+take prefl (repeat ' ')) ; putTTY (CUB [prefl+length suf])
             deleteForward n = do -- Reverse delete
               suf <- lift $ getl rlSuffix <* do rlSuffix =~ drop n
               let sufl = length (take n suf)
-              unless (sufl == 0) $ do putTTY (drop sufl suf+take sufl (repeat ' '))
-                                      putTTY (CUB [length suf])
+              unless (sufl == 0) $ hidingCursor $ do putTTY (drop sufl suf+take sufl (repeat ' '))
+                                                     putTTY (CUB [length suf])
             
             insertText txt = do
               suf <- lift $ do rlPrefix =~ (txt+); getl rlSuffix
-              putTTY (txt+suf) >> unless (empty suf) (putTTY (CUB [length suf]))
-            
+              putTTY txt
+              hidingCursor (putTTY suf >> unless (empty suf) (putTTY (CUB [length suf])))
+
+            hidingCursor m = putTTY [Esc '['] >> putTTY "?25l" >> m <* putTTY [Esc '['] <* putTTY "?25h" 
+
+            histPrev = do
+              doMove <- lift $ do RLState p s h f <- get
+                                  case h of
+                                    [] -> return Nothing
+                                    prev:h' -> do
+                                      put (RLState (reverse prev) "" h' ((reverse p+s):f))
+                                      return (Just (length p+length s,prev))
+              case doMove of
+                Just (wh,prev) -> do putTTY [RawChar '\r',CUF [length prompt]] >> putTTY (take wh (repeat ' '))
+                                     putTTY [RawChar '\r',CUF [length prompt]] >> putTTY prev
+                Nothing -> return ()
+            histNext = do
+              doMove <- lift $ do RLState p s h f <- get
+                                  case f of
+                                    [] -> return Nothing
+                                    next:f' -> do
+                                      put (RLState (reverse next) "" ((reverse p+s):h) f')
+                                      return (Just (length p+length s,next))
+              case doMove of
+                Just (wh,prev) -> do putTTY [RawChar '\r',CUF [length prompt]] >> putTTY (take wh (repeat ' '))
+                                     putTTY [RawChar '\r',CUF [length prompt]] >> putTTY prev
+                Nothing -> return ()
+
             axiom = do
               c <- cseq
               case c of
@@ -180,30 +210,12 @@ readline prompt = between (hSetEcho tty False) (hSetEcho tty True) $ do
                   forwardChar (length (takeWhile (\x -> not (x`elem`" \t")) suf))
                   axiom
                 
-                CUU [] -> do
-                  doMove <- lift $ do RLState p s h f <- get
-                                      case h of
-                                        [] -> return Nothing
-                                        prev:h' -> do
-                                          put (RLState (reverse prev) "" h' ((reverse p+s):f))
-                                          return (Just (length p+length s,prev))
-                  case doMove of
-                    Just (wh,prev) -> do putTTY [RawChar '\r',CUF [length prompt]] >> putTTY (take wh (repeat ' '))
-                                         putTTY [RawChar '\r',CUF [length prompt]] >> putTTY prev
-                    Nothing -> return ()
-                  axiom
-                CUD [] -> do
-                  doMove <- lift $ do RLState p s h f <- get
-                                      case f of
-                                        [] -> return Nothing
-                                        next:f' -> do
-                                          put (RLState (reverse next) "" ((reverse p+s):h) f')
-                                          return (Just (length p+length s,next))
-                  case doMove of
-                    Just (wh,prev) -> do putTTY [RawChar '\r',CUF [length prompt]] >> putTTY (take wh (repeat ' '))
-                                         putTTY [RawChar '\r',CUF [length prompt]] >> putTTY prev
-                    Nothing -> return ()
-                  axiom
+                CUU [] -> histPrev >> axiom
+                CUU [0] -> histPrev >> axiom
+                CUU [1] -> histPrev >> axiom
+                CUD [] -> histNext >> axiom
+                CUD [0] -> histNext >> axiom
+                CUD [1] -> histNext >> axiom
               
                 RawChar c -> insertText [c] >> axiom
                 

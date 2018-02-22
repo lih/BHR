@@ -257,9 +257,9 @@ readCurlyConfig cliargs = foldMap (map (second ($zero))) <$> traverse (fileArgs 
                 objFile = several "#!/lib/cyl!#" <&> \_ ->
                   [(Nothing,const $ Mount [bareName file] (LibraryFile file))]
                 bareName s = takeFileName s & \x -> fromMaybe x (noCurlySuf x)
-
                 delDefault | file`isKeyIn`cliFiles = fromKList <#> fromAList
-                           | otherwise = delete "command" . fromKList <#> fromAList
+                           | otherwise = fromKList <#> delete "command" . fromAList
+
                 configFile s = space >> fold <$> sepBy' (localOpt condDesc <+? condClause) (skipMany' (nbhspace+eol))
                   where condDesc = do
                           cond <- single '?' >> visible ""
@@ -340,7 +340,8 @@ curlyPlex args = do
           Nothing -> id
         addOpt _ _ = id
         isValidCond flags inc exc = let checked = zipWith (,) inc flags
-                                    in do guard $ (nonempty checked || empty inc) && empty (exc*keysSet flags)
+                                    in do guard $ (nonempty checked || (empty inc && nonempty exc)) &&
+                                            empty (exc*keysSet flags)
                                           return checked
         allFlags cur | cur==next = cur
                      | otherwise = allFlags next

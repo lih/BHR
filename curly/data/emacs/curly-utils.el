@@ -10,11 +10,13 @@
     (if (eq (car pattern) '@)
 	`(let ((,(cadr pattern) ,expr)) (curly-if-match ,(cadr pattern) ,(car (cddr pattern)) ,then ,else))
       (let* ((var (if (symbolp expr) expr (make-symbol "var")))
-	     (body `(if (and (consp ,var) 
-			     (curly-if-match (car ,var) ,(car pattern)
-			       (curly-if-match (cdr ,var) ,(cdr pattern) (prog1 t (setq --ret-- ,then)))))
-			--ret--
-		      ,else)))
+	     (retv (make-symbol "--ret--"))
+	     (body `(let (,retv)
+		      (if (and (consp ,var) 
+			       (curly-if-match (car ,var) ,(car pattern)
+				 (curly-if-match (cdr ,var) ,(cdr pattern) (prog1 t (setq ,retv ,then)))))
+			  ,retv
+			,else))))
 	(if (symbolp expr) body
 	  `(let ((,var ,expr)) ,body)))))))
 
