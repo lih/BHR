@@ -7,6 +7,7 @@ import Curly.Core.Annotated
 import Curly.Core
 import Curly.Core.Library
 import IO.Filesystem
+import Curly.Core.Documentation
 
 newtype RegID = RegID Int
               deriving (Show,Eq,Ord)
@@ -481,6 +482,52 @@ rotateL :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l) => [l] -> m ()
 rotateL [] = unit
 rotateL [_] = unit
 rotateL l = sequence_ $ zipWith (<--) (Register tmpReg:map toLocus l) (map toLocus l+[Register tmpReg])
+
+setDest :: (?sys :: VonNeumannMachine,IsValue v,IsValue v',MonadASM m s) => v -> v' -> m ()
+setDest t v = do
+  destReg!TypeOffset  <-- t
+  destReg!ValueOffset <-- v
+
+specialize :: forall m. (?sys :: VonNeumannMachine,MonadASM m GlobalID) => String -> AnnExpr GlobalID -> m BinAddress
+specialize sysName expr = inSection TextSection $ getCounter <* specTail (sem expr)
+  where
+    specLambda e = get >>= \m -> mute $ case m^.rtAddresses.at e of
+      Just a -> return a
+      Nothing -> mfix $ \r -> do
+        rtAddresses =~ insert e r
+        inSection TextSection $ getCounter <* do
+          builtinArgs 1
+          specTail (sem e)
+
+    specTail e = do
+      specHead e
+      tailCall destReg
+
+    specHead (SemSymbol (Argument n)) = do
+      f <- global_argFun
+      setDest f (composing (const (!EnvOffset)) [1..n] (thisReg!ValueOffset))
+    specHead (SemSymbol (Builtin _ (B_Foreign defs def))) = uncurry setDest =<< foreignBuiltin sysName def defs
+      where foreignBuiltin sys def defs = case findSym i of
+              Just le -> globalBuiltin (specialize sys (anonymous (le^.leafVal))) (Constant 0)
+              Nothing -> error $ format "Couldn't find link destination for symbol: %s" (show i)
+              where i = fromMaybe def (lookup sys defs)
+    specHead (SemSymbol (Builtin _ b)) = case _curlyBuiltin ?sys b of
+      Just mav -> uncurry setDest =<< mav
+      Nothing -> error $ format "The builtin %s is not yet implemented on this system." (show b)
+    specHead (SemAbstract _ body) = do
+      a <- specLambda body
+      setDest a (if empty (exprRefs body) then toValue (0 :: Int) else toValue (thisReg!ValueOffset))
+    specHead (SemApply f x) = specAps f [x]
+      where specAps (PatApply f' x) l = specAps f' (x:l)
+            specAps f l = do
+              pushing [destReg] $ do
+                destReg <-- (0 :: Int)
+                for_ (reverse (f:l)) $ \arg -> do
+                  pushThunk destReg
+                  specHead (sem arg)
+                tmpReg <-- destReg
+              szth <- global_partialApply (length l)
+              setDest szth tmpReg
 
 newtype Standalone = Standalone { standalone :: forall m s. MonadASM m s => m BinAddress -> m () }
 data SysImpl = Imperative (Maybe SystemHooks -> VonNeumannMachine)

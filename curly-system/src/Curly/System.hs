@@ -39,54 +39,13 @@ hostSystem = X86_Linux.system64 { _sysName = "host" }
 
 mkRunExpr e = mkApply e (mkSymbol (Builtin zero B_Unit))
 
-setDest :: (?sys :: VonNeumannMachine,IsValue v,IsValue v',MonadASM m s) => v -> v' -> m ()
-setDest t v = do
-  destReg!TypeOffset  <-- t
-  destReg!ValueOffset <-- v
-
-specialize :: forall m s. (?sys :: VonNeumannMachine,MonadASM m s,Show s,Documented s,Identifier s) => AnnExpr s -> m BinAddress
-specialize expr = inSection TextSection $ getCounter <* specTail (sem expr)
-  where
-    specLambda e = get >>= \m -> mute $ case m^.rtAddresses.at e of
-      Just a -> return a
-      Nothing -> mfix $ \r -> do
-        rtAddresses =~ insert e r
-        inSection TextSection $ getCounter <* do
-          builtinArgs 1
-          specTail (sem e)
-
-    specTail e = do
-      specHead e
-      tailCall destReg
-
-    specHead (SemSymbol (Argument n)) = do
-      f <- global_argFun
-      setDest f (composing (const (!EnvOffset)) [1..n] (thisReg!ValueOffset))
-    specHead (SemSymbol (Builtin _ b)) = case _curlyBuiltin ?sys b of
-      Just mav -> uncurry setDest =<< mav
-      Nothing -> error $ format "The builtin %s is not yet implemented on this system." (show b)
-    specHead (SemAbstract _ body) = do
-      a <- specLambda body
-      setDest a (if empty (exprRefs body) then toValue (0 :: Int) else toValue (thisReg!ValueOffset))
-    specHead (SemApply f x) = specAps f [x]
-      where specAps (PatApply f' x) l = specAps f' (x:l)
-            specAps f l = do
-              pushing [destReg] $ do
-                destReg <-- (0 :: Int)
-                for_ (reverse (f:l)) $ \arg -> do
-                  pushThunk destReg
-                  specHead (sem arg)
-                tmpReg <-- destReg
-              szth <- global_partialApply (length l)
-              setDest szth tmpReg
-
 
 specializeStandalone :: System -> LeafExpr GlobalID -> Bytes
 specializeStandalone sys e = let ?sys = sys in
   let Id (_,_,bin) = runASMT defaultRuntime $ do
         standalone (_sysStandalone sys) $ case _sysImpl sys of
           Imperative imp -> let ?sys = imp (_sysStandaloneHooks sys)
-                            in specialize (mkRunExpr $ anonymous (e^.leafVal))
+                            in specialize (_sysName sys) (mkRunExpr $ anonymous (e^.leafVal))
           RawSystem r -> inSection TextSection (getCounter <* tell (bytesCode' (r e)))
   in bin^.bData
 
@@ -306,8 +265,8 @@ jit_machine = let Imperative imp = _sysImpl hostSystem
               in sys
 newJITContext :: IO (JITContext s)
 newJITContext = map JITContext (newIORef (JITData defaultRuntime zero))
-jitExpr :: (Documented s,Identifier s) => JITContext s -> AnnExpr s -> IO RunJITExpr
-jitExpr cxt e = let ?sys = jit_machine in runJIT cxt (specialize (mkRunExpr e))
+jitExpr :: JITContext GlobalID -> AnnExpr GlobalID -> IO RunJITExpr
+jitExpr cxt e = let ?sys = jit_machine in runJIT cxt (specialize "jit" (mkRunExpr e))
 
 foreign import ccall "mprotect"
   mprotect :: Ptr a -> CSize -> CInt -> IO ()

@@ -19,7 +19,7 @@ module Curly.Core.Library(
   rawLibrary,fileLibrary,  
   -- * Repositories
   Template,defaultTemplate,showTemplate,showDummyTemplate,
-  findLib,availableLibs,libraryVCS
+  findLib,findSym,availableLibs,libraryVCS
   ) where
 
 import Curly.Core.Security.SHA256
@@ -581,3 +581,7 @@ findLib l = registerBuiltinsLib`seq`by thunk $ do
         Nothing -> return Nothing
         
   where orIO ma mb = ma >>= maybe mb (return . Just)
+
+findSym :: GlobalID -> Maybe (LeafExpr GlobalID)
+findSym (GlobalID _ (Just (n,l))) = findLib l >>= by (flLibrary.symbols.at n)
+findSym _ = Nothing
