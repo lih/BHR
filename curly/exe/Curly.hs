@@ -161,14 +161,14 @@ runTarget ServeInstance = forkTgt $ \tid1 -> trylog unit $ bracket_
   tids <- newIORef (c'int 0,c'map zero)
   let ?targetParams = ?targetParams & confThreads %- Just (tid1,tid2,tids)
       
-  putStrLn $ format "Hosting instance '%s' on port %p" (getConf confInstance) port
+  logLine Chatty $ format "Hosting instance '%s' on port %p" (getConf confInstance) port
   sock <- listenOn port
   forever $ do
     (h,addr) <- accept sock
     logLine Verbose $ "Accepting connection from "+show addr
     n <- runAtomic tids $ l'1`swapWith`(+1)
     (`forkFinally` (\e -> case e of
-                      Left exc -> logLine Debug (show exc)
+                      Left exc -> logLine Quiet (show exc)
                       _ -> runAtomic tids $ do l'2 =~ delete n)) $ do
       let storeTid tid = runAtomic tids $ do l'2 =~ insert n tid
       runCurlySession storeTid (SocketClient h) =<< targetServer

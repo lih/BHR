@@ -202,7 +202,7 @@ identities = thunk $^ do
   
 reloadKeyStore :: IO ()
 reloadKeyStore = do
-  logLine Debug "Reloading key store"
+  logLine Verbose "Reloading key store"
   ks <- trylog (return zero) $ readFormat curlyKeysFile
   runKeyState $ put ks
 

@@ -38,7 +38,7 @@ peerServer = do
           x <- readIORef timeouts
           if inst`isKeyIn`x then modifyIORef timeouts (delete inst) >> threadDelay 5000000 >> again
             else do
-            logLine Verbose $ format "Freeing stale instance '%s'" inst
+            logLine Chatty $ format "Freeing stale instance '%s'" inst
             modifyIORef srvState (delete inst)
           
   void $ forkIO $ forever $ do

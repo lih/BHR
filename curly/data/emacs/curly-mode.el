@@ -223,7 +223,7 @@
   (set (make-local-variable 'font-lock-defaults) '(curly-mode-keywords t))
   (set (make-local-variable 'font-lock-multiline) t)
   (set (make-local-variable 'indent-line-function) 'curly-indent-line)
-  ; (set (make-local-variable 'font-lock-extend-after-change-region-function) 'curly-extend-after-change-region)
+  (set (make-local-variable 'font-lock-extend-after-change-region-function) 'curly-extend-after-change-region)
   (set (make-local-variable 'comment-start) "#")
   (set (make-local-variable 'comment-end) "#")
   (set (make-local-variable 'comment-style) 'plain)

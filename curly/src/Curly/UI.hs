@@ -162,7 +162,7 @@ cacheCurly (src,cache) a ms = by thunk $ do
 
   addSource <$>
     if b
-    then readSourceFile
+    then logAction (format "compilation of file %s" sourceName) readSourceFile
     else do 
       ser <- slurpBytes cacheName
       case matches Just datum ser of

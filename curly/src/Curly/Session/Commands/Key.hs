@@ -103,7 +103,7 @@ keyCmd = withDoc keyDoc $ False <$ do
         Zesty (pub,priv) <- (single '#' >> dirArg) >*> readable
                             <+? Zesty . (,Nothing) <$> do
                               name' <- dirArg
-                              logLine Debug $ format "Asking client for key '%s'" name'
+                              logLine Verbose $ format "Asking client for key '%s'" name'
                               (maybe zero return =<< liftIO (clientKey name'))
                                 <+? (maybe zero (\(Zesty p) -> return p) =<< dns_lookup (DomainKey name'))
                                 <+? (warn Sev_Error (format "Error: unknown client key '%s'" name') >> zero)

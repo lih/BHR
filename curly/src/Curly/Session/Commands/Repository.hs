@@ -100,10 +100,10 @@ repositoryCmd = withDoc repositoryDoc $ False <$ do
       let branchFilter = do
             filterP <- expected "'keep' or 'drop'" (fill id (several "-keep")
                                                     <+? fill not (several "-drop"))
-            let libPred = (dirArg >*> readable) <&> \l -> warp ascList $ \ls -> [x | x@(l',_) <- ls, filterP (l==l')]
+            let libPred = (single '#' >> (dirArg >*> readable)) <&> \l -> warp ascList $ \ls -> [x | x@(l',_) <- ls, filterP (l==l')]
                 tplAtom = docAtom <*= \x -> guard (has t'Join x)
                 singlePred = do
-                  tpl <- tplAtom
+                  tpl <- tplAtom <+? map snd packageSearch
                   return $ warp ascList $ \ls -> [x | x@(_,m) <- ls, filterP (nonempty (showDummyTemplate m tpl))]
                 groupPred = do
                   op <- fill "<=" (several "minimum") <+? fill ">=" (several "maximum")

@@ -11,13 +11,12 @@ module Curly.Core(
   c'Expression,syntax,semantic,mapParams,
   -- * Environment
   envVar,curlyUserDir,curlyKeysFile,curlyCacheDir,curlyCommitDir,curlyPort,
-  -- * Conditional output
-  LogLevel(..),envLogLevel,logLine,trylogLevel,trylog,liftIOLog,cyDebug,
+  -- * Logging facilities
+  LogLevel(..),LogMessage(..),addLogCallback,removeLogCallback,withLogCallback,envLogLevel,logLine,logMessage,logAction,trylogLevel,trylog,liftIOLog,cyDebug,
   -- * Misc
   B64Chunk(..),PortNumber,watchFile,connectTo,(*+),cacheFileName,createFileDirectory,
   Compressed(..),noCurlySuf,(</>),format
   ) where
-
 
 import Definitive
 import Language.Format
@@ -31,6 +30,10 @@ import System.INotify
 import System.IO (openFile,IOMode(AppendMode),hSetBuffering,BufferMode(LineBuffering))
 import qualified Data.ByteString.Base64 as Base64
 import Codec.Compression.Zlib (compress,decompress)
+import Data.IORef
+import Control.Concurrent.Chan
+import Control.Concurrent (forkIO)
+import Control.Exception (bracket)
 
 {-| The type of an expression node
 
@@ -197,17 +200,80 @@ curlyCommitDir :: FilePath
 curlyCommitDir = curlyDirPath (curlyUserDir + "/commits")
 
 -- | A Curly log level
-data LogLevel = Quiet | Verbose | Debug
-              deriving (Eq,Ord)
+data LogLevel = Quiet | Chatty | Verbose | Debug
+              deriving (Eq,Ord,Show,Generic)
+instance Serializable LogLevel
+instance Format LogLevel
+data LogMessage = LogLine LogLevel String
+                | LogActionStart String
+                | LogActionEnd String Bool
+                deriving (Show,Generic)
+instance Format LogMessage
+instance Serializable LogMessage
+
 -- The global log level, as set by the environment variable CURLY_LOGLEVEL
 envLogLevel :: LogLevel
-envLogLevel = envVar "quiet" "CURLY_LOGLEVEL"
-              & fromMaybe Quiet . matches Just (foldl1' (<+?) [x<$several s | (x,s) <- levels])
-  where levels = [(Quiet,"quiet"),(Verbose,"verbose"),(Debug,"debug")]
+envLogLevel = envVar "chatty" "CURLY_LOGLEVEL"
+              & fromMaybe Chatty . matches Just (foldl1' (<+?) [x<$several s | (x,s) <- levels])
+  where levels = [(Quiet,"quiet"),(Chatty,"chatty"),(Verbose,"verbose"),(Debug,"debug")]
+
 -- | Logs a line to stderr if the environment log level is greater than the given threshold
 logLine :: MonadIO m => LogLevel -> String -> m ()
-logLine level | envLogLevel>=level = \str -> liftIO $ logFile`seq`writeHString logFile (str+"\n")
-              | otherwise = const unit
+logLine level str = logMessage (LogLine level str)
+
+logMessage :: MonadIO m => LogMessage -> m ()
+logMessage msg = initLogChannel`seq`liftIO $ writeChan (fst logChannels) msg >> readChan (snd logChannels)
+
+logAction :: MonadIO m => String -> IO a -> m a
+logAction act ma = do
+  logMessage (LogActionStart act)
+  a <- liftIO $ catch (\e -> logMessage (LogActionEnd act False) >> throw e) ma
+  logMessage (LogActionEnd act True)
+  return a
+
+newtype LogCallbackID = LogCallbackID Int
+                      deriving (Eq,Ord,Show)
+logCallbacks :: IORef ([LogCallbackID],Map LogCallbackID (LogMessage -> IO ()))
+logCallbacks = by thunk $ do
+  inAction <- newIORef (False,"")
+  let def (LogLine level str) | envLogLevel>=level = do
+        (b,ind) <- readIORef inAction
+        when b (writeLog "\n")
+        modifyIORef inAction (set l'1 False)
+        writeLog (ind+str+"\n")
+                              | otherwise = unit
+      def (LogActionStart act) = do
+        (b,ind) <- readIORef inAction
+        when b (writeLog "\n")
+        modifyIORef inAction (set l'1 True . second ("  "+))
+        writeLog (ind+"Begin "+act+"...")
+      def (LogActionEnd act success) = do
+        modifyIORef inAction (second (drop 2))
+        readIORef inAction >>= \(b,ind) ->
+          if b
+          then writeLog (if success then " done.\n" else " failed.\n")
+          else writeLog (ind + (if success then "Finished " else "Failed ") + act + "\n")
+        modifyIORef inAction (set l'1 False)
+      writeLog = writeHString logFile
+  newIORef (map LogCallbackID [1..],singleton (LogCallbackID 0) (logFile`seq`def))
+                                              
+logChannels :: (Chan LogMessage,Chan ())
+logChannels = (newChan^.thunk,newChan^.thunk)
+
+initLogChannel :: ()
+initLogChannel = by thunk $ void $ forkIO $ forever $ do
+  msg <- readChan (fst logChannels)
+  (_,cbs) <- readIORef logCallbacks
+  for_ cbs $ ($msg)
+  writeChan (snd logChannels) ()
+
+addLogCallback :: (LogMessage -> IO ()) -> IO LogCallbackID
+addLogCallback c = runAtomic logCallbacks $ do id <~ \((i:is),m) -> ((is,insert i c m),i)
+removeLogCallback :: LogCallbackID -> IO ()
+removeLogCallback i = modifyIORef logCallbacks $ (i:) <#> delete i
+
+withLogCallback :: (LogMessage -> IO ()) -> IO a -> IO a
+withLogCallback cb ma = bracket (addLogCallback cb) removeLogCallback (const ma)  
 
 cyDebug :: Show a => a -> a
 cyDebug | envLogLevel >= Debug = debug
@@ -229,7 +295,6 @@ trylog = trylogLevel Debug
 -- | A utility function that lifts its argument while logging its errors
 liftIOLog :: MonadIO m => IO () -> m ()
 liftIOLog = liftIO . trylogLevel Quiet unit
-
 
 -- | A global INotify instance
 inotify :: INotify

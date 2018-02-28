@@ -54,6 +54,7 @@ data ServerPacket = LineRequest
                   | KeyGenRequest Bool String
                   | KeyListRequest
                   | ServerHasQuit
+                  | CommandLog LogMessage
                   deriving Generic
 instance Serializable ServerPacket where
 instance Format ServerPacket where
@@ -266,8 +267,12 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
       
   t <- forkIO $ do
     takeMVar start
-    str <- withPrelude <$> connGetContents conn
-    trylog (serve conn ServerHasQuit) $ void $ parseCurly str (interactiveSession (serve conn CommandAck))
+    let onLog msg = serve conn (CommandLog msg)
+        withLogs | hasLocalClient = id
+                 | otherwise = withLogCallback onLog
+    withLogs $ do
+      str <- withPrelude <$> connGetContents conn
+      trylog (serve conn ServerHasQuit) $ void $ parseCurly str (interactiveSession (serve conn CommandAck))
   thr t
 
 localClient :: String -> Connection -> IO ()
@@ -318,9 +323,11 @@ yesOrNo p = until $ do
   ans <- readline (p+"[y/N] ")
   matchesT Just (keyword True "y" + keyword False "n" + fill False eoi) (fold ans)
 
+
 commonServerRequest clt (EditRequest ext (l,c) b) = writeChan clt . EditResponse =<< localEdit ext (l,c) b
 commonServerRequest clt (PubkeyRequest name) = writeChan clt . PubkeyResponse =<< map (by l'2) . lookup name <$> getKeyStore
-commonServerRequest _ (CommandOutput out) = liftIOLog (writeHBytes stdout out) 
+commonServerRequest _ (CommandOutput out) = liftIOLog (writeHBytes stdout out)
+commonServerRequest _ (CommandLog msg) = logMessage msg
 commonServerRequest _ (KeyGenRequest True str) = do
   priv <- genPrivateKey
   let pub = publicKey priv

@@ -93,7 +93,7 @@ libraryCache = newIORef zero^.thunk
 registerLib :: FileLibrary -> FileLibrary
 registerLib l = by thunk $ do
   let i = l^.flID
-  logLine Debug $ format "Registering library %s" (show i)
+  logLine Verbose $ format "Registering library %s" (show i)
   i`seq`modifyIORef libraryCache (insert i l)
   return l
 
@@ -567,20 +567,22 @@ registerBuiltinsLib = by thunk $ void (yb thunk (head builtinLibs))
 
 findLib :: LibraryID -> Maybe FileLibrary
 findLib l = registerBuiltinsLib`seq`by thunk $ do
-  conn <- readIORef libraryVCS
   cache <- readIORef libraryCache
   return (lookup l cache)
     `orIO` readCachedLibrary l
-    `orIO` do
-      bs <- fromMaybe zero <$> vcbLoad conn (LibraryKey l)
-      case guard (isLibData l bs) >> matches Just datum bs of
-        Just f -> do
-          createFileDirectory (cacheName l)
-          writeBytes (cacheName l) bs
-          return (Just (registerLib $ FileLibrary f bs l False Nothing))
-        Nothing -> return Nothing
-        
+    `orIO` getVCLibrary
   where orIO ma mb = ma >>= maybe mb (return . Just)
+        getVCLibrary = do
+          conn <- readIORef libraryVCS
+          try (return Nothing) $ map Just
+            $ logAction (format "download of library %s" (show l)) $ do
+              bs <- maybe undefined return =<< vcbLoad conn (LibraryKey l)
+              case guard (isLibData l bs) >> matches Just datum bs of
+                Just f -> do
+                  createFileDirectory (cacheName l)
+                  writeBytes (cacheName l) bs
+                  return (registerLib $ FileLibrary f bs l False Nothing)
+                Nothing -> undefined
 
 findSym :: GlobalID -> Maybe (LeafExpr GlobalID)
 findSym (GlobalID _ (Just (n,l))) = findLib l >>= by (flLibrary.symbols.at n)
