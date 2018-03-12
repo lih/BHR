@@ -125,7 +125,7 @@ runTarget Help = ioTgt $ do
         "" -> format " (default value, set %s to override)" v
         _ -> format " (from %s)" v
   
-  putStrLn $ "Known systems: "+intercalate ", " (map show knownSystems)
+  putStrLn $ "Known systems: "+intercalate ", " (keys knownSystems)
   putStrLn $ format "Repositories%s:" (valOrigin "CURLY_VCS")
   VCSB_Native repos _ _ <- readIORef libraryVCS
   for_ repos $ \r -> putStrLn $ "  * "+r

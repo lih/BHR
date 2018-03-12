@@ -53,6 +53,18 @@ editCmd = viewCmd editDoc zero onPath $ \path (by leafPos -> r) -> case r of
             Just s -> liftIOWarn $ editSource s (0,0) reloadMountain
             _ -> zero
 
+showExprDefault pat n v = do
+  let Join params = composing (uncurry insert) [
+        (["flavor"],Pure $ Pure "Expression"),
+        (["name"],Pure $ Pure n),
+        (["type"],Pure $ document (exprType v)),
+        (["raw-type"],Pure $ Pure $ show (exprType v & \(Type e) -> e)),
+        (["impl"],Pure $ Pure $ showImpl v),
+        (["strictness"],Pure $ document (snd $ exprStrictness v))
+        ] zero
+  serveStrLn (docString ?terminal ?style (fromMaybe (nodoc $ "Cannot show pattern "+showRawDoc pat)
+                                          (evalDocWithPatterns ?patterns params pat)))
+
 showDoc = unlines [
   "{section {title Formatted Query} {p {em Usage:} show (PATH|\\\\(EXPR\\\\)) [PATTERN]}",
   "  {p Show information about functions under PATH, or an ad-hoc expression}",
@@ -87,16 +99,7 @@ showCmd = withDoc showDoc . fill False $ do
 
     Right (n,e) -> do
       v <- optExprIn <$> getSession this <*> pure e
-      let Join params = composing (uncurry insert) [
-            (["flavor"],Pure $ Pure "Expression"),
-            (["name"],Pure $ Pure n),
-            (["type"],Pure $ document (exprType v)),
-            (["raw-type"],Pure $ Pure $ show (exprType v & \(Type e) -> e)),
-            (["impl"],Pure $ Pure $ showImpl v),
-            (["strictness"],Pure $ document (snd $ exprStrictness v))
-            ] zero
-      serveStrLn (docString ?terminal ?style (fromMaybe (nodoc $ "Cannot show pattern "+showRawDoc pat)
-                                              (evalDocWithPatterns ?patterns params pat)))
+      showExprDefault pat n v
 patternDoc = unlines [
   "{section {title Define Formatting Patterns} {p {em Usage:} pattern NAME ARG... = PATTERN {em OR} pattern NAME}",
   "  {p Defines a new query pattern accessible with \\{pattern PATTERN PARAM...\\}}",

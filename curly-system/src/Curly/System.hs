@@ -29,13 +29,12 @@ import Foreign.C.String (castCCharToChar)
 import Foreign.Storable (peek,poke)
 
 knownSystems :: Map String System
-knownSystems = fromAList [(_sysName s,s) | s <- [hostSystem
-                                                ,X86_Linux.system,X86_Linux.system64
-                                                ,ARM_Linux.system
-                                                ,JavaScript.system,JavaScript.systemASM
-                                                ,HTML.system]]
+knownSystems = fromAList $ ("host",hostSystem):[(_sysName s,s) | s <- [X86_Linux.system,X86_Linux.system64
+                                                                      ,ARM_Linux.system
+                                                                      ,JavaScript.system,JavaScript.systemASM
+                                                                      ,HTML.system]]
 hostSystem :: System
-hostSystem = X86_Linux.system64 { _sysName = "host" }
+hostSystem = X86_Linux.system64
 
 mkRunExpr e = mkApply e (mkSymbol (Builtin zero B_Unit))
 

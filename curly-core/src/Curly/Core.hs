@@ -222,7 +222,7 @@ logLine :: MonadIO m => LogLevel -> String -> m ()
 logLine level str = logMessage (LogLine level str)
 
 logMessage :: MonadIO m => LogMessage -> m ()
-logMessage msg = initLogChannel`seq`liftIO $ writeChan (fst logChannels) msg >> readChan (snd logChannels)
+logMessage msg = initLogChannel`seq`liftIO $ writeChan logChannels msg
 
 logAction :: MonadIO m => String -> IO a -> m a
 logAction act ma = do
@@ -257,15 +257,14 @@ logCallbacks = by thunk $ do
       writeLog = writeHString logFile
   newIORef (map LogCallbackID [1..],singleton (LogCallbackID 0) (logFile`seq`def))
                                               
-logChannels :: (Chan LogMessage,Chan ())
-logChannels = (newChan^.thunk,newChan^.thunk)
+logChannels :: Chan LogMessage
+logChannels = newChan^.thunk
 
 initLogChannel :: ()
 initLogChannel = by thunk $ void $ forkIO $ forever $ do
-  msg <- readChan (fst logChannels)
+  msg <- readChan logChannels
   (_,cbs) <- readIORef logCallbacks
   for_ cbs $ ($msg)
-  writeChan (snd logChannels) ()
 
 addLogCallback :: (LogMessage -> IO ()) -> IO LogCallbackID
 addLogCallback c = runAtomic logCallbacks $ do id <~ \((i:is),m) -> ((is,insert i c m),i)

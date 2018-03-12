@@ -160,9 +160,9 @@ interactiveSession ack = while sessionLine
             Just _ -> return False
             Nothing -> guard (empty ws) >> cmdLine
         parseCmd = hspace >> do
-          e <- optimized =<< accessorExpr HorizSpaces
+          (n,e) <- withParsedString (optimized =<< accessorExpr HorizSpaces)
           lookingAt (hspace >> eol)
-          serveStrLn (showImpl e)
+          withPatterns $ withStyle $ showExprDefault (docTag' "call" [Pure "show-default"]) n e
           return False
         cmdLine = do
           s <- remaining

@@ -116,7 +116,7 @@ repositoryCmd = withDoc repositoryDoc $ False <$ do
                   return $ \ls -> let groups = c'map $ composing (\x@(_,m) -> mat (showDummyTemplate m gtpl) %~ (x:)) (ls^.ascList) zero
                                   in fromAList $ mlookup Nothing groups + fold [select (filterP . (fst (foldl1' minTpl l)==) . fst) l
                                                                                | (Just _,l) <- groups^.ascList]
-            expected "filter predicate" (nbhspace >> (libPred <+? singlePred <+? groupPred))
+            expected "filter predicate" (nbhspace >> (groupPred <+? libPred <+? singlePred))
             
           branchAdd = do
             several "-add"
