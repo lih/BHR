@@ -22,8 +22,8 @@ system = arm_sys "linux-arm" prog
           rt <- get
           let BA dstart = rt^.rtSection TextSection .l'2
           tell $ bytesCode' $ serialize $ Elf ET_Exec (Linux_ARM_ElfN (fromIntegral start)) [
-            ElfProgram "text" (Linux_ARM_ElfN (fromIntegral pstart)) (True,True,True) (rt^.rtSection TextSection .l'1.bData),
-            ElfProgram "data" (Linux_ARM_ElfN (fromIntegral dstart)) (True,True,False) (rt^.rtSection DataSection .l'1.bData)]
+            ElfSection "text" (ElfProgbits (Linux_ARM_ElfN (fromIntegral pstart)) (True,True,True) (rt^.rtSection TextSection .l'1.bData)),
+            ElfSection "data" (ElfProgbits (Linux_ARM_ElfN (fromIntegral dstart)) (True,True,False) (rt^.rtSection DataSection .l'1.bData))]
             
         pstart = 0x400000 + fromIntegral (ehSize linux_arm + phEntSize linux_arm)
         

@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances, RecursiveDo #-}
+{-# LANGUAGE UndecidableInstances, RecursiveDo, LambdaCase, ViewPatterns #-}
 module Curly.System.Base where
 
 import Definitive
@@ -311,17 +311,23 @@ commonBuiltin B_CmpInt_EQ = Just $ getOrDefineBuiltin0 TextSection "cmpInt_eq" $
         tailCall el)
 commonBuiltin _ = Nothing
 
-assemblyBuiltin :: (?sysHooks :: SystemHooks, ?sys :: VonNeumannMachine) => (Word32 -> BinaryCode) -> BUILTIN_INSTR
-assemblyBuiltin encodeWord (B_String s) = Just $ do
+data Endianness = LittleEnd | BigEnd
+
+encodeWordEndian :: Endianness -> Word32 -> BinaryCode
+encodeWordEndian LittleEnd = bytesCode' . serialize . LittleEndian
+encodeWordEndian BigEnd    = bytesCode' . serialize
+
+assemblyBuiltin :: (?sysHooks :: SystemHooks, ?sys :: VonNeumannMachine) => Endianness -> BUILTIN_INSTR
+assemblyBuiltin endns (B_String s) = Just $ do
   str <- inSection DataSection $ getCounter <* do
-    tell $ encodeWord 1
-    tell $ encodeWord (fromIntegral (length s))
+    tell $ encodeWordEndian endns 1
+    tell $ encodeWordEndian endns (fromIntegral (length s))
     for_ s $ tell . binaryCode (Just 1,1)
   globalBuiltin global_constant (toValue str)
-assemblyBuiltin encodeWord (B_Bytes bs) = Just $ do
+assemblyBuiltin endns (B_Bytes bs) = Just $ do
   str <- inSection DataSection $ getCounter <* do
-    tell $ encodeWord 1
-    tell $ encodeWord (fromIntegral (bytesSize bs))
+    tell $ encodeWordEndian endns 1
+    tell $ encodeWordEndian endns (fromIntegral (bytesSize bs))
     tell $ bytesCode' bs
   globalBuiltin global_constant (toValue str)
 assemblyBuiltin _ B_MkArray = Just $ getOrDefineBuiltin0 TextSection "mkArray" $ do
@@ -517,6 +523,15 @@ specialize sysName expr = inSection TextSection $ getCounter <* specTail (sem ex
     specHead (SemAbstract _ body) = do
       a <- specLambda body
       setDest a (if empty (exprRefs body) then toValue (0 :: Int) else toValue (thisReg!ValueOffset))
+    specHead (SemApply
+              (sem -> SemSymbol (Builtin _ (B_RawIndex i)))
+              (sem -> SemSymbol (Builtin _ b))) = case _curlyBuiltin ?sys b of
+      Just mav -> do
+        (a,v) <- (`map`mav) $ second $ \case
+          Constant n -> Constant (n+fromIntegral i)
+          v -> v
+        setDest a v
+      Nothing -> error $ format "Couldn't find implementation for builtin %s" (show b)
     specHead (SemApply f x) = specAps f [x]
       where specAps (PatApply f' x) l = specAps f' (x:l)
             specAps f l = do

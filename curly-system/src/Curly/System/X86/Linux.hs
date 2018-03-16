@@ -150,7 +150,7 @@ x86_popThunk dest = x86_common $ do
 
 x86_linux_system :: (?x86 :: X86) => String -> System
 x86_linux_system name = x86_sys name prog x86_machine_linux
-                        (liftA2 (+) x86_linux_builtin (let ?sys = x86_machine_linux in assemblyBuiltin encodeWord))
+                        (liftA2 (+) x86_linux_builtin (let ?sys = x86_machine_linux in assemblyBuiltin LittleEnd))
                         (SystemHooks x86_pushThunk x86_popThunk x86_linux_sysAllocBytes)
   where prog = Standalone $ \mtext -> x86_common $ do
           mute $ rawProgram [InitSection,TextSection,DataSection] $ do
@@ -169,11 +169,11 @@ x86_linux_system name = x86_sys name prog x86_machine_linux
           let BA tstart = rt^.rtSection InitSection .l'2
               BA dstart = rt^.rtSection TextSection .l'2
               ser p = serialize $ Elf ET_Exec (p pstart) [
-                ElfProgram ".init" (p pstart) (True,True,True) (rt^.rtSection InitSection .l'1.bData),
-                ElfProgram ".text" (p tstart) (True,True,True) (rt^.rtSection TextSection .l'1.bData),
-                ElfProgram ".data" (p dstart) (True,True,False) (rt^.rtSection DataSection .l'1.bData),
-                ElfSymTab ".symtab" (from ascList $^ map (\((sec,sym),BA addr) -> (secName sec+"."+sym,(secName sec,p addr)))
-                                     $ ascList $^ rt^.rtBuiltins)]
+                ElfSection ".init" (ElfProgbits (p pstart) (True,True,True) (rt^.rtSection InitSection .l'1.bData)),
+                ElfSection ".text" (ElfProgbits (p tstart) (True,True,True) (rt^.rtSection TextSection .l'1.bData)),
+                ElfSection ".data" (ElfProgbits (p dstart) (True,True,False) (rt^.rtSection DataSection .l'1.bData)),
+                ElfSection ".symtab" (ElfSymTab (from ascList $^ map (\((sec,sym),BA addr) -> (secName sec+"."+sym,(secName sec,p addr)))
+                                                 $ ascList $^ rt^.rtBuiltins))]
               secName TextSection = ".text"
               secName InitSection = ".init"
               secName DataSection = ".data"

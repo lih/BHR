@@ -369,8 +369,9 @@ libSymbol _ (GlobalID _ (Just (i,lid))) = findLib lid >>= \l -> l^.flLibrary.sym
 
 builtinLibs :: [FileLibrary]
 builtinLibs = map (\l -> rawLibrary False l (serialize l) Nothing)
-              [blib_3]
+              [blib_4,blib_3]
   where
+    blib_4 = blib_3 & setMeta ["author","email"] "marc.coiffier@curly-lang.org"
     blib_3 = blib_2 & set (sym ["string"] "showInt".leafDoc) (mkDoc "leafDoc" showIntDoc)
       where showIntDoc = "{section {title Show Number} {p Produces a string representation of its argument}}"
     blib_2 = blib_1 & setMeta ["author","email"] "marc.coiffier@curly-lang.net"
@@ -531,8 +532,9 @@ cacheName :: LibraryID -> String
 cacheName l = cacheFileName curlyCacheDir (show l) "cyl"
 
 libraryVCS :: IORef VCSBackend
-libraryVCS = newIORef (fromMaybe (protoBackend "http" "curly-vc.coiffier.net/vcs")
-                       (matches Just readable (envVar "" "CURLY_VCS")))^.thunk
+libraryVCS = by thunk $ case matches Just readable (envVar "" "CURLY_VCS") of
+  Just vc -> newIORef vc
+  Nothing -> nativeBackend "vcs.curly-lang.org" 5402 >>= newIORef
 
 forkValue :: IO a -> IO a
 forkValue ma = do

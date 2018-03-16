@@ -16,7 +16,7 @@ import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
 import System.Console.GetOpt (OptDescr(..),ArgDescr(..),usageInfo,getOpt,ArgOrder(..))
 import qualified Prelude as P
-import Curly.Core (B64Chunk(..))
+import Curly.Core (B64Chunk(..),Hash(..),hashData)
 
 instance Functor OptDescr where map = P.fmap
 

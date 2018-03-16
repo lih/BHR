@@ -7,25 +7,11 @@ import Curly.Core.Security
 import Curly.Core.Documentation
 import Definitive
 import Language.Format
-import qualified Curly.Core.Security.SHA256 as SHA256
 import System.Process (withCreateProcess)
 import qualified System.Process as Sys
 import Data.IORef
 import Control.Concurrent.MVar
 import GHC.IO.Handle (hClose)
-
-newtype Hash = Hash Chunk
-             deriving (Eq,Ord)
-hashData :: Bytes -> Hash
-hashData b = Hash (SHA256.hashlazy b)
-instance Show Hash where
-  show (Hash h) = show (B64Chunk h)
-instance Read Hash where
-  readsPrec _ = readsParser (readable <&> \(B64Chunk h) -> Hash h)
-instance Serializable Hash where
-  encode (Hash h) = h^.chunkBuilder
-instance Format Hash where
-  datum = Hash<$>getChunk 32
 
 commitHash :: Commit -> Hash
 commitHash c = hashData (serialize c)

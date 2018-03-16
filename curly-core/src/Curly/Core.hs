@@ -2,9 +2,9 @@
 module Curly.Core(
   -- * Expressions
   ExprNode(..),Expression,
-  Identifier(..),HasIdents(..),Builtin(..),
+  Identifier(..),HasIdents(..),Builtin(..),BinaryRelocation(..),
   SemanticT(..),Semantic(..),mkAbstract,mkSymbol,mkApply,sem,
-  LibraryID(..),GlobalID(..),
+  Hash(..),hashData,LibraryID(..),GlobalID(..),
   pattern PatSymbol,pattern PatAbstract,pattern PatApply,pattern PatApply2,
   t'Symbol,t'Apply,t'Abstract,
   -- ** Utilities
@@ -34,6 +34,7 @@ import Data.IORef
 import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
 import Control.Exception (bracket)
+import qualified Curly.Core.Security.SHA256 as SHA256
 
 {-| The type of an expression node
 
@@ -346,6 +347,10 @@ instance HasIdents s s' (s,a) (s',a) where
 instance HasIdents s s' t t' => HasIdents s s' (Maybe t) (Maybe t') where
   ff'idents = t'Just.ff'idents
 
+data BinaryRelocation = BinaryRelocation { _br_PCRelative :: Bool, _br_size :: Int, _br_symhash :: Hash, _br_symoffset :: Int }
+                      deriving (Eq,Ord,Show,Generic)
+instance Serializable BinaryRelocation
+instance Format BinaryRelocation
 -- | The type of all Curly builtins
 data Builtin = B_Undefined
              | B_Seq
@@ -380,6 +385,9 @@ data Builtin = B_Undefined
              | B_Open | B_Read | B_Write | B_Close
 
              | B_Foreign (Map String GlobalID) GlobalID
+
+             | B_Relocatable Hash [(Bytes,BinaryRelocation)] Bytes
+             | B_RawIndex Int
              deriving (Eq,Ord,Show,Generic)
 instance Documented Builtin where
   document = Pure . show'
@@ -401,6 +409,19 @@ noCurlySuf :: FilePath -> Maybe FilePath
 noCurlySuf f = nosuffix ".cy" f + nosuffix ".curly" f + nosuffix ".cyl" f
   where nosuffix s s' = if t==s then Just h else Nothing
           where (h,t) = splitAt (length s'-length s) s'
+
+newtype Hash = Hash Chunk
+             deriving (Eq,Ord)
+hashData :: Bytes -> Hash
+hashData b = Hash (SHA256.hashlazy b)
+instance Show Hash where
+  show (Hash h) = show (B64Chunk h)
+instance Read Hash where
+  readsPrec _ = readsParser (readable <&> \(B64Chunk h) -> Hash h)
+instance Serializable Hash where
+  encode (Hash h) = h^.chunkBuilder
+instance Format Hash where
+  datum = Hash<$>getChunk 32
 
 newtype LibraryID = LibraryID Chunk
                 deriving (Eq,Ord,Generic)
