@@ -311,23 +311,26 @@ commonBuiltin B_CmpInt_EQ = Just $ getOrDefineBuiltin0 TextSection "cmpInt_eq" $
         tailCall el)
 commonBuiltin _ = Nothing
 
-data Endianness = LittleEnd | BigEnd
+data SystemDataRepr = SystemDataRepr {
+  sdr_encodeWord16 :: Word16 -> Builder,
+  sdr_encodeWord32 :: Word32 -> Builder,
+  sdr_encodeWordN :: Word32 -> Builder,
+  sdr_byteOrder :: Bool,
+  sdr_wordSize :: Int
+  }
 
-encodeWordEndian :: Endianness -> Word32 -> BinaryCode
-encodeWordEndian LittleEnd = bytesCode' . serialize . LittleEndian
-encodeWordEndian BigEnd    = bytesCode' . serialize
-
-assemblyBuiltin :: (?sysHooks :: SystemHooks, ?sys :: VonNeumannMachine) => Endianness -> BUILTIN_INSTR
-assemblyBuiltin endns (B_String s) = Just $ do
+tellWordN repr n = tell $ bytesCode' (sdr_encodeWordN repr n^..bytesBuilder)
+assemblyBuiltin :: (?sysHooks :: SystemHooks, ?sys :: VonNeumannMachine) => SystemDataRepr -> BUILTIN_INSTR
+assemblyBuiltin repr (B_String s) = Just $ do
   str <- inSection DataSection $ getCounter <* do
-    tell $ encodeWordEndian endns 1
-    tell $ encodeWordEndian endns (fromIntegral (length s))
+    tellWordN repr 1
+    tellWordN repr (fromIntegral (length s))
     for_ s $ tell . binaryCode (Just 1,1)
   globalBuiltin global_constant (toValue str)
-assemblyBuiltin endns (B_Bytes bs) = Just $ do
+assemblyBuiltin repr (B_Bytes bs) = Just $ do
   str <- inSection DataSection $ getCounter <* do
-    tell $ encodeWordEndian endns 1
-    tell $ encodeWordEndian endns (fromIntegral (bytesSize bs))
+    tellWordN repr 1
+    tellWordN repr (fromIntegral (bytesSize bs))
     tell $ bytesCode' bs
   globalBuiltin global_constant (toValue str)
 assemblyBuiltin _ B_MkArray = Just $ getOrDefineBuiltin0 TextSection "mkArray" $ do

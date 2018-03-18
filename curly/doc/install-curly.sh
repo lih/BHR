@@ -1,5 +1,5 @@
 #!/bin/sh
-curly_url="https://coiffiem.gricad-pages.univ-grenoble-alpes.fr/curly/pkg/curly.tar.xz"
+curly_url="http://www.curly-lang.org/pkg/curly.tar.xz"
 
 while (($# > 0)); do
     cur_opt="$1"
