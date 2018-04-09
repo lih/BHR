@@ -12,7 +12,7 @@ module Curly.Core(
   -- * Environment
   envVar,curlyUserDir,curlyKeysFile,curlyCacheDir,curlyCommitDir,curlyPort,
   -- * Logging facilities
-  LogLevel(..),LogMessage(..),addLogCallback,removeLogCallback,withLogCallback,envLogLevel,logLine,logMessage,logAction,trylogLevel,trylog,liftIOLog,cyDebug,
+  LogLevel(..),LogMessage(..),serialWriteHBytes,addLogCallback,removeLogCallback,withLogCallback,envLogLevel,logLine,logMessage,logAction,trylogLevel,trylog,liftIOLog,cyDebug,
   -- * Misc
   B64Chunk(..),PortNumber,watchFile,connectTo,(*+),cacheFileName,createFileDirectory,
   Compressed(..),noCurlySuf,(</>),format
@@ -32,7 +32,7 @@ import qualified Data.ByteString.Base64 as Base64
 import Codec.Compression.Zlib (compress,decompress)
 import Data.IORef
 import Control.Concurrent.Chan
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO,MVar,newEmptyMVar,putMVar,readMVar)
 import Control.Exception (bracket)
 import qualified Curly.Core.Security.SHA256 as SHA256
 
@@ -223,7 +223,7 @@ logLine :: MonadIO m => LogLevel -> String -> m ()
 logLine level str = logMessage (LogLine level str)
 
 logMessage :: MonadIO m => LogMessage -> m ()
-logMessage msg = initLogChannel`seq`liftIO $ writeChan logChannels msg
+logMessage msg = initLogChannel`seq`liftIO $ writeChan logChannel msg
 
 logAction :: MonadIO m => String -> IO a -> m a
 logAction act ma = do
@@ -255,15 +255,30 @@ logCallbacks = by thunk $ do
           then writeLog (if success then " done.\n" else " failed.\n")
           else writeLog (ind + (if success then "Finished " else "Failed ") + act + "\n")
         modifyIORef inAction (set l'1 False)
-      writeLog = writeHString logFile
+      writeLog = serialWriteHBytes logFile . stringBytes
   newIORef (map LogCallbackID [1..],singleton (LogCallbackID 0) (logFile`seq`def))
                                               
-logChannels :: Chan LogMessage
-logChannels = newChan^.thunk
+logChannel :: Chan LogMessage
+logChannel = newChan^.thunk
+
+lineChannel :: Chan (Handle,Bytes,MVar ())
+lineChannel = by thunk $ do
+  c <- newChan
+  _ <- forkIO $ forever $ do
+    (h,bs,v) <- readChan c
+    try unit (writeHBytes h bs)
+    putMVar v ()
+  return c
+  
+serialWriteHBytes :: Handle -> Bytes -> IO ()
+serialWriteHBytes h bs = do
+   v <- newEmptyMVar
+   writeChan lineChannel (h,bs,v)
+   readMVar v
 
 initLogChannel :: ()
 initLogChannel = by thunk $ void $ forkIO $ forever $ do
-  msg <- readChan logChannels
+  msg <- readChan logChannel
   (_,cbs) <- readIORef logCallbacks
   for_ cbs $ ($msg)
 
@@ -347,7 +362,15 @@ instance HasIdents s s' (s,a) (s',a) where
 instance HasIdents s s' t t' => HasIdents s s' (Maybe t) (Maybe t') where
   ff'idents = t'Just.ff'idents
 
-data BinaryRelocation = BinaryRelocation { _br_PCRelative :: Bool, _br_size :: Int, _br_symhash :: Hash, _br_symoffset :: Int }
+data RelocationSize = RS_16 | RS_32 | RS_64
+                    deriving (Eq,Ord,Show,Generic)
+instance Serializable RelocationSize ; instance Format RelocationSize
+data BinaryRelocation = BinaryRelocation {
+  _br_PCRelative :: Bool,
+  _br_size :: RelocationSize,
+  _br_symhash :: Hash,
+  _br_symoffset :: Int
+  }
                       deriving (Eq,Ord,Show,Generic)
 instance Serializable BinaryRelocation
 instance Format BinaryRelocation
@@ -386,7 +409,7 @@ data Builtin = B_Undefined
 
              | B_Foreign (Map String GlobalID) GlobalID
 
-             | B_Relocatable Hash [(Bytes,BinaryRelocation)] Bytes
+             | B_Relocatable Bool Hash [(Bytes,BinaryRelocation)] Bytes
              | B_RawIndex Int
              deriving (Eq,Ord,Show,Generic)
 instance Documented Builtin where

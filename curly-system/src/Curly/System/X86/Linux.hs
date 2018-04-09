@@ -152,7 +152,7 @@ x86_linux_system :: (?x86 :: X86) => String -> System
 x86_linux_system name = x86_sys name prog x86_machine_linux
                         (liftA2 (+) x86_linux_builtin (let ?sys = x86_machine_linux in assemblyBuiltin repr))
                         (SystemHooks x86_pushThunk x86_popThunk x86_linux_sysAllocBytes)
-  where repr = SystemDataRepr (encode . LittleEndian) (encode . LittleEndian)
+  where repr = SystemDataRepr (encode . LittleEndian) (encode . LittleEndian) (encode . LittleEndian)
                (if32 (encode . LittleEndian) (encode . LittleEndian . (fromIntegral :: Word32 -> Word64)))
                False (if32 4 8)
         prog = Standalone $ \mtext -> x86_common $ do

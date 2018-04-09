@@ -35,6 +35,7 @@ js_machine = VonNeumannMachine {
     _newFunction = const getCounter,
     _cp = \l v -> instr (format "%s=%s" (showLoc l) (showVal v)),
     _add = \l v -> instr (format "%s+=%s" (showLoc l) (showVal v)),
+    _sub = \l v -> instr (format "%s-=%s" (showLoc l) (showVal v)),
     _load = \l a -> instr (format "%s=data[%s]" (showLoc l) (showAddr a)),
     _store = \a v -> instr (format "data[%s]=%s" (showAddr a) (showVal v)),
     _push = \v -> instr (format "stack={'val':%s,'next':stack}" (showVal v)),

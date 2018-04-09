@@ -169,11 +169,9 @@ instance Ord VCSBackend where
   compare (VCSB_Native s _ _) (VCSB_Native s' _ _) = compare s s'
 dummyBackend :: VCSBackend
 dummyBackend = VCSB_Native [] () (\(Dummy_VC io) -> io)
-nativeBackend :: MonadIO m => String -> PortNumber -> m VCSBackend
-nativeBackend h p = do
-  conn <- liftIO (connectTo h p)
-  lock <- liftIO (newMVar ())
-  return (VCSB_Native ["curly-vc://"+h+":"+show p] (Client_Handle lock conn) (\(Client_VC io) -> io))
+nativeBackend :: String -> PortNumber -> VCSBackend
+nativeBackend h p = VCSB_Native ["curly-vc://"+h+":"+show p] (getHandle^.thunk) (\(Client_VC io) -> io)
+  where getHandle = liftA2 Client_Handle (newMVar ()) (connectTo h p)
 fileBackend :: FilePath -> VCSBackend
 fileBackend p = VCSB_Native ["file://"+p] p (\(File_VC io) -> io)
 protoBackend :: String -> String -> VCSBackend
@@ -185,7 +183,7 @@ instance Read VCSBackend where
     where backend = proto_native <+? proto_file <+? proto_arbitrary <+? fill dummyBackend (several "dummy")
           proto_native = do
             several "curly-vc://" <+? single '@'
-            map (by thunk) $ liftA2 nativeBackend
+            liftA2 nativeBackend
               (many1' (noneOf ": \t\n") <&> \x -> if x=="_" then "127.0.0.1" else x)
               (option' 5402 (single ':' >> number))
           proto_file = do

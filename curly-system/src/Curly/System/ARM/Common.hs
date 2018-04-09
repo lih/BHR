@@ -102,6 +102,8 @@ arm_cp (AtOffset (Register rd) _ off) (Variable (Register rs)) = [Conditional C_
 arm_cp (AtOffset l _ off) v = arm_cp (Register rdst) (Variable l) + arm_cp (rdst!off) v
 
 arm_add = undefined
+arm_sub = undefined
+
 arm_push (Variable (Register r)) = arm_instr [Conditional C_AL (Push [toR r])]
 arm_push v = arm_instr $
              arm_cp (Register rsrc) v
@@ -166,7 +168,7 @@ arm_machine = VonNeumannMachine {
   _newFunction = \sec -> case sec of
     TextSection -> align 16 0x00 >> getCounter
     _ -> getCounter,
-  _cp = cp, _add = arm_add,
+  _cp = cp, _add = arm_add, _sub = arm_sub,
   _pushThunk = \_ -> unit, _popThunk = \_ -> unit,
   _load = arm_load, _store = arm_store,
   _ret = arm_ret, _pop = arm_pop,

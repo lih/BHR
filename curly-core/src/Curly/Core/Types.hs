@@ -541,8 +541,8 @@ builtinType b = (zero :: Type s) & i'typeRel %~ case b of
                      . ln [Out,In,Out,Out] [Out,Out,Out,In,Out] poly
                      . ln [Out,In,Out,Out] [Out,Out,Out,Out] poly
 
-  B_Relocatable _ _ _ -> ln' [] intT
-  B_RawIndex _        -> ln' [] (intT --> intT)
+  B_Relocatable _ _ _ _ -> ln' [] intT
+  B_RawIndex _          -> ln' [] (intT --> intT)
   where
     nativeT = Pure . NativeType
     intT = nativeT NT_Int ; stringT = nativeT NT_String

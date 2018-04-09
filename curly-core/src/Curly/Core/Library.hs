@@ -532,9 +532,9 @@ cacheName :: LibraryID -> String
 cacheName l = cacheFileName curlyCacheDir (show l) "cyl"
 
 libraryVCS :: IORef VCSBackend
-libraryVCS = by thunk $ case matches Just readable (envVar "" "CURLY_VCS") of
-  Just vc -> newIORef vc
-  Nothing -> nativeBackend "vcs.curly-lang.org" 5402 >>= newIORef
+libraryVCS = by thunk $ newIORef $ case matches Just readable (envVar "" "CURLY_VCS") of
+  Just vc -> vc
+  Nothing -> nativeBackend "vcs.curly-lang.org" 5402
 
 forkValue :: IO a -> IO a
 forkValue ma = do
@@ -546,14 +546,17 @@ availableLibs :: IO [(LibraryID,Metadata)]
 availableLibs = do
   conn <- readIORef libraryVCS
   ks <- getKeyStore
-  allLibs <- for (ks^.ascList) $ \(kn,(_,k,_,_,_)) -> forkValue $ do
-    StampedBranches _ branches <- getBranches conn k
-    for (keys branches) $ \b -> forkValue $ do
-      mcomm <- getBranch conn (Just (Left (k,b)))
-      maybe (return zero) (getCommit conn) mcomm
-        <&> map (at "repository".l'Just zero
-                 %~ insert ["key-name"] (Pure kn)
-                 . insert ["branch-name"] (Pure b))
+  allLibs <- for (ks^.ascList) $ \(kn,(_,k,_,m,_)) -> forkValue $ do
+    case m^.from i'Metadata.at "follow-branches" of
+      Just (Pure bs) -> do
+        let branches = words bs
+        for branches $ \b -> forkValue $ do
+          mcomm <- getBranch conn (Just (Left (k,b)))
+          maybe (return zero) (getCommit conn) mcomm
+            <&> map (at "repository".l'Just zero
+                     %~ insert ["key-name"] (Pure kn)
+                     . insert ["branch-name"] (Pure b))
+      _ -> return []
   return $ fold (fold allLibs)^.ascList
 
 readCachedLibrary :: LibraryID -> IO (Maybe FileLibrary)

@@ -326,7 +326,7 @@ yesOrNo p = until $ do
 
 commonServerRequest clt (EditRequest ext (l,c) b) = writeChan clt . EditResponse =<< localEdit ext (l,c) b
 commonServerRequest clt (PubkeyRequest name) = writeChan clt . PubkeyResponse =<< map (by l'2) . lookup name <$> getKeyStore
-commonServerRequest _ (CommandOutput out) = liftIOLog (writeHBytes stdout out)
+commonServerRequest _ (CommandOutput out) = liftIOLog (serialWriteHBytes stdout out)
 commonServerRequest _ (CommandLog msg) = logMessage msg
 commonServerRequest _ (KeyGenRequest True str) = do
   priv <- genPrivateKey

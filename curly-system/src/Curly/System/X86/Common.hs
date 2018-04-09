@@ -212,25 +212,30 @@ x86_cp (AtOffset l i o)                    v
   = do x86_cp (Register rdst) (Variable l)
        x86_cp (rdst!%(i,o)) v
 
-x86_add (Register r) (Constant i)
-  = tellBC [Instruction x86_prefix (OpCode [0x81] Nothing) (Imm32 (fromInteger i)) (Value (toEnum 0) (toR r))]
-x86_add (Register r) (Variable (Register r'))
-  = tellBC [Instruction x86_prefix (OpCode [0x01] Nothing) Imm0 (Value (toR r') (toR r))]
-x86_add (Register rd) (Variable (AtOffset (Register rb) i o))
-  = tellBC [Instruction x86_prefix (OpCode [0x03] Nothing) Imm0 (Disp8 (toR rd) (toRM rb i) (archOffset o))]
-x86_add (Register r) (Variable (AtOffset l i o))
-  = do x86_cp (Register rsrc) (Variable l)
-       x86_add (Register r) (Variable (rsrc!%(i,o)))
-x86_add (AtOffset (Register r) i o) (Constant n)
-  = tellBC [Instruction x86_prefix (OpCode [0x81] Nothing) (Imm32 (fromInteger n)) (Disp8 (toEnum 0) (toRM r i) (archOffset o))]
-x86_add (AtOffset (Register r) i o) (Variable (Register r'))
-  = tellBC [Instruction x86_prefix (OpCode [0x01] Nothing) Imm0 (Disp8 (toR r') (toRM r i) (archOffset o))]
-x86_add (AtOffset (Register r) i o) (Variable (AtOffset r' i' o'))
-  = do x86_cp (Register rsrc) (Variable (r'!%(i',o')))
-       x86_add (r!%(i,o)) (Variable (Register rsrc))
-x86_add (AtOffset l i o) v
-  = do x86_cp (Register rdst) (Variable l)
-       x86_add (rdst!%(i,o)) v
+
+x86_unary (x1,x1') x2 x3 = unary
+  where unary (Register r) (Constant i)
+          = tellBC [Instruction x86_prefix (OpCode [x1] Nothing) (Imm32 (fromInteger i)) (Value (toEnum x1') (toR r))]
+        unary (Register r) (Variable (Register r'))
+          = tellBC [Instruction x86_prefix (OpCode [x2] Nothing) Imm0 (Value (toR r') (toR r))]
+        unary (Register rd) (Variable (AtOffset (Register rb) i o))
+          = tellBC [Instruction x86_prefix (OpCode [x3] Nothing) Imm0 (Disp8 (toR rd) (toRM rb i) (archOffset o))]
+        unary (Register r) (Variable (AtOffset l i o))
+          = do x86_cp (Register rsrc) (Variable l)
+               unary (Register r) (Variable (rsrc!%(i,o)))
+        unary (AtOffset (Register r) i o) (Constant n)
+          = tellBC [Instruction x86_prefix (OpCode [x1] Nothing) (Imm32 (fromInteger n)) (Disp8 (toEnum x1') (toRM r i) (archOffset o))]
+        unary (AtOffset (Register r) i o) (Variable (Register r'))
+          = tellBC [Instruction x86_prefix (OpCode [x2] Nothing) Imm0 (Disp8 (toR r') (toRM r i) (archOffset o))]
+        unary (AtOffset (Register r) i o) (Variable (AtOffset r' i' o'))
+          = do x86_cp (Register rsrc) (Variable (r'!%(i',o')))
+               unary (r!%(i,o)) (Variable (Register rsrc))
+        unary (AtOffset l i o) v
+          = do x86_cp (Register rdst) (Variable l)
+               unary (rdst!%(i,o)) v
+
+x86_add = x86_unary (0x81,0) 0x01 0x03
+x86_sub = x86_unary (0x85,5) 0x29 0x2a
 
 x86_push (Constant n)                            = tellBC [Instruction x86_prefix (OpCode [0x68] Nothing) (Imm32 (fi n)) NoModRM]
 x86_push (Variable (Register r))                 = tellBC [Instruction x86_prefix (OpCode [] (Just (0x50,toR r))) Imm0 NoModRM]
@@ -352,7 +357,7 @@ x86_machine_common = VonNeumannMachine {
     _ -> getCounter,
   _pushThunk = error "Undefined method pushThunk in basic X86 configuration",
   _popThunk = error "Undefined method popThunk in basic X86 configuration",
-  _cp = x86_cp , _add = x86_add,
+  _cp = x86_cp , _add = x86_add, _sub = x86_sub,
   _load = x86_load, _store = x86_store,
   _ret = x86_ret, _push = x86_push,
   _pop = x86_pop, _call = x86_call,

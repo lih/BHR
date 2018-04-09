@@ -24,7 +24,9 @@ data Offset = Offset Int
 data Value = Constant Integer
            | Variable Locus
            deriving (Show,Eq,Ord)
- 
+
+version = 1 :: Int
+
 class IsLocus t where
   toLocus :: t -> Locus
 instance IsLocus Locus where toLocus = id
@@ -43,7 +45,6 @@ instance IsValue Int where toValue = Constant . fromIntegral
 instance IsValue Word32 where toValue = Constant . fromIntegral
 instance IsValue Word8 where toValue = Constant . fromIntegral
 instance IsValue BinAddress where toValue (BA a) = Constant (fromIntegral a)
-
 
 (!%) :: IsLocus l => l -> (OffsetStride,Offset) -> Locus
 l !% (i,o) = AtOffset (toLocus l) i o
@@ -100,6 +101,7 @@ data Runtime s = Runtime {
   _rtAddresses :: Map (AnnExpr s) BinAddress,
   _rtPartial :: Map Int BinAddress,
   _rtBuiltins :: Map (Section,String) BinAddress,
+  _rtRawSections :: Map Hash BinAddress,
   _rtSections :: Map Section (BinaryCode,BinAddress),
   _rtDirty :: Map Int Bool
   }
@@ -120,7 +122,7 @@ rtDirty :: Int -> Lens' (Runtime s) Bool
 rtDirty reg = lens _rtDirty (\x y -> x { _rtDirty = y }).mat reg
 
 defaultRuntime :: Runtime s
-defaultRuntime = Runtime zero zero zero zero zero
+defaultRuntime = Runtime zero zero zero zero zero zero
 
 newtype ASMT s m a = ASMT (StateT (Runtime s) (CounterT BinaryCode BinAddress m) a)
                  deriving (Functor,SemiApplicative,Applicative,Unit,MonadFix
@@ -179,7 +181,7 @@ type ALLOC_BYTES       = forall m s. MonadASM m s => Locus -> Value -> m ()
 data VonNeumannMachine = VonNeumannMachine {
   _destReg,_thisReg,_tmpReg :: RegID,
   _newFunction :: forall m s. MonadASM m s => Section -> m BinAddress,
-  _cp,_add :: INSTR2 Locus Value,
+  _cp,_add,_sub :: INSTR2 Locus Value,
   _load :: INSTR2 Locus BinAddress,
   _store :: INSTR2 BinAddress Value,
   _push :: INSTR1 Value,
@@ -314,6 +316,7 @@ commonBuiltin _ = Nothing
 data SystemDataRepr = SystemDataRepr {
   sdr_encodeWord16 :: Word16 -> Builder,
   sdr_encodeWord32 :: Word32 -> Builder,
+  sdr_encodeWord64 :: Word64 -> Builder,
   sdr_encodeWordN :: Word32 -> Builder,
   sdr_byteOrder :: Bool,
   sdr_wordSize :: Int
@@ -327,6 +330,37 @@ assemblyBuiltin repr (B_String s) = Just $ do
     tellWordN repr (fromIntegral (length s))
     for_ s $ tell . binaryCode (Just 1,1)
   globalBuiltin global_constant (toValue str)
+assemblyBuiltin repr B_AddString = Just $ getOrDefineBuiltin0 TextSection "add-string" $ do
+  [a,b] <- builtinArgs 2
+  pushing [thisReg] $ callThunk a
+  pushing [thisReg] $ callThunk b
+  tmpReg <-- a!ValueOffset!Offset wordSize
+  add tmpReg (b!ValueOffset!Offset wordSize)
+  add tmpReg (2*wordSize :: Int)
+
+  allocBytes (thisReg!ValueOffset) tmpReg
+  
+  sub tmpReg (2*wordSize :: Int)
+  thisReg!ValueOffset!Offset 0 <-- (1 :: Int)
+  thisReg!ValueOffset!Offset wordSize <-- tmpReg
+  let fillLoop v = do
+        start <- getCounter
+        tmpReg <-- (0 :: Int)
+        ifcmp_hint (Just True) (True,LT) tmpReg v $ do
+          thisReg!ValueOffset!%(ByteStride tmpReg,Offset 0) <-- v
+          add tmpReg (wordSize :: Int)
+  between
+    (add (thisReg!ValueOffset) (2*wordSize :: Int))
+    (sub (thisReg!ValueOffset) (2*wordSize :: Int)) $ do
+      fillLoop (a!ValueOffset)
+      between
+        (add (thisReg!ValueOffset) (a!ValueOffset))
+        (sub (thisReg!ValueOffset) (a!ValueOffset)) $ do
+          fillLoop (b!ValueOffset)
+
+  cst <- global_constant
+  thisReg!TypeOffset <-- cst
+  jmp cst
 assemblyBuiltin repr (B_Bytes bs) = Just $ do
   str <- inSection DataSection $ getCounter <* do
     tellWordN repr 1
@@ -422,6 +456,8 @@ store :: (?sys :: VonNeumannMachine,MonadASM m s,IsValue v) => BinAddress -> v -
 store a v = _store ?sys a (toValue v)
 add :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l,IsValue v) => l -> v -> m ()
 add l v = _add ?sys (toLocus l) (toValue v)
+sub :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l,IsValue v) => l -> v -> m ()
+sub l v = _sub ?sys (toLocus l) (toValue v)
 
 assemblyMachine :: (?sys :: VonNeumannMachine) => AssemblyMachine
 assemblyMachine = let Just asm = _assemblyMachine ?sys in asm
