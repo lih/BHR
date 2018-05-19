@@ -12,6 +12,8 @@ import qualified System.Process as Sys
 import Data.IORef
 import Control.Concurrent.MVar
 import GHC.IO.Handle (hClose)
+import IO.Filesystem (modTime)
+import IO.Time (currentTime,TimeVal(..))
 
 commitHash :: Commit -> Hash
 commitHash c = hashData (serialize c)
@@ -206,7 +208,23 @@ getBranch conn = deepBranch'
         deepBranch' (Just (Right h)) = return (Just h)
         deepBranch' (Just (Left (pub,b))) = deepBranch b pub
         deepBranch b pub = do
-          StampedBranches _ bs <- getBranches conn pub
+          ks <- getKeyStore
+          let headFile = cacheFileName curlyCommitDir (show (Zesty (pub,b))) "head"
+              getRemoteBranches = do
+                createFileDirectory headFile
+                getBranches conn pub <*= liftIO . writeSerial headFile
+          StampedBranches _ bs <-
+            liftIO $ case [ts | (_,pub',_,meta,_) <- toList ks
+                              , pub==pub'
+                              , Just (Pure ts) <- [meta^.mat "branch-expiry".at [b]]] of
+              (ts:_) -> do
+                htime <- modTime headFile
+                now <- currentTime
+                if htime >= Since (now - 60*read ts)
+                  then readFormat headFile
+                  else getRemoteBranches
+              _ -> getRemoteBranches
+
           deepBranch' (lookup b bs)
 
 getCommit :: MonadIO m => VCSBackend -> Hash -> m (Map LibraryID Metadata)

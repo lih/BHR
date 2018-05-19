@@ -15,6 +15,17 @@ import Control.Exception (fromException)
 import Control.DeepSeq (($!!))
 import System.Process (readProcess)
 import Control.Concurrent.MVar
+import qualified Language.Haskell.TH as TH
+import qualified Language.Haskell.TH.Quote as TH
+import qualified Prelude as P
+
+q_string :: TH.QuasiQuoter
+q_string = TH.QuasiQuoter {
+  TH.quoteExp = \s -> P.return (TH.LitE (TH.StringL ("{section.help-doc "+s+"}"))),
+  TH.quotePat = undefined,
+  TH.quoteType = undefined,
+  TH.quoteDec = undefined
+  }
 
 showPath l = intercalate "." (map (foldMap quote) l)
   where quote '.' = "\\."

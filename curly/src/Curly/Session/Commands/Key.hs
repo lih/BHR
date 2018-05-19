@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo #-}
+{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo, QuasiQuotes #-}
 module Curly.Session.Commands.Key where
 
 import Curly.Core
@@ -12,22 +12,22 @@ import Curly.UI
 
 keyCmd :: Interactive Command
 
-keyDoc = unlines [
-  "{section {title Manage Keystore}",
-  "  {p Queries or modifies the keystore.}",
-  "  {title Keystore Commands:}",
-  "  {ul {li {em key list}: Lists known keys}",
-  "      {li {em key access}: Shows the current access level}",
-  "      {li {em key grant (none|read|execute|write|admin|almighty) <key-name>}: ",
-  "          Grants access of given type to the current instance}",
-  "      {li {em key set <key-name> <path>... = <value>}: Sets some metadata}",
-  "      {li {em key meta <key-name> <path>...}: Shows a key's metadata}",
-  "      {li {em key gen [client|server] <key-name>}: Generates a new private key}",
-  "      {li {em key del [client|server] <key-name>}: Deletes a known key}",
-  "      {li {em key export <key-name> [proof]}: Exports a claim for the given key, or a proof of it if specified}",
-  "      {li {em key import <key-name> (<client-key-name>|#<export>)}: Imports an exported key under the given name}}",
-  "}"
-  ]
+keyDoc = [q_string|
+{title Manage Keystore}
+{p Queries or modifies the keystore.}
+{title Keystore Commands:}
+{ul {li {em key list}: Lists known keys}
+    {li {em key access}: Shows the current access level}
+    {li {em key grant (none|read|execute|write|admin|almighty) <key-name>}: 
+        Grants access of given type to the current instance}
+    {li {em key set <key-name> <path>... = <value>}: Sets some metadata}
+    {li {em key unset <key-name> <path>...}: Unsets a metadata path}
+    {li {em key meta <key-name> <path>...}: Shows a key's metadata}
+    {li {em key gen [client|server] <key-name>}: Generates a new private key}
+    {li {em key del [client|server] <key-name>}: Deletes a known key}
+    {li {em key export <key-name> [proof]}: Exports a claim for the given key, or a proof of it if specified}
+    {li {em key import <key-name> (<client-key-name>|#<export>)}: Imports an exported key under the given name}}
+|]
 keyCmd = withDoc keyDoc $ False <$ do
   x <- expected "key command" (nbhspace >> dirArg)
   let setKey name v = do
@@ -77,6 +77,13 @@ keyCmd = withDoc keyDoc $ False <$ do
       if ?access >= Almighty
         then modifyKeyStore $ at name.t'Just.l'4.mat ph %~ insert pt (Pure value)
         else serveStrLn "Error: you are not authorized to set key metadata"
+    "unset" -> do
+      name <- expected "key name" (nbhspace >> dirArg)
+      ph:pt <- expected "metadata path"  (many1' (nbhspace >> dirArg))
+      if ?access >= Almighty
+        then modifyKeyStore $ at name.t'Just.l'4.at ph %~ maybe Nothing (\m -> let m' = delete pt m in
+                                                                          if empty m' then Nothing else Just m')
+        else serveStrLn "Error: you are not authorized to unset key metadata"
     "meta" -> do
       name <- expected "key name" (nbhspace >> dirArg)
       path <- many' (nbhspace >> dirArg)

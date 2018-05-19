@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo #-}
+{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo, QuasiQuotes #-}
 module Curly.Session.Commands(
   -- * Sessions
   SessionState,wd,this,style,patterns,
@@ -55,6 +55,7 @@ commands = [
   ("Control",[
       ("key",keyCmd),
       ("clean",cleanCmd),
+      ("build",buildCmd),
       ("reload",reloadCmd),
       ("configure",configCmd),
       ("run",runCmd),
@@ -81,7 +82,8 @@ commandNames = let
 
 quitCmd,helpCmd,configCmd,killCmd,compareTypesCmd,showInstancesCmd :: Interactive Command
 
-compareTypesDoc = "{section {title Compare Types} Compares the types of two expressions}"
+compareTypesDoc = [q_string|{title Compare Types} 
+{p Compare the types of two expressions}|]
 compareTypesCmd = withDoc compareTypesDoc $ False <$ do
   let exprT = map exprType . optimized
   nbsp
@@ -92,21 +94,24 @@ compareTypesCmd = withDoc compareTypesDoc $ False <$ do
   b <- exprT =<< tom HorizSpaces
   serveStrLn $ if shapeCmp then show (compare a b) else show (compareConstrainedness a b)
 
-showInstancesDoc = "{section {title Show Instances} Shows all the instances of the current execution context}"
+showInstancesDoc = [q_string|{title Show Instances}
+{p Show all the instances of the current execution context}|]
 showInstancesCmd = withDoc showInstancesDoc $ False <$ do
   imps <- lift $ getl $ l'library.implicits
   when (envLogLevel >= Debug) $ serveStrLn $ format "Valid: %s" (show $ isValidInstanceMap imps)
   for_ (imps^.ascList) $ \((n,t),(_,e)) -> do
     serveStrLn $ format "Instance %s (%s): %s\n%s" (pretty n) (show t) (show (e^.leafType)) (pretty (map fst $ semantic (e^.leafVal) :: Expression GlobalID GlobalID))
 
-quitDoc = "{section {title Quit} Quit the program}"
+quitDoc = [q_string|{title Quit}
+{p Quit the program}|]
 quitCmd = withDoc quitDoc $ liftIO ?quitSession >> return True
 
 subTag t = t'Join.docNodeSubs.traverse.sat (isTag t)
   where isTag x (Join (DocTag t _ _)) = t==x
         isTag _ _ = False
 
-helpDoc = "{section {title Show Help} Show the help for the given function, or all of them.}"
+helpDoc = [q_string|{title Show Help}
+{p Show the help for the given function, or all of them.}|]
 helpCmd = withDoc helpDoc $ False <$ do
   args <- many' (nbhspace >> dirArg)
   term <- liftIO setupTermFromEnv
@@ -118,17 +123,17 @@ helpCmd = withDoc helpDoc $ False <$ do
             $ cmds <&> \(c,(d,_)) ->
             let sub = d^?subTag "section".subTag "title".t'Join.docNodeSubs
             in docTag "li" [Pure (c+":"),docTag "em" (head sub)]
-      serveStrLn $ docString term ?style (docTag "doc" (Pure "Here are the available commands (enter 'help <cmd>' to show specific sections) :":lis))
+      serveStrLn $ docString term ?style (docTag "help-doc" (Pure "Here are the available commands (enter 'help <cmd>' to show specific sections) :":lis))
     (cmd:_) -> case foldMap snd commands^.at cmd of
       Just (d,_) -> withStyle (serveStrLn $ docString term ?style d)
       _  -> serveStrLn $ "Error: "+cmd+": no such command."
 
-configDoc = unlines [
-  "{section {title Instance Configuration} ",
-  "  {p {em Usage:} configure <selector>} ",
-  "  {p Open a configuration file for edition.",
-  "  {line If many configurations are available, the first one whose name matches the selector is edited.}}}"
-  ]
+configDoc = [q_string|
+{title Instance Configuration} 
+{p {em Usage:} configure <selector>} 
+{p Open a configuration file for edition.}
+{p If many configurations are available, the first one whose name matches the selector is edited.}
+|]
 configCmd = withDoc configDoc $ False <$ do
   sel <- option' 0 ((nbhspace >> many1' (noneOf "\n")) >*> number)
   case drop sel (curlyFiles ?curlyConfig) of
@@ -136,10 +141,10 @@ configCmd = withDoc configDoc $ False <$ do
            | otherwise -> serveStrLn "Error: You are not allowed to access the instance configuration"
     [] -> serveStrLn $ format "Error: Couldn't find configuration file number '%d'" sel
 
-killDoc = unlines [
-  "{section {title Kill Instance Server}",
-  "  {p Kills the server for the current instance, if there is one.}}"
-  ]
+killDoc = [q_string|
+{title Kill Instance Server}
+{p Kills the server for the current instance, if there is one.}
+|]
 killCmd = withDoc killDoc $ True <$ if ?access >= Admin then liftIOWarn (?quitSession >> ?killServer)
                                     else serveStrLn "Error: you need admin access to kill a server"
 

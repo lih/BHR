@@ -67,7 +67,7 @@ type LensLike f s t a b = (s -> f t) -> (a -> f b)
 type Simple f a b = f b b a a
 
 type FixFold s t a b = forall m. MonadFix m => LensLike m s t a b
-type FixFold' a b = Simple Fold a b
+type FixFold' a b = Simple FixFold a b
 type Fold s t a b = forall m. Monad m => LensLike m s t a b
 type Fold' a b = Simple Fold a b
 type Traversal s t a b = forall f. Applicative f => LensLike f s t a b
@@ -147,9 +147,9 @@ x^..i = yb i x
 (%-) = set
 (%%-) :: Iso s t a b -> a -> (t -> s)
 (%%-) i = set (from i)
-(^?) :: (Unit f,Monoid (f b)) => a -> FixFold' a b -> f b
+(^?) :: (Unit f,Monoid (f b),MonadFix ((,) (f b))) => a -> FixFold' a b -> f b
 x^?l = fst $ l (\y -> (pure y,y)) x
-(^??) :: a -> FixFold' a b -> [b]
+(^??) :: MonadFix ((,) [b]) => a -> FixFold' a b -> [b]
 x^??l = fst $ l (\y -> ([y],y)) x
 
 (-.) :: Lens c u b v -> (a -> b) -> a -> c
@@ -783,5 +783,5 @@ commuted = iso commute commute
 
 newtype Test a = Test (Const Bool a)
                deriving (Semigroup,Monoid,Functor,Unit,SemiApplicative,Applicative)
-has :: FixFold' a b -> a -> Bool
+has :: MonadFix ((,) Bool) => FixFold' a b -> a -> Bool
 has l x = fst $ l (\y -> (True,y)) x

@@ -29,7 +29,7 @@ import IO.Time
 newtype PrivateKey = PrivateKey Integer
             deriving (Eq,Ord)
 newtype PublicKey = PublicKey (Integer,Integer)
-                  deriving Show
+                  deriving (Show,Eq)
 data Signature = Signature Integer Integer
                deriving (Eq,Ord,Generic,Show)
 instance Serializable Signature ; instance Format Signature
