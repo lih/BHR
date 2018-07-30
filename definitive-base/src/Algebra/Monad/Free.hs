@@ -1,16 +1,20 @@
-{-# LANGUAGE UndecidableInstances, ScopedTypeVariables #-}
+{-# LANGUAGE UndecidableInstances, ScopedTypeVariables, DeriveGeneric #-}
 module Algebra.Monad.Free where
 
 import Algebra.Monad.Base
 import Unsafe.Coerce (unsafeCoerce)
+import qualified Control.DeepSeq as DSeq
+import GHC.Generics (Generic)
 
 data Free f a = Join (Forest f a)
               | Pure a
+              deriving Generic
 type Forest f a = f (Free f a)
 
 deriving instance (Eq (f (Free f a)),Eq a) => Eq (Free f a)
 deriving instance (Ord (f (Free f a)),Ord a) => Ord (Free f a)
 deriving instance (Show (f (Free f a)),Show a) => Show (Free f a)
+instance (DSeq.NFData (Forest f a), DSeq.NFData a) => DSeq.NFData (Free f a)
 
 t'Join :: Traversal (f (Free f a)) (g (Free g a)) (Free f a) (Free g a)
 t'Join k (Join x) = Join<$>k x

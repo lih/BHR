@@ -179,7 +179,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["style",_,"display",tp] -> completeWord ["none","line","block","inline"] tp
           ["style",_,x,tp] | x`elem`["underline","bold","italic"] -> completeWord ["none","true","false"] tp
                            | x`elem`["color","bgcolor"] -> completeWord ("none":keys colorNames) tp
-          ["key",cmd] -> completeWord ["access","list","gen","del","set","meta","grant","export","import"] cmd
+          ["key",cmd] -> completeWord ["access","list","gen","del","set","unset","meta","grant","export","import"] cmd
           ["key","grant",acc] -> completeWord (map show [Deny .. maxBound]) acc
           ["key","grant",_,k] -> completeKeyName k
           ["key","export",k] -> completeKeyName k
@@ -188,6 +188,7 @@ localServer hasLocalClient thr acc conn@(Connection clt srv) = do
           ["key","import",_,k] -> completeClientKeyName k
           ["key","set",k] -> completeKeyName k
           ["key","meta",k] -> completeKeyName k
+          ["key","unset",k] -> completeKeyName k
           ["key","gen",t] -> completeWord ["client","server"] t
           ["key","del",k] -> completeClientKeyName k + completeKeyName k + completeWord ["client","server"] k
           ["key","del","client",k] -> completeClientKeyName k

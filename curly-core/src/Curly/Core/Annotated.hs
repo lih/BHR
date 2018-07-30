@@ -82,6 +82,7 @@ instance HasIdents s s' (StrictnessHead s) (StrictnessHead s') where
   ff'idents _ (StH_Val n) = pure (StH_Val n)
 instance Serializable s => Serializable (StrictnessHead s)
 instance Format s => Format (StrictnessHead s)
+instance NFData s => NFData (StrictnessHead s)
 
 noStrictness :: Strictness s
 noStrictness = HNF StH_Void []
@@ -91,6 +92,7 @@ data Strictness s = Delayed s (ExprStrictness s)
                 deriving (Eq,Ord,Generic)
 instance Serializable s => Serializable (Strictness s)
 instance Format s => Format (Strictness s)
+instance NFData s => NFData (Strictness s)
 instance HasIdents s s' (Strictness s) (Strictness s') where
   ff'idents k (Delayed s es) = liftA2 Delayed (k s) ((l'1.each.ff'idents .+ l'2.ff'idents) k es)
   ff'idents k (HNF h stss) = liftA2 HNF (ff'idents k h) ((each.(l'1.each.ff'idents .+ l'2.ff'idents)) k stss)
@@ -139,6 +141,7 @@ data AnnNode s a = AnnNode {
   _strictness :: ExprStrictness s,
   _shape :: ExprNode s a
   }
+                 deriving Generic
 annShape :: Lens (ExprNode s a) (ExprNode s b) (AnnNode s a) (AnnNode s b)
 annShape = lens _shape (\x y -> x { _shape = y })
 annType :: Lens' (AnnNode s a) (Type s)
@@ -151,7 +154,8 @@ instance Functor (AnnNode s) where
 instance Foldable (AnnNode s) where
   fold = fold . _shape
 instance Traversable (AnnNode s) where
-  sequence = annShape sequence 
+  sequence = annShape sequence
+instance (NFData s, NFData a) => NFData (AnnNode s a)
 instance (Identifier s,Identifier s') => HasIdents s s' (AnnNode s a) (AnnNode s' a) where
   ff'idents k (AnnNode i m r t st s) = liftA4 (\t' r' st' s' -> AnnNode i m r' t' st' s')
                                        (forl ff'idents t k)
