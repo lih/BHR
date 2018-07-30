@@ -31,6 +31,9 @@ deriving instance Monoid (m (a,Void,Void)) => Monoid (ReaderT r m a)
 deriving instance Semiring (m (a,Void,Void)) => Semiring (ReaderT r m a)
 deriving instance Ring (m (a,Void,Void)) => Ring (ReaderT r m a)
 deriving instance (Monad m,MonadFuture n m) => MonadFuture n (ReaderT r m)
+instance MonadLogic m l => MonadLogic (ReaderT r m) (ReaderT r l) where
+  deduce = coerceDeduce ReaderT ReaderT
+  induce = coerceInduce ReaderT ReaderT
 
 readerT :: (Functor m,Functor m') => Iso (ReaderT r m a) (ReaderT r' m' b) (r -> m a) (r' -> m' b)
 readerT = iso t'readerT t'runReaderT

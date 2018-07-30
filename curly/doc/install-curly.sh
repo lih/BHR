@@ -1,5 +1,6 @@
 #!/bin/sh
-curly_url="http://www.curly-lang.org/pkg/curly.tar.xz"
+curly_version="0.59.4"
+curly_url="http://www.curly-lang.org/pkg/curly-$curly_version.tar.xz"
 
 while (($# > 0)); do
     cur_opt="$1"
@@ -28,8 +29,11 @@ else
     get_url() { exit 1; }
 fi
 
-get_url "$curly_url" | { mkdir -p "$install_dir"; trace tar -xJ --checkpoint=40 --checkpoint-action=dot -C "$install_dir"; }
+get_url "$curly_url" | {
+    mkdir -p "$install_dir"
+    trace tar -xJ --checkpoint=40 --checkpoint-action=dot -C "$install_dir"
+}
 if [ -n "$bin_dir" ]; then
     mkdir -p "$bin_dir"
-    trace ln -fs "$install_dir/curly-0.59.4/curly" "$bin_dir/curly"
+    trace ln -fs "$install_dir/curly-$curly_version/curly" "$bin_dir/curly"
 fi

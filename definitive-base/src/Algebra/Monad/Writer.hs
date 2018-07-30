@@ -51,6 +51,9 @@ deriving instance Monoid (m (a,Void,w)) => Monoid (WriterT w m a)
 deriving instance Semiring (m (a,Void,w)) => Semiring (WriterT w m a)
 deriving instance Ring (m (a,Void,w)) => Ring (WriterT w m a)
 deriving instance (Monad m, Monoid w, MonadFuture n m) => MonadFuture n (WriterT w m)
+instance (Monoid w,MonadLogic m l) => MonadLogic (WriterT w m) (WriterT w l) where
+  deduce = coerceDeduce WriterT WriterT
+  induce = coerceInduce WriterT WriterT
 
 writerT :: (Functor m,Functor m') => Iso (WriterT w m a) (WriterT w' m' b) (m (w,a)) (m' (w',b))
 writerT = iso _writerT t'runWriterT

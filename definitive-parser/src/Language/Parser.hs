@@ -56,6 +56,16 @@ class (MonadLogic m p,Monoid (p ()),Monad p,Monad m) => MonadParser s m p | p ->
   noParse :: p a
   (<+?),(<+>) :: p a -> p a -> p a
   infixr 0 <+?,<+>
+instance (MonadParser s m p,Monoid (p ((),s',Void))) => MonadParser s (StateT s' m) (StateT s' p) where
+  runStreamState st = lift (runStreamState st)
+  noParse = lift noParse
+  (<+?) = by (stateT<.>stateT<.>stateT) (\a b s -> a s <+? b s)
+  (<+>) = by (stateT<.>stateT<.>stateT) (\a b s -> a s <+> b s)
+instance (MonadParser s m p,Monoid (p ((),Void,Void))) => MonadParser s (ReaderT s' m) (ReaderT s' p) where
+  runStreamState st = lift (runStreamState st)
+  noParse = lift noParse
+  (<+?) = by (readerT<.>readerT<.>readerT) (\a b s -> a s <+? b s)
+  (<+>) = by (readerT<.>readerT<.>readerT) (\a b s -> a s <+> b s)
 class ParseToken c where
   type TokenPayload c :: *
   type TokenPayload c = c

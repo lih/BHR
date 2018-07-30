@@ -6,15 +6,15 @@ Installing Curly
 ===============
 
 (Curly currently has only been tested on 64-bit Linux, which is what
-the following instructions assume. Other platforms will be coming
-soon).
+the following instructions assume. Other platforms will be coming,
+perhaps even soon).
 
 Curly is pretty straightforward to install. You can either [download a
 pre-compiled binary [Linux, x86-64]][curly-package] (unpack it with
 `tar -xJf curly.tar.xz`) or build it from [the source][curly-source],
 which may require you to use the [Stack build tool][stack].
 
-[curly-source]: https://gricad-gitlab.univ-grenoble-alpes.fr/coiffiem/curly
+[curly-source]: http://git.curly-lang.org/marc/curly
 [stack]: https://docs.haskellstack.org/en/stable/README/
 [curly-package]: ../pkg/curly.tar.xz
 
@@ -148,7 +148,7 @@ To use it, you'll need to inform Curly of the existence of the
 repository, by importing its public key (this only needs to be done
 once) :
 
-    curly -e 'key import curly-std curly-std.coiffier.net'
+    curly -e 'key import curly-std standard.curly-lang.org' -e 'ket sey curly-std follow-branches = stdlib'
 
 After that, the package can be found by Curly under the name
 "hello". All we have to do is mount it and use the `main`{.curly}
@@ -195,7 +195,7 @@ If you save this file as 'main.curly', you can achieve the same
 results as before by running `curly main.curly +build`, or `curly
 main.curly +run`
 
-The configuration format pretty straightforward :
+The configuration format is pretty straightforward :
 
   - options are listed one per line. Blank lines are ignored, as are
     lines that start with a `#`{.curly}
@@ -300,3 +300,27 @@ then Curly loads that file before other options are processed.
 In the previous example, `cd`ing into the project directory and
 entering `curly -i` would start an interactive session in the context
 of the project.
+
+### Goodies
+
+You may have noticed the `--goody` option. This option does not affect
+the behaviour of Curly, but rather prints out the contents of a
+predetermined file that was shipped with Curly, such as completion
+functions, scaffolding templates, or desktop files. The `install.sh`
+goody offers a script that can create packages for various systems.
+
+In the following section, I will assume the existence of a
+`curly-install` shell function defined as follows :
+
+    curly-install() { curly --goody install.sh | sh -s "$@"; }
+
+#### Emacs modes for editing Curly files
+
+`curly-install emacs` will create a package archive that can be
+installed by running `M-x package-install-file` in your favorite
+editor. This package provides a major mode for Curly source files
+(`curly-mode.el`) and another for Curly configuration files
+(`curly-conf-mode.el`).
+
+
+
