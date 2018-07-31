@@ -11,7 +11,7 @@ perhaps even soon).
 
 Curly is pretty straightforward to install. You can either [download a
 pre-compiled binary [Linux, x86-64]][curly-package] (unpack it with
-`tar -xJf curly.tar.xz`) or build it from [the source][curly-source],
+`tar -xJf curly.tar.xz`{.terminal}) or build it from [the source][curly-source],
 which may require you to use the [Stack build tool][stack].
 
 [stack]: https://docs.haskellstack.org/en/stable/README/
@@ -19,7 +19,7 @@ which may require you to use the [Stack build tool][stack].
 If you're feeling lazy, you can also elect to use this generously
 provided [install script][curly-install-script], which downloads and
 unpacks the above archive in the directory of your choice, and creates
-a link to `curly` in your PATH.
+a link to Curly in your PATH.
 
 Curly doesn't depend on much to do its work. Still, if something is
 missing, it's either one of the following :
@@ -28,12 +28,12 @@ missing, it's either one of the following :
   - GMP (GNU Multi-Precision) because it's a Haskell program that makes calculations with large numbers
   - The GNU C Library (glibc), because what doesn't depend on it ? 
 
-First steps with the `curly` compiler
+First steps with the Curly compiler
 ====================================
 
 I hope the previous steps went well. If they did, you should now be
 able to run Curly, and it should be in your PATH as well. You can test
-it by running `curly --help`, which should present you with a screen
+it by running `curly --help`{.terminal}, which should present you with a screen
 like the following
 
     Usage: curly OPTION...
@@ -69,9 +69,9 @@ like the following
     Mounts: none
     Targets: none
 
-_Tip:_ As indicated above, the `--help` option inhibits all
+_Tip:_ As indicated above, the "--help" option inhibits all
 others. When you are unsure of a command-line, you can always append
-`--help` to see what Curly understood without actually running
+"--help" to see what Curly understood without actually running
 anything.
 
 Curly works by first creating a context by *mounting* input sources at
@@ -88,15 +88,15 @@ Input sources can be many things. As of now (version 0.59.1), they can either be
   - libraries (`library <lib-id>`{.curly}) and packages, which we will cover a bit later
 
 Let's put that knowledge in practice with an exercise. Try running
-`curly -M builtins=builtins -i` to walk around the builtin library and
-discover the interactive environment. In that environment, you can
-define functions and use them, just like you would in source files
-(we'll get to the source format in a moment).
+`curly -M builtins=builtins -i`{.terminal} to walk around the builtin
+library and discover the interactive environment. In that environment,
+you can define functions and use them, just like you would in source
+files (we'll get to the source format in a moment).
 
 You can also, once in that environment, use additional commands to
 rummage around within the context. For example, try running `show
-builtins`{.curly}, or `meta builtins`{.curly}. Enter `help`{.curly} to
-see a list of all interactive commands, `help <cmd>`{.curly} for a
+builtins`{.terminal}, or `meta builtins`{.terminal}. Enter `help`{.terminal} to
+see a list of all interactive commands, `help <cmd>`{.terminal} for a
 description of their individual usage.
 
 Hello, Curly !
@@ -111,7 +111,7 @@ There are many ways to do so with Curly.
 
 The most traditional of those ways would be to define a main function
 in a file (let's say "main.cy") and turn it into an executable using
-the `-t` option. Here's what it looks like :
+the "-t" option. Here's what it looks like :
 
 ~~~~~{.curly}
 module Main
@@ -124,15 +124,15 @@ export main
 ~~~~~~~~~~~
 
 Running `curly -M builtins=builtins -M main=source:main.cy -t
-main=main.main` creates an executable `main` from the function that we
-just defined.
+main=main.main`{.terminal} creates an executable called "main" from
+the function that we just defined.
 
 ### The quick-and-dirty way
 
 For such a simple example, you could even write the program inline, as
 an interactive expression that uses the builtins library directly
 `curly -M builtins=builtins -p 'import builtins' -e 'run (write stdout
-"Hello, world !\n")'`
+"Hello, world !\n")'`{.terminal}
 
 ### The Curly Way
 
@@ -146,19 +146,24 @@ To use it, you'll need to inform Curly of the existence of the
 repository, by importing its public key (this only needs to be done
 once) :
 
-    curly -e 'key import curly-std standard.curly-lang.org' -e 'ket sey curly-std follow-branches = stdlib hello'
+~~~~{.terminal}
+curly -e 'key import curly-std standard.curly-lang.org' -e 'key set curly-std follow-branches = stdlib hello'
+~~~~~
+
 
 After that, the package can be found by Curly under the name
 "hello". All we have to do is mount it and use the `main`{.curly}
 function that it exports, like so :
 
-    curly package:hello %'run hello.main'
-    # to create an executable
-    curly package:hello -t hello.main
+~~~{.terminal}
+curly package:hello %'run hello.main'
+# to create an executable
+curly package:hello -t hello.main
+~~~~~
 
-In the above commands, `package:hello` is a shorthand for `--mount
-hello=package:hello`, and `%<cmd>` is another form for `--execute
-<cmd>`.
+In the above commands, "package:hello" is a shorthand for "--mount
+hello=package:hello", and "%<cmd>" is another form for "--execute
+<cmd>".
 
 Going Further
 =============
@@ -190,8 +195,8 @@ mount Main = package Main
 ~~~~~~~
 
 If you save this file as 'main.curly', you can achieve the same
-results as before by running `curly main.curly +build`, or `curly
-main.curly +run`
+results as before by running `curly main.curly +build`{.terminal}, or
+`curly main.curly +run`{.terminal}
 
 The configuration format is pretty straightforward :
 
@@ -237,7 +242,7 @@ The configuration format is pretty straightforward :
         
         The following example shows how to write a simple installation
         context, so that calling `curly +install:<pkg1>
-        ... +install:<pkgn>` will install all the requested executables
+        ... +install:<pkgn>`{.terminal} will install all the requested executables
         from named packages to a common location : 
 	
         ~~~~~{.curly}
@@ -268,7 +273,7 @@ you can mount the 'src' folder by simply adding `mount = source
 src`{.curly} to the configuration. If you then load the '.curly' file
 from any directory, the path to the 'src' folder will be updated
 accordingly. For example, running `curly /path/to/project/.curly
---help` will show `mount = source /path/to/project/src`{.curly} in the
+--help`{.terminal} will show `mount = source /path/to/project/src`{.curly} in the
 "Mounts" section.
 
 Paths are translated for every option that references the file
@@ -295,30 +300,32 @@ Additionally, if no other configuration file is specified, and there
 exists a file called '.curly' in the current directory or its parents,
 then Curly loads that file before other options are processed.
 
-In the previous example, `cd`ing into the project directory and
-entering `curly -i` would start an interactive session in the context
+In the previous example, `cd`{.terminal}ing into the project directory and
+entering `curly -i`{.terminal} would start an interactive session in the context
 of the project.
 
 ### Goodies
 
-You may have noticed the `--goody` option. This option does not affect
+You may have noticed the "--goody" option. This option does not affect
 the behaviour of Curly, but rather prints out the contents of a
 predetermined file that was shipped with Curly, such as completion
-functions, scaffolding templates, or desktop files. The `install.sh`
+functions, scaffolding templates, or desktop files. The "install.sh"
 goody offers a script that can create packages for various systems.
 
 In the following section, I will assume the existence of a
-`curly-install` shell function defined as follows :
+`curly-install`{.terminal} shell function defined as follows :
 
-    curly-install() { curly --goody install.sh | sh -s "$@"; }
+~~~~{.terminal}
+curly-install() { curly --goody install.sh | sh -s "$@"; }
+~~~~~
 
 #### Emacs modes for editing Curly files
 
-`curly-install emacs` will create a package archive that can be
-installed by running `M-x package-install-file` in your favorite
-editor. This package provides a major mode for Curly source files
-(`curly-mode.el`) and another for Curly configuration files
-(`curly-conf-mode.el`).
+`curly-install emacs`{.terminal} will create a package archive that
+can be installed by running `M-x package-install-file` in your
+favorite editor. This package provides a major mode for Curly source
+files ("curly-mode.el") and another for Curly configuration files
+("curly-conf-mode.el").
 
 
 

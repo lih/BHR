@@ -14,6 +14,7 @@ category:            Compilers
 build-type:          Simple
 extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
+homepage: http://www.curly-lang.org/
 
 data-dir: data
 data-files:

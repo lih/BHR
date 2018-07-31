@@ -36,19 +36,25 @@ $include-before$
 $endfor$
 $if(toc)$
 <nav>
-  <a href="index.html" class="logo navbar-brand"><h2>{curly}</h1><h4>A universal language</h4></a>
+  <a href="index.html" class="logo navbar-brand"><h2>{curly}</h1><h4 id="logo-message">&nbsp;<noscript>No JS ? No BS !</noscript></h4></a>
   <ul>
-    <li><a href="downloads.html">Downloads</a></li>
-    <li><a href="#">Documentation</a><ul>
+    <li>
+      <a href="#">Go to...</a>
+      $toc$</li><li>
+      <a href="#">Learn Curly</a><ul>
 	<li><a href="getting-started.html">Quick Start</a></li>
 	<li><a href="curly-language.html">The Curly Language</a></li>
 	<li><a href="curly-document.html">The Curly Document Format</a></li>
 	<li><a href="doc/custom-index.html">Curly API Documentation</a></li>
-    </ul></li>
-    <li><a href="#">Navigation</a>
-      $toc$</li>
+    </ul></li><li><a href="downloads.html">Get Curly</a></li>
   </ul>
 </nav>
+<script type="text/javascript">
+  var messages = [ 'A fool\'s language', 'Cures logorrhea', 'What else ?', 'Coder\'s best friend' ];
+  var elem = document.getElementById('logo-message');
+  var msg = messages[Math.floor(Math.random()*messages.length)];
+  elem.textContent = msg;
+</script>
 $endif$
 $if(title)$
 <div id="$idprefix$header">
@@ -63,10 +69,17 @@ $if(date)$
 <h3 class="date">$date$</h3>
 $endif$
 </div>
+<hr/>
 $endif$
+<article>
 $body$
+</article>
 $for(include-after)$
 $include-after$
 $endfor$
+<footer>
+  The Curly Programming Language, brought to you by Marc Coiffier<br/>
+  <small>This site was statically generated thanks to <a href="https://pandoc.org/">Pandoc</a></small>
+</footer>
 </body>
 </html>
