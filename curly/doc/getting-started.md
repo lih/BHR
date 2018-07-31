@@ -14,12 +14,10 @@ pre-compiled binary [Linux, x86-64]][curly-package] (unpack it with
 `tar -xJf curly.tar.xz`) or build it from [the source][curly-source],
 which may require you to use the [Stack build tool][stack].
 
-[curly-source]: http://git.curly-lang.org/marc/curly
 [stack]: https://docs.haskellstack.org/en/stable/README/
-[curly-package]: ../pkg/curly.tar.xz
 
 If you're feeling lazy, you can also elect to use this generously
-provided [install script](install-curly.sh), which downloads and
+provided [install script][curly-install-script], which downloads and
 unpacks the above archive in the directory of your choice, and creates
 a link to `curly` in your PATH.
 
@@ -148,7 +146,7 @@ To use it, you'll need to inform Curly of the existence of the
 repository, by importing its public key (this only needs to be done
 once) :
 
-    curly -e 'key import curly-std standard.curly-lang.org' -e 'ket sey curly-std follow-branches = stdlib'
+    curly -e 'key import curly-std standard.curly-lang.org' -e 'ket sey curly-std follow-branches = stdlib hello'
 
 After that, the package can be found by Curly under the name
 "hello". All we have to do is mount it and use the `main`{.curly}

@@ -45,7 +45,6 @@ packages:
 - curly-system
 - curly
 - curly-gateway
-- woosh
 # - grow
 # - misc
 # Dependency packages to be pulled from upstream that are not in the resolver

@@ -19,18 +19,30 @@
 }
 
 .title { text-align: center; margin-bottom: 2em; }
-body { padding-top: 3em; width: 50%; margin: auto; font-family: 'Titillium Web'; line-height: 180%; }
+body { width: 50%; margin: auto; font-family: 'Titillium Web'; line-height: 180%; }
 p, div, body { font-family: 'Titillium Web'; }
 h1, h2, h3, h4, h5, h6 { font-family: 'Roboto'; margin-top: 1em; }
-a { text-decoration: none; color: grey;  }
-a:hover { text-decoration: underline; }
+a { text-decoration: none; color: #5c7;  }
+a:hover { text-decoration: underline; color: #3a5; }
+.logo {
+    * { margin-top: 0; }
+    background: #efe;
+    display: inline-block;
+    // position: relative;
+    height: 100%;
+}
 
-pre { overflow: auto; }
+
+pre, pre code {
+    overflow: auto;
+    word-wrap: normal;
+    white-space: pre;
+}
 pre, code {
     font-family: 'Roboto Mono'; font-size: 90%;
     border-radius: 2px; border: 1px grey outset;
     padding: 0.1em 0.5em 0.1em 0.5em;
-    background: lightgrey;
+    background: #f5f5f5;
 }
 pre code { border: none; padding: 0; line-height: 130%; }
 .terminal { color: lightgreen; background: black; }
@@ -38,8 +50,7 @@ pre code { border: none; padding: 0; line-height: 130%; }
 
 nav {
     $border-size: 1px;
-    position: absolute;
-    top: 0;
+    padding-bottom: 3em;
     
     ul { padding: 0; margin: 0; }
     li > ul {
@@ -50,7 +61,7 @@ nav {
 
     li { padding: 0.3em;
 	 display: block;
-	 border: $border-size solid;
+	 border: $border-size solid #aaa;
 	 text-decoration: none;
 	 position: relative;
 	 width: 12em; 

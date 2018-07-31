@@ -110,7 +110,9 @@ evaluation :
     succeeds, the value of X is returned.
 
   - `{matches X Y}` returns X if its value matches the wildcard
-    expression Y. This operator allows queries like 
+    expression Y. This operator allows queries like `{matches {$ name}
+    *_*}` to select only operators, or `{matches {$ name} append*}` to
+    select those functions whose name begins with "append".
 
   - `{when X BODY...}` and `{unless X BODY...}` are conditional
     expressions. As their name implies, they succeed in producing

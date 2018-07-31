@@ -3,17 +3,21 @@
 
 name:                curly-system
 version:             0.3.2
--- synopsis:            
+synopsis:            System-specific code generation libraries for the Curly compiler
 -- description:         
 license:             MIT
 license-file:        LICENSE
 author:              Marc Coiffier
 maintainer:          marc.coiffier@univ-grenoble-alpes.fr
 -- copyright:           
--- category:            
+category:            Compilers
 build-type:          Simple
 extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
+
+flag paranoid
+  default: False
+  manual: True
 
 library
   exposed-modules:     Curly.System, Curly.System.HTML, Curly.System.Base, Curly.System.JavaScript, Curly.System.X86.Common, Curly.System.X86.Linux, Curly.System.ARM.Common, Curly.System.ARM.Linux, Curly.System.Format.ELF, Curly.System.Format.JVM.Class
@@ -31,5 +35,6 @@ library
   other-extensions:    UndecidableInstances, RecursiveDo, ScopedTypeVariables, NoMonomorphismRestriction, PatternSynonyms, CPP, TypeFamilies, StandaloneDeriving
   build-depends: base >=4.9 && <4.10,curly-core >=0.7 && <0.8,definitive-base >=2.6 && <2.7,definitive-filesystem >=2.1 && <2.2,definitive-parser >=2.5 && <2.6
   hs-source-dirs:      src
-  ghc-options:         -Werror
+  if flag(paranoid)
+    ghc-options:         -Werror
   default-language:    Haskell2010

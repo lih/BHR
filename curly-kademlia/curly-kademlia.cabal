@@ -15,11 +15,21 @@ description:
     This library aims to be very simple and pleasant to use, with the downside of
     deciding some of the implementation details, like timeout intervals and
     k-bucket size, for the user.
+    .
+
+    Maintainer note: this package is a fork of the original kademlia
+    package, made to accomodate the need for record validation before
+    insertion into the hash table. This is made evident by the
+    addition of the `i -> a -> Bool` argument to the `create`
+    function, that should return True when the key `i` validates the
+    content `a`. In turn, this can be useful for implementing
+    identity- or content-addressed hash tables that are a little more
+    resistant to adverse tampering.
 
 license:             BSD3
 license-file:        LICENSE
 author:              fro_ozen <fro_ozen@gmx.de>
-maintainer:          fro_ozen <fro_ozen@gmx.de>
+maintainer:          Marc Coiffier <marc.coiffier@univ-grenoble-alpes.fr>
 category:            Network
 
 build-type:          Simple

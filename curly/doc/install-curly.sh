@@ -2,13 +2,23 @@
 curly_version="0.59.4"
 curly_url="http://www.curly-lang.org/pkg/curly-$curly_version.tar.xz"
 
+import_stdkeys=
+install_dir=
+bin_dir=
+
 while (($# > 0)); do
-    cur_opt="$1"
-    shift
-    case "$cur_opt" in
-	--prefix)  bin_dir="$1/bin"; install_dir="$1/lib"; shift;;
-	--bin-dir) bin_dir="$1"; shift;;
-	--lib-dir) install_dir="$1"; shift;;
+    o="$1"; shift
+    optval=
+    case "$o" in
+	-[pB]?*) optval="${o#-?}" optname="${o%$optval}";;
+	--*=*) optname="${o%%=*}"; optval="${o#--*=}";;
+	-[pB]|--prefix|--bin-dir) optname="$o"; optval="$1"; shift;;
+	*) optname="$o";;
+    esac
+    case "$optname" in
+	--import-standard-keys) import_stdkeys=true;;
+	-p|--prefix) install_dir="$optval";;
+	-B|--bin-dir) bin_dir="$optval";;
     esac
 done
 
@@ -29,11 +39,11 @@ else
     get_url() { exit 1; }
 fi
 
-get_url "$curly_url" | {
-    mkdir -p "$install_dir"
-    trace tar -xJ --checkpoint=40 --checkpoint-action=dot -C "$install_dir"
-}
+get_url "$curly_url" | { mkdir -p "$install_dir"; trace tar -xJ --checkpoint=40 --checkpoint-action=dot -C "$install_dir"; }
 if [ -n "$bin_dir" ]; then
     mkdir -p "$bin_dir"
     trace ln -fs "$install_dir/curly-$curly_version/curly" "$bin_dir/curly"
+fi
+if [ -n "$import_stdkeys" ]; then
+    "$bin_dir/curly" %'key import curly-std standard.curly-lang.org' %'key set curly-std follow-branches = stdlib hello'
 fi

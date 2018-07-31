@@ -3,14 +3,14 @@
 
 name:                definitive-parser
 version:             2.5.1
--- synopsis:            
+synopsis:            General LogicT-based parser combinator library compatible with the definitive-base Prelude
 -- description:         
 license:             MIT
 license-file:        LICENSE
 author:              Marc Coiffier
 maintainer:          marc.coiffier@univ-grenoble-alpes.fr
 -- copyright:           
--- category:            
+category:            Parsers
 build-type:          Simple
 extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10

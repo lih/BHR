@@ -34,6 +34,22 @@ $endfor$
 $for(include-before)$
 $include-before$
 $endfor$
+$if(toc)$
+<nav>
+  <a href="index.html" class="logo navbar-brand"><h2>{curly}</h1><h4>A universal language</h4></a>
+  <ul>
+    <li><a href="downloads.html">Downloads</a></li>
+    <li><a href="#">Documentation</a><ul>
+	<li><a href="getting-started.html">Quick Start</a></li>
+	<li><a href="curly-language.html">The Curly Language</a></li>
+	<li><a href="curly-document.html">The Curly Document Format</a></li>
+	<li><a href="doc/custom-index.html">Curly API Documentation</a></li>
+    </ul></li>
+    <li><a href="#">Navigation</a>
+      $toc$</li>
+  </ul>
+</nav>
+$endif$
 $if(title)$
 <div id="$idprefix$header">
 <h1 class="title">$title$</h1>
@@ -47,17 +63,6 @@ $if(date)$
 <h3 class="date">$date$</h3>
 $endif$
 </div>
-$endif$
-$if(toc)$
-<nav>
-  <ul>
-    <li><a href="index.html">Home</a><ul>
-      <li><a href="getting-started.html">Quick Start</a></li>
-      <li><a href="curly-language.html">The Curly Language</a></li></ul></li>
-    <li><a href="#">Navigation</a>
-      $toc$</li>
-  </ul>
-</nav>
 $endif$
 $body$
 $for(include-after)$

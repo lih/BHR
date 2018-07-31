@@ -3,7 +3,7 @@
 
 name:                definitive-filesystem
 version:             2.1.1.1
--- synopsis:            
+synopsis:            Filesystem-handling functions that are compatible with the definitive-base library
 -- description:         
 license:             MIT
 license-file:        LICENSE
