@@ -158,6 +158,8 @@ x86_linux_system name = x86_sys name prog x86_machine_linux
         prog = Standalone $ \mtext -> x86_common $ do
           mute $ rawProgram [InitSection,TextSection,DataSection] $ do
             rtSection InitSection .l'2 =- BA pstart
+            rtSection TextSection .l'2 =~ \(BA x) -> BA (x+0x400000)
+            rtSection DataSection .l'2 =~ \(BA x) -> (BA (x+0x400000))
             start <- mtext
             inSection InitSection $ do
               poolReg <-- Constant 0
@@ -169,11 +171,11 @@ x86_linux_system name = x86_sys name prog x86_machine_linux
               call start
               x86_linux_syscall SC_Exit [pure (Constant 0)]
           rt <- get
-          let BA tstart = rt^.rtSection InitSection .l'2
-              BA dstart = rt^.rtSection TextSection .l'2
+          let BA tstart = BA 0x400000 + rt^.rtSection InitSection .l'2 
+              BA dstart = BA 0x400000 + rt^.rtSection TextSection .l'2
               ser p = serialize $ Elf ET_Exec (p pstart) [
-                ElfSection ".init" (ElfProgbits (p pstart) (True,True,True) (rt^.rtSection InitSection .l'1.bData)),
-                ElfSection ".text" (ElfProgbits (p tstart) (True,True,True) (rt^.rtSection TextSection .l'1.bData)),
+                ElfSection ".init" (ElfProgbits (p pstart) (True,False,True) (rt^.rtSection InitSection .l'1.bData)),
+                ElfSection ".text" (ElfProgbits (p tstart) (True,False,True) (rt^.rtSection TextSection .l'1.bData)),
                 ElfSection ".data" (ElfProgbits (p dstart) (True,True,False) (rt^.rtSection DataSection .l'1.bData)),
                 ElfSection ".symtab" (ElfSymTab (from ascList $^ map (\((sec,sym),BA addr) -> (secName sec+"."+sym,(secName sec,p addr)))
                                                  $ ascList $^ rt^.rtBuiltins))]
@@ -182,7 +184,7 @@ x86_linux_system name = x86_sys name prog x86_machine_linux
               secName DataSection = ".data"
               secName (RawSection n) = ".raw."+n
           tell $ bytesCode' $ if32 (ser (Linux_X86_ElfN . fromIntegral)) (ser (Linux_X86_64_ElfN . fromIntegral))
-        pstart = 0x40000000 + fromIntegral (if32 (ehSize linux_x86) (ehSize linux_x64))
+        pstart = 0x400000 + fromIntegral (if32 (ehSize linux_x86) (ehSize linux_x64))
 
 x86_defBuiltin :: (?x86 :: X86,?sysHooks :: SystemHooks,MonadASM m s) => String -> ((?sys :: VonNeumannMachine) => m ()) -> Maybe (m (BinAddress,Value))
 x86_defBuiltin name m = Just $ x86_extended $ (,Constant 0) <$> getOrDefine TextSection name m
