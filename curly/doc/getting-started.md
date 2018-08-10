@@ -52,11 +52,11 @@ like the following
           --instance        INSTANCE           Set the instance name for the next targets                                                
           --at              [SERVER]/INSTANCE  Select a server for the next targets                                                      
                                                --- Running Sessions ---                                                                  
-      -i  --interactive     (nothing)          Launche an interactive session                                                            
+      -i  --interactive     (nothing)          Launch an interactive session                                                            
       -e  --execute         COMMAND            Execute an interactive command                                                            
       -r  --run             FILE               Run interactive commands from the given file, or stdin if the file is -                   
                                                --- Hosting Sessions ---                                                                  
-      -s  --serve-instance  (nothing)          Launche an instance server for the current instance.                                      
+      -s  --serve-instance  (nothing)          Launch an instance server for the current instance.                                      
       -l  --list-instances  (nothing)          List all available instances on the selected server (the previous --at target)            
     
     Known systems: host, html, javascript, jsasm, linux-arm, linux-x86, linux-x86-64

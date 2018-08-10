@@ -104,7 +104,7 @@ Did I mention that Curly was very minimal ? That minimalism allows it
 to be ported almost effortlessly to any platform imaginable. As a
 proof-of-concept, the Curly compiler can already generate code for 32-
 and 64-bit x86 Linux systems, as well as runnable pseudo-code in
-JavaScript and/or other C-like languages.
+JavaScript and/or other C-like languages, using a single algorithm.
 
 I am currently working on an ARM backend, a JVM class file generator,
 and a WebAssembly backend, as well as extending the x86 implementation

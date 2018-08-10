@@ -1,12 +1,12 @@
 #!/bin/sh
 curly_version="0.59.4"
-curly_url="http://www.curly-lang.org/pkg/curly-$curly_version.tar.xz"
+curly_url="https://www.curly-lang.org/pkg/curly-$curly_version.tar.xz"
 
 import_stdkeys=
 install_dir=
 bin_dir=
 
-while (($# > 0)); do
+while [ "$#" -gt  0 ]; do
     o="$1"; shift
     optval=
     case "$o" in

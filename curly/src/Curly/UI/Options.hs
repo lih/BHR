@@ -167,11 +167,11 @@ curlyOpts = [
   Option [] ["instance"] (ReqArg (target . SetInstance) "INSTANCE") "Set the instance name for the next targets",
   Option [] ["at"] (ReqArg (target . SetServer . readServer) "[SERVER]/INSTANCE") "Select a server for the next targets",
   sepOpt "Running Sessions",
-  Option ['i'] ["interactive"] (NoArg (target Interactive)) "Launche an interactive session",
+  Option ['i'] ["interactive"] (NoArg (target Interactive)) "Launch an interactive session",
   Option ['e'] ["execute"]     (ReqArg (target . Execute) "COMMAND") "Execute an interactive command",
   Option ['r'] ["run"]    (ReqArg (target . RunFile) "FILE") "Run interactive commands from the given file, or stdin if the file is -",
   sepOpt "Hosting Sessions",
-  Option ['s'] ["serve-instance"] (NoArg (target ServeInstance)) "Launche an instance server for the current instance.",
+  Option ['s'] ["serve-instance"] (NoArg (target ServeInstance)) "Launch an instance server for the current instance.",
   Option ['l'] ["list-instances"] (NoArg (target ListInstances)) "List all available instances on the selected server (the previous --at target)"
   ]
   where tryParse err p s = fromMaybe (error (err s)) (matches Just p s)
@@ -266,7 +266,7 @@ inputSource base = do
           return (Library $ packageID tpl^.thunk)
         lib = like "library" >> sep >> (fileLib <+? map Library readable)
           where fileLib = single '@' >> map LibraryFile (visible "")
-        blts = Library (head builtinLibs^.flID) <$ like "builtins"
+        blts = Library (builtinsLib^.flID) <$ like "builtins"
 
 packageID :: Template -> IO LibraryID
 packageID tpl = do

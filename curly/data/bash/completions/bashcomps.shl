@@ -1,0 +1,384 @@
+#!/bin/bash
+declare -gA BASHCOMPS
+declare -gA COMP_DESCRIPTIONS
+declare -gA INTERPRETER_COMPS
+if [ -z "$INCLUDED_BASHCOMPS" ]; then
+    INCLUDED_BASHCOMPS=true
+    declare -gix CI_PREFIX=0 CI_REST=1 CI_POP=2
+
+    function C.testBashCorrectness() {
+        # Some versions of Bash give incorrect results when splicing arrays
+        # that contain empty strings, so we need to check if we are running
+        # in a compatible environment
+        local -a foo=( '' '' )
+        local -a bar=( "${foo[@]:1}" )
+        (( ${#bar[@]} == 1 ))
+    }
+    if C.testBashCorrectness; then
+        function C.popState() { COMPSTATE=( "$@" "${COMPSTATE[@]:$CI_POP}" ); }
+        function C.adjustWords() { COMP_WORDS=( "${COMP_WORDS[@]:1:$COMP_CWORD}" ); }
+    else
+        function C.popState() {
+            if [ "${COMPSTATE[CI_POP]}" != '' ]; then
+                COMPSTATE=( "$@" "${COMPSTATE[@]:$CI_POP}" )
+            else
+                if (( ${#COMPSTATE[@]} == CI_POP+1 )); then
+                    COMPSTATE=( "$@" "${COMPSTATE[CI_POP]}" )
+                else
+                    COMPSTATE=( "$@" "${COMPSTATE[@]:$CI_POP}" )
+                fi
+            fi
+        }
+        function C.adjustWords() {
+            if (( ${#COMP_WORDS[@]} == 2 )) && [ "${COMP_WORDS[1]}" == '' ]; then
+                COMP_WORDS=( "" )
+            else
+                COMP_WORDS=( "${COMP_WORDS[@]:1:$COMP_CWORD}" )
+            fi
+        }
+    fi
+
+    function C.defcomp() {
+        local comp="$1"
+        shift
+        for cmd; do
+            BASHCOMPS[$cmd]="$comp"
+            complete -o nospace -F C.complete "$cmd"
+        done
+    }
+    function C.defcomp.default {
+	local comp="$1"
+	for cmd; do INTERPRETER_COMPS[.$cmd]="$comp"; done
+    }
+    
+    function C.complete() {
+	COMPREPLY=( )
+        C.adjustWords
+	local -a COMPSTATE=( "" )
+        local COMP_PROGRAM="$1"
+        local i=0 j=1
+        for ((i=0;i<${#COMP_WORDS[@]};i++)); do
+            case "${COMP_WORDS[i]}" in
+                [$COMP_WORDBREAKS]) COMPSTATE[j-1]+="${COMP_WORDS[i]}${COMP_WORDS[i+1]}"; ((i++));;
+                *)                  COMPSTATE[j]="${COMP_WORDS[i]}"; ((j++));;
+            esac
+        done
+	local C_RET=1 prefix=":${COMPSTATE[j-1]}" prefsuf
+        prefix="${prefix%[$COMP_WORDBREAKS]*}"
+        prefix="${prefix:1}"
+        prefsuf="${COMPSTATE[j-1]#$prefix}"
+        eval "${BASHCOMPS[${COMP_PROGRAM##*/}]:-:}" && {
+            IFSBAK="$IFS" IFS=$'\n' COMPREPLY=( $(printf '%s\n' "${COMPREPLY[@]}" | sort -u) ) IFS="$IFSBAK"
+            if [ "${#COMPREPLY[@]}" -gt 1 ]; then
+                local -a heads=( ) tails=( )
+                local head tail hsz=0 tsz=0
+                for comp in "${COMPREPLY[@]}"; do
+                    head="${comp% -- *}" ; tail="${comp##*--}"
+                    if (( ${#head} > hsz )); then hsz=${#head}; fi
+                    if (( ${#tail} > tsz )); then tsz=${#tail}; fi
+                done
+
+                local spaces="$(printf '%150s' '')" newcomp
+                local -a newreply=( )
+                for comp in "${COMPREPLY[@]}"; do
+                    head="${comp% -- *}$spaces" ; tail="${comp##* -- }"
+                    tail="${tail:+ -- ${tail:0:$tsz}$spaces}"
+                    newcomp="${head:0:$hsz}${tail:0:$((tsz+4))}"
+                    newreply+=( "$newcomp" )
+                done
+                COMPREPLY=( "${newreply[@]}" )
+            else
+                COMPREPLY=( "${COMPREPLY[@]% -- *}" )
+            fi
+            if [ -n "$prefix" ]; then
+                COMPREPLY=( "${COMPREPLY[@]#$prefix${prefsuf:0:1}}" )
+            fi
+        }
+    }
+    function C.leaf() { (( ${#COMPSTATE[@]} < 2 )); }
+    function C.argument() {
+	local argtype="$1" arg prefix
+	shift
+        : ${COMP_SUFFIX:= }
+	if C.leaf; then
+	    return 1
+	else
+	    prefix="${COMPSTATE[CI_PREFIX]}"
+	    case "$argtype:${COMPSTATE[CI_REST]}" in
+		word:*)
+		    if [ "$COMP_SUFFIX" != " " ]; then
+			local whole="${COMPSTATE[CI_REST]}"
+			arg="${whole%%${COMP_SUFFIX:0:1}*}"
+			if [ "$whole" = "$arg" ] ; then
+			    C.popState "" 
+			else
+			    COMPSTATE[CI_PREFIX]+="$arg$COMP_SUFFIX"
+			    COMPSTATE[CI_REST]="${whole#$arg${COMP_SUFFIX:0:$((${#whole} - ${#arg}))}}"
+			fi
+		    else
+			arg="${COMPSTATE[CI_REST]}"
+                        C.popState ""
+		    fi
+		    ;;
+                opt:--*=*)
+		    arg="${COMPSTATE[CI_REST]%%=*}"
+                    C.popState "$arg=" "${COMPSTATE[CI_REST]#*=}"
+		    ;;
+		flag:--*|opt:|flag:|opt:-|flag:-|opt:--*)
+		    arg="${COMPSTATE[CI_REST]}"
+                    C.popState "" 
+		    ;;
+		opt:-?*)
+		    arg="${COMPSTATE[CI_REST]:0:2}"
+		    COMPSTATE[CI_PREFIX]="${COMPSTATE[CI_PREFIX]:--}${arg#-}"
+		    COMPSTATE[CI_REST]="${COMPSTATE[CI_REST]:2}"
+		    if [ -n "${COMPSTATE[CI_REST]}" ]; then :; else
+			if (( ${#COMPSTATE[@]} > 2 )); then
+			    C.popState ""
+			fi
+		    fi
+		    ;;
+		flag:-?*)
+		    arg="${COMPSTATE[CI_REST]:0:2}"
+		    COMPSTATE[CI_PREFIX]="${COMPSTATE[CI_PREFIX]:--}${arg#-}"
+		    COMPSTATE[CI_REST]="-${COMPSTATE[CI_REST]:2}"
+                    if [ "${COMPSTATE[CI_REST]}" == - ] && (( ${#COMPSTATE[@]} > 2 )); then
+                        C.popState ""
+                    fi
+		    ;;
+		*) return 1;;
+	    esac
+	    local -a COMPLETIONS=( ) SUGGESTIONS=( )
+	    "$1" "$arg" "${@:2}" && {
+                local -a descriptions
+		case "$argtype" in 
+		    flag|opt)
+                        case "$prefix" in
+                            -[^-]*)
+                                local -a newc=( )
+                                for c in "${COMPLETIONS[@]}"; do
+                                    if [[ "$c" != --* ]]; then newc+=( "$c" ); fi
+                                done
+                                COMPLETIONS=( "${newc[@]}" )
+                                ;;
+                        esac
+                        descriptions=( "${COMPLETIONS[@]##* -- }" )
+                        COMPLETIONS=( "${COMPLETIONS[@]% -- *}" )
+
+			COMPLETIONS=( "${COMPLETIONS[@]/#-/${prefix:--}}" )
+                        if [[ "$COMPLETIONS" == --* ]]; then
+                            if [ "$argtype" == opt ]; then
+                                COMPLETIONS=( "${COMPLETIONS[@]/%/=}" )
+                            else
+                                COMPLETIONS=( "${COMPLETIONS[@]/%/ }" )
+                            fi
+                        fi
+			;;
+		    *)
+                        descriptions=( "${COMPLETIONS[@]##* -- }" )
+                        COMPLETIONS=( "${COMPLETIONS[@]% -- *}" )
+			COMPLETIONS=( "${COMPLETIONS[@]/%/$COMP_SUFFIX}" )
+                        COMPLETIONS=( "${COMPLETIONS[@]/#/$prefix}" )
+			;;
+		esac
+                for ((i=0;i<${#COMPLETIONS[@]};i++)); do
+                    COMPLETIONS[i]+=" -- ${descriptions[i]}"
+                done
+                COMPREPLY+=( "${COMPLETIONS[@]}" )
+	    }
+	fi
+    }
+    
+    function C.suffixed() { local COMP_SUFFIX="$1"; "${@:2}";	}
+    function C.describing() { local COMP_DESCRIPTION="$1"; "${@:2}"; }
+    function C.normal() { local COMP_SUFFIX= COMP_DESCRIPTION=; "$@"; }
+
+    function C.save() {
+	local -a OLD_COMPSTATE
+	OLD_COMPSTATE=( "${COMPSTATE[@]}" )
+	"$@" || {
+	    COMPSTATE=( "${OLD_COMPSTATE[@]}" ) 
+	    return 1
+	}
+    }
+    function C.alt() {
+	local -a OLD_COMPSTATE
+	local ret
+	OLD_COMPSTATE=( "${COMPSTATE[@]}" )
+	"$@"
+	ret="$?"
+	COMPSTATE=( "${OLD_COMPSTATE[@]}" ) 
+	C_RET="$(( C_RET && ret ))"
+	return "$C_RET"
+    }
+    function C.repeat() {
+	C.save "$@" C.repeat "$@" || C.leaf
+    }
+    function C.perhaps() {
+	local n="$1"
+	local cmd=( "${@:2:$n}" )
+	shift "$((n+1))"
+	C.alt C.any "$@"
+	C.alt "${cmd[@]}" "$@"
+    }
+
+    function C.returnRaw() {
+	if C.leaf; then
+	    if (( ${#SUGGESTIONS[@]} == 0 )); then
+		return 1
+            else
+                COMPLETIONS+=( "${SUGGESTIONS[@]}" )
+	    fi
+	elif (( ${#SUGGESTIONS[@]} > 0 )); then
+	    "$@"
+	fi
+    }
+    function C.return() {
+        SUGGESTIONS=( "${SUGGESTIONS[@]/%/ -- $COMP_DESCRIPTION}" )
+        C.returnRaw "$@"
+    }
+    function C.isCapture() {
+        local word="$1" ; shift
+        local var="$1" ; shift
+
+        eval "local $var=\"\$word\""
+        
+        COMPSTATE=( "${OLD_COMPSTATE[@]}" )
+        "$@"
+    }
+    function C.capture() {
+        local type="$1" ; shift
+        local -a OLD_COMPSTATE=( )
+        OLD_COMPSTATE=( "${COMPSTATE[@]}" )
+        C.argument "$type" C.isCapture "$@"
+    }
+    
+    function C.isOneOf() {
+        local word="$1"
+	local rettype="$2"
+        local nelems="$3"
+	shift 3
+        
+	local arg
+	for arg in "${@:1:$nelems}"; do
+	    if [[ "$arg" == "$word"* ]]; then
+		SUGGESTIONS+=( "$arg" )
+	    fi
+	done
+	shift "$nelems"
+	C.return"$rettype" "$@"
+    }
+    function C.wordOf() { C.argument word C.isOneOf "" "$@"; }
+    function C.rawWordOf() { C.argument word C.isOneOf Raw "$@"; }
+    function C.flagOf() { C.argument flag C.isOneOf "" "$@"; }
+    function C.optOf()  { C.argument opt C.isOneOf "" "$@"; }
+
+    function C.isFileIn() {
+        local word="$1" try="$1" ; shift
+        local predSize="$1" ; shift
+        local -a hasType
+        case "$predSize" in
+            -?)      hasType=( test "$predSize" ) ;;
+            [0-9]*)  hasType=( "${@:1:$predSize}" ); shift "$predSize" ;;
+            *)       hasType=( "$predSize" );;
+        esac
+	local dir="$1/" ; shift
+        if C.leaf; then
+            local numb=0
+	    case "$word" in
+                /*) dir="";;
+                ~*) dir=""; word="${word/#~/$HOME}";;
+            esac
+	    
+            while
+                numb="${#SUGGESTIONS[@]}"
+                for f in "$dir$word"*; do
+                    if "${hasType[@]}" "$f" || test -d "$f"; then
+                        SUGGESTIONS+=( "${f#$dir}" )
+		    fi
+	        done
+                [ "${#SUGGESTIONS[@]}" -eq 1 ] && [ -d "$dir$SUGGESTIONS" ] && [ "$numb" -lt "${#SUGGESTIONS[@]}" ]
+            do
+                word="$SUGGESTIONS/"
+                if "${hasType[@]}" "$dir$SUGGESTIONS"; then :; else
+                    SUGGESTIONS=( )
+                fi
+            done
+
+            SUGGESTIONS=( "${SUGGESTIONS[@]/#$HOME/\~}" )
+        else
+            case "$word" in
+                -*) ;;
+                *) SUGGESTIONS=( "${word/#$HOME/\~}" );;
+            esac
+        fi
+
+        C.return "$@"
+    }
+    function C.fileIn() { C.argument word C.isFileIn "$@"; }
+    
+    function C.isHostname() {
+        if C.leaf; then
+	    SUGGESTIONS=( $(compgen -A hostname "$1") )
+	    SUGGESTIONS+=( $(grep "^$1" "/usr/share/bash/bashcomps.d/common-hosts" 2> /dev/null | grep -F "$1" || :) )
+        else
+            SUGGESTIONS=( "$1" )
+        fi
+	shift
+	C.return "$@"
+    }
+    function C.hostname() { C.argument word C.isHostname "$@"; }
+    
+    function C.isAny() { if [ -n "$1" ]; then SUGGESTIONS=( "$1" ); fi; C.return "${@:2}"; }
+    function C.any() { C.argument word C.isAny "$@"; }
+    
+    function C.url() {
+	C.suffixed '://' C.wordOf 5 http https git ftp ssh \
+		   C.suffixed "/" C.hostname \
+		   C.normal C.any "$@"
+    }
+
+    function C.init() {
+        local name fname cmdname comp
+        for comp in /usr/share/bash/completions/*; do
+            if [ -r "$comp" ]; then
+                name="$(realpath "$comp")"
+                name="${name#/usr/share/bash/completions/}"
+                fname="$name"
+                case "$name" in
+                    *.shf) fname="$name"; name="${name%.shf}";;
+		    *.sh)  . "$comp" ; continue;;
+                    *)
+                        cmdname="${comp#/usr/share/bash/completions/}"
+                        fname="$name"
+                        C.defcomp "C.$name" "$cmdname"
+                        ;;
+                esac
+                eval "function C.$name() { source /usr/share/bash/completions/$fname; }"
+            fi
+        done
+
+	function C.default() {
+	    local program="$(which "$1" 2>/dev/null || echo "$1")"
+	    {
+		local interp="$(head -1 "$program")"
+	    } 2>/dev/null # necesary to silence the "null bytes ignored in input" message
+	    local comp="${INTERPRETER_COMPS[.${interp#\#!}]}"
+	    if [ -n "$comp" ]; then
+		local oldcomp="${BASHCOMPS[:]}" ret
+		BASHCOMPS[:]="$comp '${program//\'/\'\\\'\'}'"
+		C.complete :
+		ret="$?"
+		BASHCOMPS[:]="$oldcomp"
+		return "$ret"
+	    elif declare -F _completion_loader &> /dev/null; then
+		# Default to the bash_completion loader if all else fails, and it exists
+		_completion_loader "$@"
+	    fi
+	}
+	complete -D -F C.default -o nospace
+    }
+    C.init
+
+fi
+

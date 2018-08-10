@@ -11,12 +11,11 @@ inside. Here are the available packages for today :
 
   - [Linux (x86, 64-bit)][curly-linux-x86-64]
 
-If you're feeling lucky, and you don't use Windows, you can try to run
-the following command in a terminal, which will perform all the
-necessary steps for you :
+If you're feeling lucky, you can try to run the following command in a
+terminal, which will perform all the necessary steps for you :
 
 ~~~~{.terminal}
-curl -s http://www.curly-lang.org/install-curly.sh | sh -s - --prefix="$HOME/.local" --bin-dir="$HOME/.bin"
+curl -s https://www.curly-lang.org/install-curly.sh | sh -s - --prefix="$HOME/.local" --bin-dir="$HOME/.bin"
 ~~~~~
 
 Compiling from source, for the curious

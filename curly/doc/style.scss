@@ -49,13 +49,12 @@ pre, pre code {
 }
 pre, code {
     font-family: 'Roboto Mono'; font-size: 90%;
-    border-radius: 2px; border: 1px grey outset;
+    /* border-radius: 2px; border: 1px grey outset; */
     padding: 0.1em 0.5em 0.1em 0.5em;
     background: #f5f5f5;
 }
 pre code { border: none; padding: 0; line-height: 130%; }
-.terminal { color: lightgreen; background: #777; }
-.curly { background: white; }
+.terminal { color: #551; }
 
 nav {
     font-size: 90%;
