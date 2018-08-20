@@ -46,13 +46,13 @@ matrix:
     os: osx
 
 before_install:
-- scripts/ci/travis-build.sh before_install
+- . scripts/ci/travis-build.sh before_install
 
 install:
-- scripts/ci/travis-build.sh install
+- . scripts/ci/travis-build.sh install
 
 script:
-- scripts/ci/travis-build.sh script
+- . scripts/ci/travis-build.sh script
 
   # Travis includes an macOS which is incompatible with GHC 7.8.4
   #- env: BUILD=stack ARGS="--resolver lts-2"
