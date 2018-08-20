@@ -6,7 +6,6 @@ bash/completions/curly
 bash/completions/curly.arg.shf
 bash/completions/curly.script.shf
 bash/completions/curly.sh
-bash/completions/cyfile
 bash/completions/defcomp.curly-script.shf
 emacs/curly-conf-mode.el
 emacs/curly-mode.el

@@ -29,7 +29,7 @@ module Algebra.Lens(
 
   -- * Extracting values
   (^.),($^),(^..),(^?),has,(^??),(%~),(%-),(%%~),(%%-),by,yb,warp,set,
-  (-.),(.-),
+  (-.),(.-),interpret,
   
   -- * Basic lenses
   Lens1(..),Lens2(..),Lens3(..),Lens4(..),Lens5(..),Lens6(..),Lens7(..),Lens8(..),Lens9(..),
@@ -165,6 +165,9 @@ warp :: FixFold s t a b -> (s -> t) -> (a -> b)
 warp l = map getId . l . map Id
 set :: FixFold s t a b -> t -> (a -> b)
 set l = warp l . const 
+
+interpret :: Iso' (r -> a) b -> r -> b -> a
+interpret x s v = (v^..x) s
 
 forl :: LensLike f a b c d -> c -> (a -> f b) -> f d
 forl l c f = l f c

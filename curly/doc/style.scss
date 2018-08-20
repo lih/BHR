@@ -18,51 +18,84 @@
   src: local('Roboto-Mono'), url(Roboto-Mono.ttf);
 }
 
-.title { text-align: center; margin-bottom: 2em; }
-body { padding-top: 3em; width: 50%; margin: auto; font-family: 'Titillium Web'; line-height: 180%; }
-p, div, body { font-family: 'Titillium Web'; }
-h1, h2, h3, h4, h5, h6 { font-family: 'Roboto'; margin-top: 1em; }
-a { text-decoration: none; color: grey;  }
-a:hover { text-decoration: underline; }
+.title { text-align: center; margin-top: 0.5em; margin-bottom: 0.5em; }
+body { width: 100%; }
+@media (min-width: 1280px) {
+    body { width: 65%; }
+}
 
-pre { overflow: auto; }
+body { margin: auto; font-family: 'Titillium Web'; line-height: 180%; }
+p, div, body { font-family: 'Titillium Web'; }
+p { text-indent: 0.7em; margin-left: 1em; }
+article { margin-left: 1em; margin-right: 1em; }
+h1, h2, h3, h4, h5, h6 { font-family: 'Roboto'; margin-top: 1em; }
+a { text-decoration: none; color: #3a5;  }
+a:hover { text-decoration: underline; color: #183; }
+.logo {
+    * { margin-top: 0; }
+    #logo-message { margin-left: 1em; }
+    background: #e5f5e5;
+    display: inline-block;
+    // position: relative;
+    width: 12em;
+    height: 100%;
+}
+
+
+pre, pre code {
+    overflow: auto;
+    word-wrap: normal;
+    white-space: pre;
+}
 pre, code {
     font-family: 'Roboto Mono'; font-size: 90%;
-    border-radius: 2px; border: 1px grey outset;
+    /* border-radius: 2px; border: 1px grey outset; */
     padding: 0.1em 0.5em 0.1em 0.5em;
-    background: lightgrey;
+    background: #f5f5f5;
 }
 pre code { border: none; padding: 0; line-height: 130%; }
-.terminal { color: lightgreen; background: black; }
-.curly { background: white; }
+.terminal { color: #551; }
 
 nav {
+    font-size: 90%;
+    font-family: 'Roboto';
     $border-size: 1px;
-    position: absolute;
-    top: 0;
-    
+
+    ul, li { background: #f8fff8; }
+
     ul { padding: 0; margin: 0; }
     li > ul {
+	border-collapse: true;
 	display: none;
 	position: absolute;
 	left: 100%; top: -$border-size;
     }
 
-    li { padding: 0.3em;
-	 display: block;
-	 border: $border-size solid;
+    li { display: block;
+	 border: $border-size solid #aaa;
 	 text-decoration: none;
 	 position: relative;
-	 width: 12em; 
+	 width: 100%; 
 	 background: white; }
     
-    & > ul > li {
-	display: inline-block;
-	text-align: center;
-	& > ul {
-	    left: -1px; top: 100%;
+    & > ul {
+	text-align: right;
+	background: #efe;
+	padding: 2px;
+	& > li {
+	    display: inline-block;
+	    text-align: center;
+	    width: 20%;
+	    & > ul {
+		left: -1px; top: calc(100% + 1px);
+	    }
 	}
     }
+    li:hover > ul { display: block; width: calc(100% + 2px); }
+}
 
-    li:hover > ul { display: block; width: 15em; }
+footer {
+    text-align: center;
+    margin-top: 5em;
+    background: #ded;
 }

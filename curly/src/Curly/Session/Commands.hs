@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo, QuasiQuotes #-}
+{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo, QuasiQuotes, TemplateHaskell #-}
 module Curly.Session.Commands(
   -- * Sessions
   SessionState,wd,this,style,patterns,

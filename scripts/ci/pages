@@ -1,4 +1,5 @@
 #!/bin/bash
+make -C curly/doc || exit
 make doc || exit
 function has_cmd() { which "$1" 2>/dev/null; }
 
@@ -7,7 +8,7 @@ elif has_cmd sassc; then scss=sassc
 elif has_cmd scss; then scss=scss
 fi
 
-mkdir -p public && {
+mkdir -p public/doc && {
     packages=( )
     ispackage=
     while read line; do
@@ -26,7 +27,7 @@ mkdir -p public && {
     done
     stack_path="$(stack path --local-install-root)"
     
-    cp "$stack_path"/doc/ocean.css public
+    cp "$stack_path"/doc/ocean.css public/doc
     {
         cat <<EOF
 <!DOCTYPE html>
@@ -37,8 +38,8 @@ mkdir -p public && {
   <body>
     <div id="package-header">
       <ul class="links">
-        <li><a href="https://gricad-gitlab.univ-grenoble-alpes.fr/coiffiem/curly">Source repository</a></li>
-	<li><a href="doc/index.html">Tutorial</a></li>
+        <li><a href="https://git.curly-lang.org/marc/curly">Source repository</a></li>
+	<li><a href="../index.html">Back to the main page</a></li>
       </ul>
       <div class="caption">Curly packages</div></div>
     <div id="content">
@@ -50,12 +51,12 @@ EOF
             fullpkg=( "$stack_path"/doc/$pkg-[0-9]* )
             fullpkg=( ${fullpkg[@]: -1:1} )
             fullpkg="${fullpkg##*/}"
-            cp -r "$stack_path"/doc/$fullpkg public
-            if [ -e public/$fullpkg/index.html ]; then
+            cp -r "$stack_path"/doc/$fullpkg public/doc
+            if [ -e public/doc/$fullpkg/index.html ]; then
                 printf '<li><a href="%s/index.html">%s</a></li>\n' "$fullpkg" "$pkg"
             fi
         done
-        find public -name src | xargs rm -r
+        find public/doc -name src | xargs rm -r
         cat <<EOF
       </ul>
       <h2>Packages</h2>
@@ -73,7 +74,8 @@ EOF
 	    	cp -r bin/$exe share/*/$exe-*/* "$tmp/$full"
 	    	tar -C "$tmp" -c .
 	    	rm -r "$tmp"
-	    ) | xz > public/pkg/$exe.tar.xz
+	    ) | xz > public/pkg/$full.tar.xz
+	    ln -fs $full.tar.xz public/pkg/$exe.tar.xz
             printf '<li><a href="pkg/%s.tar.xz">%s.tar.xz</a></li>\n' "$exe" "$full"
         done
         cat <<EOF
@@ -82,8 +84,8 @@ EOF
   </body>
 </html>
 EOF
-    } > public/index.html
+    } > public/doc/custom-index.html
 
-    mkdir -p public/doc
-    tar -xvzf curly/doc/bundle.tar.gz -C public/doc
+    mkdir -p public
+    tar -xvzf curly/doc/bundle.tar.gz -C public
 }

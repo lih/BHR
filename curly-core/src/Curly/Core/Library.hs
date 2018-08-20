@@ -1,6 +1,8 @@
 {-# LANGUAGE TypeFamilies, StandaloneDeriving #-}
 module Curly.Core.Library(
   -- * Modules
+  -- ** Chunked data and Future Extensions
+  Chunked(..),Extension,FutureExtensionTail,ExtensionDefault(..),FutureExtension,
   -- ** Nodes 
   ModDir(..),i'ModDir,Module,Mountain,Context,context,localContext,
   atM,atMs,fromPList,
@@ -11,7 +13,7 @@ module Curly.Core.Library(
   GlobalID(..),isLibData,
   Metadata(..),Library,metadata,imports,exports,symbols,implicits,
   addImport,addExport,setExports,defSymbol,libSymbol,
-  exprIn,optExprIn,builtinLibs,
+  exprIn,optExprIn,builtinsLib,
   -- ** Documentation
   LeafExpr,DocNode(..),Documentation,docNodeAttrs,docNodeSubs,descSymbol,docAtom,docLine,mkDoc,
   -- * Files
@@ -37,16 +39,34 @@ import Control.Concurrent.MVar
 curlyLibVersion :: Int
 curlyLibVersion = 11
 
+binaryEOI :: (MonadParser s m p, Monoid s, Eq s) => p ()
+binaryEOI = guard . (==zero) =<< remaining
 newtype Chunked a = Chunked { getChunked :: a }
 instance Serializable a => Serializable (Chunked a) where
   encode (Chunked a) = encode (serialize a)
 instance Format a => Format (Chunked a) where
-  datum = datum <&> \x -> maybe (error "Invalid chunked value") Chunked (matches Just (datum <* (guard . (==zero) =<< remaining)) x)
+  datum = datum <&> \x -> maybe (error "No parse for chunked data") Chunked (matches Just (datum <* binaryEOI) x)
+
+data FutureExtensionTail = FutureExtensionTail
+instance Serializable FutureExtensionTail where
+  encode = zero
+instance Format FutureExtensionTail where
+  datum = runStreamState (put zero) >> return FutureExtensionTail
+type FutureExtension = Extension FutureExtensionTail
+
+class ExtensionDefault t where
+  extensionDefault :: t
+instance ExtensionDefault FutureExtensionTail where extensionDefault = FutureExtensionTail
+instance ExtensionDefault (Maybe a) where extensionDefault = Nothing
+instance (ExtensionDefault a, ExtensionDefault b) => ExtensionDefault (a,b) where
+  extensionDefault = (extensionDefault,extensionDefault)
+instance ExtensionDefault a => ExtensionDefault (Extension a) where
+  extensionDefault = Extension (Chunked extensionDefault)
+
 newtype Extension a = Extension (Chunked a)
                     deriving Serializable
-instance Format a => Format (Extension a) where
-  datum = coerceDatum Extension
-
+instance (ExtensionDefault a,Format a) => Format (Extension a) where
+  datum = datum <&> \x -> maybe (error "No parse for extension") (Extension . Chunked) (matches Just (datum <+? fill extensionDefault binaryEOI) x)
 
 newtype ModDir s a = ModDir [(s,a)]
                       deriving (Semigroup,Monoid,Show)
@@ -110,7 +130,7 @@ data ModLeaf s a = ModLeaf {
   _leafType :: Type s,
   _leafIsFamily :: Bool,
   _leafStrictness :: Strictness s,
-  _leafExtension :: Extension (),
+  _leafExtension :: Extension (Maybe Documentation, FutureExtension),
   _leafVal :: a
   }
                  deriving Generic
@@ -166,7 +186,7 @@ data Library = Library {
   _externalSyms :: Map String GlobalID,
   _implicits :: InstanceMap GlobalID (Maybe LibraryID,LeafExpr GlobalID),
   _exports :: Context,
-  _libExtension :: Extension ()
+  _libExtension :: FutureExtension
   }
 
 metadata :: Lens' Library (Metadata)
@@ -185,7 +205,7 @@ exports = lens _exports (\x y -> x { _exports = y })
 instance Semigroup Library where
   Library syn i s es is e ext + Library _ i' s' es' is' e' _ = Library syn (i+i') (s+s') (es+es') (is+is') (e+e') ext
 instance Monoid Library where
-  zero = Library (Metadata zero) zero zero zero zero zero (Extension (Chunked ()))
+  zero = Library (Metadata zero) zero zero zero zero zero (Extension (Chunked FutureExtensionTail))
 cylMagic :: String
 cylMagic = "#!/lib/cyl!# "
 newtype ParEncode t = ParEncode t
@@ -219,7 +239,7 @@ type LibRep s = (Metadata,Module s
                 ,Map String s
                 ,InstanceMap s (ExprRep s)
                 ,Set LibraryID
-                ,Module s,Extension ())
+                ,Module s,FutureExtension)
 scoped :: Iso' Library (LibRep GlobalID)
 scoped = iso f g
   where f (Library syn i s es is e ext) = (syn,map fst i,map2 toExpr s,es,map2 toExpr (filterInsts is),instDeps,map fst e,ext)
@@ -322,8 +342,8 @@ localContext = context ?mountain
 undefSym :: NameExpr GlobalID
 undefSym = mkSymbol (pureIdent "undefined",Pure (Builtin (builtinType B_Undefined) B_Undefined))
 undefLeaf :: String -> LeafExpr GlobalID
-undefLeaf msg = ModLeaf (nodoc msg) NoRange zero False noStrictness (Extension (Chunked ext)) undefSym
-  where ext = ()
+undefLeaf msg = ModLeaf (nodoc msg) NoRange zero False noStrictness extensionDefault undefSym
+
 undefSymLeaf :: String -> Maybe LibraryID -> LeafExpr GlobalID
 undefSymLeaf s ml = undefLeaf (format "Undocumented symbol %s%s" s (case ml of Just l -> format " in %s" (show l)
                                                                                Nothing -> ""))
@@ -367,10 +387,11 @@ libSymbol :: Library -> GlobalID -> Maybe (LeafExpr GlobalID)
 libSymbol l (GlobalID i Nothing) = l^.symbols.at i
 libSymbol _ (GlobalID _ (Just (i,lid))) = findLib lid >>= \l -> l^.flLibrary.symbols.at i
 
-builtinLibs :: [FileLibrary]
-builtinLibs = map (\l -> rawLibrary False l (serialize l) Nothing)
-              [blib_4,blib_3]
+builtinsLib :: FileLibrary
+builtinsLib = rawLibrary False blib (serialize blib) Nothing
   where
+    blib = blib_5
+    blib_5 = blib_4 & setMeta ["name"] "curly-builtins"
     blib_4 = blib_3 & setMeta ["author","email"] "marc.coiffier@curly-lang.org"
     blib_3 = blib_2 & set (sym ["string"] "showInt".leafDoc) (mkDoc "leafDoc" showIntDoc)
       where showIntDoc = "{section {title Show Number} {p Produces a string representation of its argument}}"
@@ -568,7 +589,7 @@ readCachedLibrary l = do
     return (registerLib $ FileLibrary f b l False Nothing)
 
 registerBuiltinsLib :: ()
-registerBuiltinsLib = by thunk $ void (yb thunk (head builtinLibs))
+registerBuiltinsLib = by thunk $ void (yb thunk builtinsLib)
 
 findLib :: LibraryID -> Maybe FileLibrary
 findLib l = registerBuiltinsLib`seq`by thunk $ do

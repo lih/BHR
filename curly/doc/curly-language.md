@@ -16,7 +16,7 @@ to `{y ...: E[x / X]}`{.curly} where `E[x/X]`{.curly} means "the expression E,
 with all occurrences of x replaced by X".
 
 Here are a few functions to help you get a feel of the language : `{x:
-x}`{.curly}, the identity function; `{x _: x}`{.curly}, the identity function; `{f x
+x}`{.curly}, the identity function; `{x _: x}`{.curly}, the constant function; `{f x
 y: f y x}`{.curly}, a function to flip its first arguments parameters.
 
 Functions and operators
@@ -92,6 +92,11 @@ This directive, as it name implies, defines the symbol NAME to the
 given expression. The first form is syntactic sugar for the second
 form.
 
+Seeing as you may want to categorize the definitions of different
+sorts of objects, the following keywords are also recognized instead
+of `define` : `operator`, `function`, and `let`. Thus, `operator _++ x
+= add x 1` is a perfectly valid Curly definition.
+
 ### Definining types
 
 *Usage:* `type TC : TN VISIBLE_ARG... = TD HIDDEN_ARG... : WITNESS`{.curly}
@@ -128,8 +133,9 @@ define cons a l = List {k x: k a (listImpl l k x)}
 Showable :
 
 ~~~~{.curly}
-type Showable = getShowable a : const a(...) Show(a(...))
-define testShowable = Showable 1
+type Showable = showableImpl a : const a(...) Show(a(...))
+define defShowable = Showable 1
+define useShowable sh = showableImpl sh {x: "Value of x: ${show x}"}
 ~~~~~~
 
 ### Type-indexed families

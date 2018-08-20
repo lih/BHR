@@ -32,5 +32,6 @@ runCmd = withDoc runDoc $ False <$ do
         doRun ex = do
           logLine Verbose $ "Running expression "+pretty (semantic ex :: Expression GlobalID (Symbol GlobalID))
           runIt <- jitExpr (?curlyPlex^.jitContext) ex
-          runIt
+          ret <- runIt
+          logLine Verbose $ "Return value: "+show ret
     

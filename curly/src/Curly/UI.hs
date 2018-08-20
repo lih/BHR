@@ -12,7 +12,7 @@ module Curly.UI(
   withMountain,reloadMountain,sourceFile,
 
   -- * Misc
-  watchSources,sourceLibs,builtinLibs,getVCSBranches,curlyDataFileName,getDataFileName_ref
+  watchSources,sourceLibs,getVCSBranches,curlyDataFileName,getDataFileName_ref
   ) where
 
 import Control.Concurrent.MVar

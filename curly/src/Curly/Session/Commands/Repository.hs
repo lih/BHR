@@ -83,7 +83,7 @@ repositoryCmd = withDoc repositoryDoc $ False <$ do
         getLibrary (pref+".cyl") lid
         ctx <- liftIO $ fromMaybe zero . by (metadata.at "context") <$> readFormat (pref+".cyl")
         let checkoutMod suf (Pure l) = let l' = read l in
-              if l' `elem` map (by flID) builtinLibs
+              if l' == by flID builtinsLib
               then pure [(lid,suf,l',Nothing)]
               else ((lid,suf,l',Just pref):) <$> checkout (pref+foldMap ("/"+) suf) l'
             checkoutMod suf (Join m) = do
