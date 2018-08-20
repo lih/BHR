@@ -12,5 +12,5 @@ for exe; do
 	cp -r bin/$exe share/*/$exe-*/* "$tmp/$full"
 	tar -C "$tmp" -c .
 	rm -r "$tmp"
-    ) | xz > "$exe.tar.xz"
+    ) | xz > "$exe-$TRAVIS_OS_NAME.tar.xz"
 done

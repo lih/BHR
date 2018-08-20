@@ -57,7 +57,7 @@ script:
 deploy:
   provider: releases
   api_key: $GITHUB_API_KEY
-  file: curly.tar.xz
+  file: curly-$TRAVIS_OS_NAME.tar.xz
   skip_cleanup: true
   on:
     tags: true
