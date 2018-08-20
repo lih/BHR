@@ -3,13 +3,15 @@ FONTS := $(wildcard *.woff2) $(wildcard *.ttf)
 
 all: bundle.tar.gz
 
-bundle.tar.gz: bundle/style.css bundle/bootstrap.min.css bundle/bootstrap-theme.min.css $(SOURCES:%.md=bundle/%.html) $(FONTS:%=bundle/%) bundle/install-curly.sh
+bundle.tar.gz: bundle/style.css bundle/bootstrap.min.css bundle/bootstrap-theme.min.css $(SOURCES:%.md=bundle/%.html) $(FONTS:%=bundle/%) bundle/install-curly.sh bundle/favicon.png
 	tar -czf $@ -C bundle $(^:bundle/%=%)
 
 bundle:
 	mkdir -p $@
 
 bundle/%.sh: %.sh | bundle
+	cp -a $< $@
+bundle/%.png: %.png | bundle
 	cp -a $< $@
 bundle/%.woff2: %.woff2 | bundle
 	cp -a $< $@

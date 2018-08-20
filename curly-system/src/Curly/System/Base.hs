@@ -195,6 +195,7 @@ data VonNeumannMachine = VonNeumannMachine {
   }
 data AssemblyMachine = AssemblyMachine {
   _ccall :: CCALL,
+  _cret :: RegID,
   _poolReg :: RegID,
   _wordSize :: Int,
   _pageSize :: Int
@@ -476,6 +477,8 @@ ccall2 ml a v1 v2 = ccall ml a [map toValue v1, map toValue v2]
 ccall3 :: (?sys :: VonNeumannMachine,MonadASM m s,IsLocus l,IsValue v,IsValue v',IsValue v'') => Maybe l -> BinAddress ->
           m v -> m v' -> m v'' -> m ()
 ccall3 ml a v1 v2 v3 = ccall ml a [map toValue v1, map toValue v2, map toValue v3]
+cret :: (?sys :: VonNeumannMachine) => RegID
+cret = _cret assemblyMachine
 
 poolReg :: (?sys :: VonNeumannMachine) => RegID
 poolReg = _poolReg assemblyMachine

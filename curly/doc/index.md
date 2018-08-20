@@ -82,8 +82,8 @@ mount builtins	= builtins
 +command +default - interactive
 
 ?commit Commit the latest version of our libraries to the branches 'hello' and 'stdlib'
-+command +commit % repository commit stdlib -add base -add core -keep {= {$ commit stdlib} true} -keep maximum {$ version} by {$ name}
-+command +commit % repository commit hello -add main -add data -keep {= {$ commit hello} true} -keep maximum {$ version} by {$ name} -drop {unless {$ name} true}
++command +publish % repository commit stdlib -add base -add core -keep {= {$ commit stdlib} true} -keep maximum {$ version} by {$ name}
++command +publish % repository commit hello -add main -add data -keep {= {$ commit hello} true} -keep maximum {$ version} by {$ name} -drop {unless {$ name} true}
 ~~~~~~~~~~~~~~~
 
 Using this configuration file, many common programming tasks are

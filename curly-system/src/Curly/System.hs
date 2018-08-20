@@ -36,8 +36,7 @@ knownSystems = fromAList $ ("host",hostSystem):[(_sysName s,s) | s <- [X86_Linux
 hostSystem :: System
 hostSystem = X86_Linux.system64
 
-mkRunExpr e = mkApply e (mkSymbol (Builtin zero B_Unit))
-
+mkRunExpr e = mkApply e (mkAbstract (pureIdent "x") (mkSymbol (Argument 0)))
 
 specializeStandalone :: System -> LeafExpr GlobalID -> Bytes
 specializeStandalone sys e = let ?sys = sys in
@@ -58,7 +57,7 @@ jd_sections :: Lens' (JITData s) (Map Section [ForeignPtr ()])
 jd_sections = lens _jd_sections (\x y -> x { _jd_sections = y })
 data JITContext s = JITContext (IORef (JITData s))
 
-type RunJITExpr = IO ()
+type RunJITExpr = IO CInt
 runJIT :: JITContext s -> ASMT s Id BinAddress -> IO RunJITExpr
 runJIT (JITContext cxt) asm = let allocSections = [InitSection,TextSection,DataSection] in mdo
   rt <- runAtomic cxt $ do
@@ -71,11 +70,12 @@ runJIT (JITContext cxt) asm = let allocSections = [InitSection,TextSection,DataS
             liftA2 (,) (getCounter <* reserve thunkSize 0) (getCounter <* reserve thunkSize 0)
           start <- inSection TextSection m
           inSection InitSection $ do
-            pushing [destReg,thisReg,tmpReg,poolReg] $ do
+            pushing (select (/=cret) [destReg,thisReg,tmpReg,poolReg]) $ do
               destReg <-- dest
               thisReg <-- this
               poolReg <-- (0 :: Int)
               call start
+              cret <-- destReg!ValueOffset
             ret
     jd_runtime <~ \rt -> let Id ~(_,rt',_) = runASMT rt (withJITRuntime asm)
                          in (rt',rt')
@@ -104,7 +104,7 @@ type Wrapper t = t -> IO (FunPtr t)
 class CCallable f where
   wrapper :: Wrapper f
                                                
-foreign import ccall "dynamic" runIOFunPtr :: FunPtr (IO ()) -> IO ()
+foreign import ccall "dynamic" runIOFunPtr :: FunPtr RunJITExpr -> RunJITExpr
 
 hsAddr :: CCallable a => a -> BinAddress
 hsAddr fun = BA (fromIntegral (ptrToIntPtr (castFunPtrToPtr p)))

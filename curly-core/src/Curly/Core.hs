@@ -26,7 +26,7 @@ import IO.Filesystem ((</>),dropFileName)
 import IO.Network.Socket (PortNumber,connect,getAddrInfo)
 import System.Directory (createDirectoryIfMissing)
 import System.Environment (lookupEnv)
-import System.INotify
+import qualified System.FSNotify as FSNotify
 import System.IO (openFile,IOMode(AppendMode),hSetBuffering,BufferMode(LineBuffering))
 import qualified Data.ByteString.Base64 as Base64
 import Codec.Compression.Zlib (compress,decompress)
@@ -312,11 +312,11 @@ liftIOLog :: MonadIO m => IO () -> m ()
 liftIOLog = liftIO . trylogLevel Quiet unit
 
 -- | A global INotify instance
-inotify :: INotify
-inotify = initINotify^.thunk
+inotify :: FSNotify.WatchManager
+inotify = FSNotify.startManager^.thunk
 -- | Sets a watch on the given file, on the usual signals
-watchFile :: FilePath -> IO () -> IO WatchDescriptor
-watchFile s f = addWatch inotify [Modify,Create,Delete,Move,MoveIn,MoveOut,MoveSelf] s (\_ -> f)
+watchFile :: FilePath -> IO () -> IO (IO ())
+watchFile s f = FSNotify.watchTree inotify s (const True) (\_ -> f)
 
 -- | A utility function that opens a client socket to the given server and port
 connectTo :: String -> PortNumber -> IO Handle

@@ -365,6 +365,7 @@ x86_machine_common = VonNeumannMachine {
   _curlyBuiltin = let ?sys = x86_machine_common in commonBuiltin,
   _assemblyMachine = Just AssemblyMachine {
     _ccall = x86_ccall,
+    _cret = reg R_eax,
     _poolReg = reg R_ebp_ch,
     _wordSize = x86_wordSize,
     _pageSize = 4096
