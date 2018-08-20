@@ -54,7 +54,13 @@ install:
 script:
 - . scripts/ci/travis-build.sh script
 
-  # Travis includes an macOS which is incompatible with GHC 7.8.4
+deploy:
+  provider: releases
+  api_key: $GITHUB_API_KEY
+  file: curly.tar.xz
+  skip_cleanup: true
+
+# Travis includes an macOS which is incompatible with GHC 7.8.4
   #- env: BUILD=stack ARGS="--resolver lts-2"
   #  compiler: ": #stack 7.8.4 osx"
   #  os: osx
