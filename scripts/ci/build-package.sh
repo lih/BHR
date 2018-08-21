@@ -2,7 +2,7 @@
 stack_path="$(stack path --local-install-root)"
 
 for exe; do
-    version="$(sed -n 's/^version:\s*//p' "$exe/$exe.cabal")"
+    version="$(sed -n 's/^version: *//p' "$exe/$exe.cabal")"
     full="$exe-$version"
     shopt -s nullglob
     (
