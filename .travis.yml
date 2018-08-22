@@ -57,6 +57,7 @@ script:
 branches:
   only:
   - master
+  - /^v\d+(\.\d+)*(-\S*)?$/
 
 deploy:
   provider: releases
