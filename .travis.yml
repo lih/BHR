@@ -36,30 +36,30 @@ matrix:
   include:
   # The Stack builds. We can pass in arbitrary Stack arguments via the ARGS
   # variable, such as using --stack-yaml to point to a different file.
-  - env: BUILD=stack ARGS=""
+  - env: BUILD=stack ARGS="" HOST_ARCH=`uname -m`
     compiler: "The Haskell Stack"
     addons: {apt: {packages: [libgmp-dev]}}
 
   # Build on macOS in addition to Linux
-  - env: BUILD=stack ARGS=""
+  - env: BUILD=stack ARGS="" HOST_ARCH=`uname -m`
     compiler: "The Haskell Stack"
     os: osx
 
 before_install:
-- . scripts/ci/travis-build.sh before_install
+- . scripts/ci/inline/before_install
 
 install:
-- . scripts/ci/travis-build.sh install
+- . scripts/ci/inline/install
 
 script:
-- . scripts/ci/travis-build.sh script
+- . scripts/ci/inline/script
 
 deploy:
   provider: releases
   api_key: $GITHUB_API_KEY
   file:
-  - curly-$TRAVIS_OS_NAME.tar.xz
-  - curly-gateway-$TRAVIS_OS_NAME.tar.xz
+  - curly-$TRAVIS_OS_NAME-$HOST_ARCH.tar.xz
+  - curly-gateway-$TRAVIS_OS_NAME-$HOST_ARCH.tar.xz
   skip_cleanup: true
   on:
     tags: true

@@ -1,4 +1,4 @@
-* TODO Release Curly v1.0 [50%]
+* TODO Release Curly v1.0 [88%]
   :PROPERTIES:
   :COOKIE_DATA: todo recursive
   :END:      
@@ -10,10 +10,10 @@
     CLOSED: [2018-01-27 Sat 19:07]
 *** TODO Implement syntactic macros
 
-** TODO Make the library format forward-compatible
+** DONE Make the library format forward-compatible
 *** DONE Include all basic function metadata (value,type,strictness)
     CLOSED: [2018-01-27 Sat 19:05]
-*** TODO Allow for the presence of additional sections in the future
+*** DONE Allow for the presence of additional sections in the future
 
 ** DONE Streamline the UI
 *** DONE Unify the syntaxes for symbol paths between command-line options, configuration files and source files
@@ -31,11 +31,11 @@
 *** DONE Implement continuous builds when the --translate option is specified over long-running sessions
     CLOSED: [2018-01-27 Sat 19:23]
 
-** TODO Write the docs
-*** TODO A tutorial on the basics of the Curly language
-*** TODO A description of the Curly Compiler, with its configuration files
-*** TODO A description of the formatting language used in printing and query functions 
-*** TODO A website to welcome new users to the Curly ecosystem
+** DONE Write the docs
+*** DONE A tutorial on the basics of the Curly language
+*** DONE A description of the Curly Compiler, with its configuration files
+*** DONE A description of the formatting language used in printing and query functions 
+*** DONE A website to welcome new users to the Curly ecosystem
 
 * TODO Start hosting a DHT-based VC on several servers spread out over the world
 
@@ -45,3 +45,4 @@
 
 * Extension: Formally-verified Curly
 ** Proof-annotated variables
+** The Delta combinator, for discrimination of lambda-terms
