@@ -5,7 +5,7 @@ name:                definitive-filesystem
 version:             2.1.1.1
 synopsis:            Filesystem-handling functions that are compatible with the definitive-base library
 -- description:         
-license:             MIT
+license:             GPLv3
 license-file:        LICENSE
 author:              Marc Coiffier
 maintainer:          marc.coiffier@univ-grenoble-alpes.fr

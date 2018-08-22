@@ -89,7 +89,7 @@ script() {
 	    done
 	    ;;
     esac
-    scripts/ci/build-package.sh curly
+    scripts/ci/build-package.sh curly curly-gateway
     set +ex
 }
 

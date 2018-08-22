@@ -5,7 +5,7 @@ name:                curly-system
 version:             0.3.2
 synopsis:            System-specific code generation libraries for the Curly compiler
 -- description:         
-license:             MIT
+license:             GPLv3
 license-file:        LICENSE
 author:              Marc Coiffier
 maintainer:          marc.coiffier@univ-grenoble-alpes.fr

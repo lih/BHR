@@ -26,7 +26,7 @@ description:
     identity- or content-addressed hash tables that are a little more
     resistant to adverse tampering.
 
-license:             BSD3
+license:             GPLv3
 license-file:        LICENSE
 author:              fro_ozen <fro_ozen@gmx.de>
 maintainer:          Marc Coiffier <marc.coiffier@univ-grenoble-alpes.fr>

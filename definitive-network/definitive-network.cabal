@@ -5,7 +5,7 @@ name:                definitive-network
 version:             1.4
 synopsis:            A few utility functions for writing TCP-based client-server applications
 -- description:         
-license:             MIT
+license:             GPLv3
 license-file:        LICENSE
 author:              Marc Coiffier
 maintainer:          marc.coiffier@univ-grenoble-alpes.fr

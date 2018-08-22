@@ -5,7 +5,7 @@ name:                curly-core
 version:             0.7
 synopsis:            The core libraries for the Curly compiler.
 -- description:         
-license:             MIT
+license:             GPLv3
 license-file:        LICENSE
 author:              Marc Coiffier
 maintainer:          marc.coiffier@univ-grenoble-alpes.fr

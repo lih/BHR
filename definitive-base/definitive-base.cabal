@@ -5,7 +5,7 @@ name:                definitive-base
 version:             2.6.2
 synopsis:            A small Prelude wrapper to simplify my own Haskell developments 
 -- description:         
-license:             MIT
+license:             GPLv3
 license-file:        LICENSE
 author:              Marc Coiffier
 maintainer:          marc.coiffier@univ-grenoble-alpes.fr

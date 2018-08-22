@@ -5,7 +5,7 @@ name:                curly-gateway
 version:             0.1.1
 synopsis:            A DHT-backed implementation of the Curly VCS protocol
 -- description:         
-license:             BSD3
+license:             GPLv3
 license-file:        LICENSE
 author:              Marc Coiffier
 maintainer:          marc@coiffier.net
