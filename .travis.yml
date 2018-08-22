@@ -54,6 +54,10 @@ install:
 script:
 - . scripts/ci/inline/script
 
+branches:
+  only:
+  - master
+
 deploy:
   provider: releases
   api_key: $GITHUB_API_KEY
