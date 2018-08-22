@@ -58,8 +58,8 @@ deploy:
   provider: releases
   api_key: $GITHUB_API_KEY
   file:
-  - curly-$TRAVIS_OS_NAME-$HOST_ARCH.tar.xz
-  - curly-gateway-$TRAVIS_OS_NAME-$HOST_ARCH.tar.xz
+  - curly~$TRAVIS_OS_NAME~$HOST_ARCH.tar.xz
+  - curly-gateway~$TRAVIS_OS_NAME~$HOST_ARCH.tar.xz
   skip_cleanup: true
   on:
     tags: true
