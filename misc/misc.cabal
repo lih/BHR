@@ -5,7 +5,7 @@ name:                misc
 version:             0.1.0.0
 -- synopsis:            
 -- description:         
-license:             GPLv3
+license:             GPL-3
 license-file:        LICENSE
 author:              Marc Coiffier
 maintainer:          marc@coiffier.net
@@ -21,5 +21,6 @@ executable misc
   -- other-modules:       
   -- other-extensions:    
   build-depends: base >=4.9 && <4.10,curly-core >=0.7 && <0.8,definitive-base >=2.6 && <2.7
+  ghc-options: -Wincomplete-patterns -Wname-shadowing -Werror
   hs-source-dirs:      exe
   default-language:    Haskell2010

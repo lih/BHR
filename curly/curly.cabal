@@ -5,7 +5,7 @@ name:                curly
 version:             0.59.4
 synopsis:            A minimal cross-compiler for the simply-typed lambda-calculus
 -- description:         
-license:             GPLv3
+license:             GPL-3
 license-file:        LICENSE
 author:              Marc Coiffier
 maintainer:          marc.coiffier@univ-grenoble-alpes.fr
