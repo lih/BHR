@@ -45,5 +45,5 @@ if [ -n "$bin_dir" ]; then
     trace ln -fs "$install_dir/curly-$curly_version/curly" "$bin_dir/curly"
 fi
 if [ -n "$import_stdkeys" ]; then
-    "$bin_dir/curly" %'key import curly-std standard.curly-lang.org' %'key set curly-std follow-branches = stdlib hello'
+    "$bin_dir/curly" %'key import curly-std standard.curly-lang.org'
 fi

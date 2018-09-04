@@ -26,10 +26,16 @@ case "$1" in
 	;;
     domain-key)
 	domain="$2"
-	lookup TXT "$domain" | while read _ _ _ _ val; do
-	    case "$val" in
-		"\"curly-id="*) val="${val#\"curly-id=}"; printf "%s\n" "${val%\"}";;
-	    esac
-	done
+	lookup TXT "$domain" | sort | {
+	    total=""
+	    while read _ _ _ _ val; do
+		case "$val" in
+		    "\"curly-id-"*"="*) val="${val#\"curly-id-*=}"
+					total+="${val%\"}"
+					;;
+		esac
+	    done
+	    printf "%s\n" "$total"
+	}
 	;;
 esac

@@ -147,7 +147,7 @@ repository, by importing its public key (this only needs to be done
 once) :
 
 ~~~~{.terminal}
-curly -e 'key import curly-std standard.curly-lang.org' -e 'key set curly-std follow-branches = stdlib hello'
+curly -e 'key import curly-std standard.curly-lang.org'
 ~~~~~
 
 
