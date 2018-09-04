@@ -40,7 +40,7 @@ data ClientPacket = BannerRequest Bool
                   | CompleteRequest String
                   | EditResponse Bytes
                   | EndOfTransmission
-                  | PubkeyResponse (Maybe PublicKey)
+                  | PubkeyResponse (Maybe KeyInfo)
                   | KeyListResponse [(String,KeyFingerprint,Bool)]
                   deriving Generic
 instance Serializable ClientPacket where
@@ -326,7 +326,7 @@ yesOrNo p = until $ do
 
 
 commonServerRequest clt (EditRequest ext (l,c) b) = writeChan clt . EditResponse =<< localEdit ext (l,c) b
-commonServerRequest clt (PubkeyRequest name) = writeChan clt . PubkeyResponse =<< map (by l'2) . lookup name <$> getKeyStore
+commonServerRequest clt (PubkeyRequest name) = writeChan clt . PubkeyResponse =<< map (\(_,pub,_,meta,_) -> KeyInfo pub meta Nothing) . lookup name <$> getKeyStore
 commonServerRequest _ (CommandOutput out) = liftIOLog (serialWriteHBytes stdout out)
 commonServerRequest _ (CommandLog msg) = logMessage msg
 commonServerRequest _ (KeyGenRequest True str) = do

@@ -9,7 +9,7 @@ import Curly.Core.Parser
 import Language.Format hiding (space)
 import Curly.Session.Commands.Common
 import Curly.UI
-
+  
 keyCmd :: Interactive Command
 
 keyDoc = [q_string|
@@ -29,7 +29,8 @@ keyDoc = [q_string|
     {li {em key import <key-name> (<client-key-name>|#<export>)}: Imports an exported key under the given name}}
 |]
 keyCmd = withDoc keyDoc $ False <$ do
-  x <- expected "key command" (nbhspace >> dirArg)
+  x <- nbhspace >> dirArg
+  
   let setKey name v = do
         ks <- getKeyStore
         guardWarn Sev_Error (format "the key '%s' already exists" name) (not (name`isKeyIn`ks)) 
@@ -81,8 +82,11 @@ keyCmd = withDoc keyDoc $ False <$ do
       name <- expected "key name" (nbhspace >> dirArg)
       ph:pt <- expected "metadata path"  (many1' (nbhspace >> dirArg))
       if ?access >= Almighty
-        then modifyKeyStore $ at name.t'Just.l'4.at ph %~ maybe Nothing (\m -> let m' = delete pt m in
-                                                                          if empty m' then Nothing else Just m')
+        then
+        let purge_empty (Join m) | empty m = Nothing
+                                 | otherwise = Just (Join $ foldr (\k -> warp (at k) (>>=purge_empty)) m (keys m))
+            purge_empty x = Just x
+        in modifyKeyStore $ at name.t'Just.l'4.at ph %~ maybe Nothing (purge_empty . delete pt)
         else serveStrLn "Error: you are not authorized to unset key metadata"
     "meta" -> do
       name <- expected "key name" (nbhspace >> dirArg)
@@ -101,20 +105,22 @@ keyCmd = withDoc keyDoc $ False <$ do
       proof <- option' False (nbhspace >> True<$several "proof")
       v <- lookup name <$> getKeyStore
       case v of
-        Just (_,pub,priv,meta,_) -> serveStrLn (show (Zesty (pub,if proof && ?access >= Almighty then map (,meta) priv else Nothing)))
+        Just (_,pub,priv,meta,_) -> serveStrLn (show (Zesty (KeyInfo pub meta (if proof && ?access >= Almighty then priv else Nothing))))
         Nothing -> serveStrLn ("Error: Unknown key '"+name+"'")
     "import" -> do
+      let first = foldr1 (<+?)
       name <- expected "key name" (nbhspace >> dirArg)
       try (serveStrLn "Error: Invalid key") $ expected "client key name or raw key export" $ do
         nbhspace
-        Zesty (pub,priv) <- (single '#' >> dirArg) >*> readable
-                            <+? Zesty . (,Nothing) <$> do
-                              name' <- dirArg
-                              logLine Verbose $ format "Asking client for key '%s'" name'
-                              (maybe zero return =<< liftIO (clientKey name'))
-                                <+? (maybe zero (\(Zesty p) -> return p) =<< dns_lookup (DomainKey name'))
-                                <+? (warn Sev_Error (format "Error: unknown client key '%s'" name') >> zero)
+        Zesty (KeyInfo pub meta priv) <-
+          first [(single '#' >> dirArg) >*> readable
+                ,Zesty <$> do
+                    name' <- dirArg
+                    logLine Verbose $ format "Asking client for key '%s'" name'
+                    first [maybe zero return =<< liftIO (clientKey name')
+                          ,maybe zero (\(Zesty p) -> return p) =<< dns_lookup (DomainKey name')
+                          ,warn Sev_Error (format "Error: unknown client key '%s'" name') >> zero]]
         let keyType = maybe "claim" (const "proof") priv
         serveStrLn (format "Importing %s '%s'" keyType name)
-        setKey name (fingerprint pub,pub,map fst priv,maybe zero snd priv,zero)
+        setKey name (fingerprint pub,pub,priv,meta,zero)
     _ -> serveStrLn $ format "Error: unknown key command '%s'" x

@@ -22,9 +22,9 @@ import Definitive
 import Language.Format
 import Curly.Core.Documentation
 import Control.DeepSeq
-import IO.Filesystem ((</>),dropFileName)
+import IO.Filesystem ((</>),takeFileName,dropFileName)
 import IO.Network.Socket (PortNumber,connect,getAddrInfo)
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing,doesDirectoryExist)
 import System.Environment (lookupEnv)
 import qualified System.FSNotify as FSNotify
 import System.IO (openFile,IOMode(AppendMode),hSetBuffering,BufferMode(LineBuffering))
@@ -316,7 +316,11 @@ inotify :: FSNotify.WatchManager
 inotify = FSNotify.startManager^.thunk
 -- | Sets a watch on the given file, on the usual signals
 watchFile :: FilePath -> IO () -> IO (IO ())
-watchFile s f = FSNotify.watchTree inotify s (const True) (\_ -> f)
+watchFile s f = do
+  isD <- doesDirectoryExist s
+  if isD then
+    FSNotify.watchTree inotify s (const True) (\_ -> f)
+    else FSNotify.watchTree inotify (dropFileName s) (\p -> takeFileName (FSNotify.eventPath p) == takeFileName s) (\_ -> f)
 
 -- | A utility function that opens a client socket to the given server and port
 connectTo :: String -> PortNumber -> IO Handle

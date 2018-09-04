@@ -568,9 +568,9 @@ availableLibs = do
   conn <- readIORef libraryVCS
   ks <- getKeyStore
   allLibs <- for (ks^.ascList) $ \(kn,(_,k,_,m,_)) -> forkValue $ do
-    case m^.from i'Metadata.at "follow-branches" of
-      Just (Pure bs) -> do
-        let branches = words bs
+    case m^.from i'Metadata.at "branches" of
+      Just (Join bs) -> do
+        let branches = [b | (b,m) <- bs^.ascList, lookup ["follow"] m == Just (Pure "true")]
         for branches $ \b -> forkValue $ do
           mcomm <- getBranch conn (Just (Left (k,b)))
           maybe (return zero) (getCommit conn) mcomm

@@ -5,7 +5,7 @@ module Curly.Session.Commands(
   withSessionState,withStyle,getSession,
 
   -- * Commands
-  KeyOps(..),Interactive,Command,commands,commandNames,
+  KeyInfo(..),KeyOps(..),Interactive,Command,commands,commandNames,
 
   -- * Parsers
   interactiveSession,
@@ -151,7 +151,7 @@ killCmd = withDoc killDoc $ True <$ if ?access >= Admin then liftIOWarn (?quitSe
 interactiveSession :: Interactive (IO () -> OpParser IO ())
 interactiveSession ack = while sessionLine
   where sessionLine = do
-          (ws,ln) <- intercept $ option' Nothing (map Just line)
+          (ws,ln) <- intercept $ option' Nothing (map Just cmdLine)
           case ln of
             Just end -> liftIO ack >> return (not end)
             Nothing -> do
@@ -159,18 +159,22 @@ interactiveSession ack = while sessionLine
               liftIOWarn $ when (any (not . isSpace) err) $ throw (toException $ CurlyParserException Nothing ws)
               liftIOLog ack
               return True
-        line = withMountain $ do
+
+        cmdLine = do
+          s <- remaining
+          cmd <- hspace >> many1' (satisfy (\c -> not (isSpace c || c=='\'')))
+          let onCurlyCmd = runStreamState (put s) >> codeLine
+          maybe onCurlyCmd snd (foldMap snd commands^.at cmd) <* hspace <* (eol+eoi)
+
+        codeLine = withMountain $ do
           (ws,ln) <- listen $ muteOnSuccess $ option' Nothing (Just <$> withSessionLib curlyLine)
           case ln of
             Just _ -> return False
-            Nothing -> guard (empty ws) >> cmdLine
+            Nothing -> guard (empty ws) >> parseCmd
+
         parseCmd = hspace >> do
           (n,e) <- withParsedString (optimized =<< accessorExpr HorizSpaces)
           lookingAt (hspace >> eol)
           withPatterns $ withStyle $ showExprDefault (docTag' "call" [Pure "show-default"]) n e
           return False
-        cmdLine = do
-          s <- remaining
-          cmd <- hspace >> many1' (satisfy (\c -> not (isSpace c || c=='\'')))
-          maybe (runStreamState (put s) >> parseCmd) snd (foldMap snd commands^.at cmd) <* hspace <* (eol+eoi)
 

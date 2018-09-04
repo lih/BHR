@@ -216,11 +216,14 @@ getBranch conn = deepBranch'
           StampedBranches _ bs <-
             liftIO $ case [ts | (_,pub',_,meta,_) <- toList ks
                               , pub==pub'
-                              , Just (Pure ts) <- [meta^.mat "branch-expiry".at [b]]] of
+                              , Just (Pure ts) <- [meta^.mat "branches".at [b,"update-period"],
+                                                   Just (Pure "1s")]] of
               (ts:_) -> do
                 htime <- modTime headFile
                 now <- currentTime
-                if htime >= Since (now - 60*read ts)
+                let Just t = matches Just (liftA2 (*) number (suffixes $ zip "smhdwMy" (scanl (*) 1 [1,60,60,24,7,4,12]))) ts
+                    suffixes l = foldr1 (<+?) [n <$ single c | (c,n) <- l]
+                if htime >= Since (now - t)
                   then readFormat headFile
                   else getRemoteBranches
               _ -> getRemoteBranches

@@ -108,12 +108,18 @@ withPatterns m = getSession patterns >>= \ps -> let ?patterns = ps in m
 getSession :: (?sessionState :: IORef SessionState,MonadIO m) => Lens' SessionState a -> m a
 getSession l = liftIO (readIORef ?sessionState <&> by l)
 
+data KeyInfo = KeyInfo PublicKey Metadata (Maybe PrivateKey)
+instance Serializable KeyInfo where
+  encode (KeyInfo x y z) = encode (x,z,y)
+instance Format KeyInfo where
+  datum = (\x y z -> KeyInfo x z y) <$> datum <*> datum <*> (datum <+? fill (Metadata zero) (remaining >>= guard . (==0) . bytesSize))
+
 data KeyOps = KeyOps {
-  opsGetKey :: String -> IO (Maybe PublicKey),
+  opsGetKey :: String -> IO (Maybe KeyInfo),
   opsKeyGen :: Bool -> String -> IO (),
   opsListKeys :: IO [(String,KeyFingerprint,Bool)]
   }
-clientKey ::(?clientOps :: KeyOps) => String -> IO (Maybe PublicKey)
+clientKey ::(?clientOps :: KeyOps) => String -> IO (Maybe KeyInfo)
 clientKey = opsGetKey ?clientOps
 clientKeyGen ::(?clientOps :: KeyOps) => Bool -> String -> IO ()
 clientKeyGen = opsKeyGen ?clientOps
@@ -144,8 +150,9 @@ absPath :: (?sessionState :: IORef SessionState, MonadParser s m p, ParseStream 
 absPath lim = (single '.' >> symPath lim)
               <+? (liftA2 subPath (getSession wd) (symPath lim))
 
+
 data CurlyDNSQuery = DomainVC (WithResponse (String,PortNumber))
-                   | DomainKey String (WithResponse (Zesty PublicKey))
+                   | DomainKey String (WithResponse (Zesty KeyInfo))
 dns_lookup :: (MonadIO m,Read a) => (WithResponse a -> CurlyDNSQuery) -> m (Maybe a)
 dns_lookup k = liftIO $ do
   p <- curlyDataFileName "dns-lookup.sh"

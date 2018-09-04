@@ -139,6 +139,7 @@ data Signed a = Signed a Signature
               deriving (Eq,Ord,Show,Generic)
 instance Serializable a => Serializable (Signed a)
 instance Format a => Format (Signed a)
+
 unsafeExtractSigned :: Signed a -> a
 unsafeExtractSigned (Signed a _) = a
 extractSignedBy :: Serializable a => PublicKey -> Signed a -> Maybe a
@@ -146,6 +147,9 @@ extractSignedBy pub (Signed a s) | isValidSignatureFrom pub s (serialize a) = Ju
                                  | otherwise = Nothing
 signValue :: (MonadIO m,Serializable a) => PrivateKey -> a -> m (Signed a)
 signValue priv a = Signed a <$> signBytes priv (serialize a)
+
+signedDatum :: Format a => PublicKey -> Parser Bytes (Signed a)
+signedDatum pub = datum >>= maybe zero return . extractSignedBy pub
 
 timingRef :: IORef Seconds
 timingRef = thunk $^ newIORef 0
@@ -216,7 +220,7 @@ modifyKeyStore m = liftIO $ while $ trylog (threadDelay 1000 >> return True) $ F
     -- This little trick keeps GHC from prematurely closing the handle
     -- when the parser reaches the end of the byte stream
     sz <- between (hSeek h SeekFromEnd 0) (hSeek h AbsoluteSeek 0) (hTell h)
-    oldFile <- take (fromIntegral sz) <$> readHBytes h
+    oldFile <- readHNBytes h (fromIntegral sz)
     let ks = fromMaybe zero (matches Just datum oldFile)
         ks' = m ks
         newFile = serialize ks'

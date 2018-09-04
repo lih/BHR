@@ -3,8 +3,8 @@ module Algebra.Core(
   -- * Raw data
   Handle,stdin,stdout,stderr,
   Packed(..),
-  Chunk,chunkSize,readChunk,writeChunk,readHChunk,writeHChunk,
-  Bytes,bytesSize,readBytes,writeBytes,readHBytes,writeHBytes,
+  Chunk,chunkSize,readChunk,writeChunk,readHChunk,readHNChunk,writeHChunk,
+  Bytes,bytesSize,readBytes,writeBytes,readHBytes,readHNBytes,writeHBytes,
   readString,writeString,readHString,writeHString,
   appendString,
   
@@ -150,8 +150,12 @@ writeString :: String -> String -> IO ()
 writeString = P.writeFile
 readHBytes :: Handle -> IO Bytes
 readHBytes = BSL.hGetContents
+readHNBytes :: Handle -> Int -> IO Bytes
+readHNBytes = BSL.hGet
 readHChunk :: Handle -> IO Chunk
 readHChunk = BSS.hGetContents
+readHNChunk :: Handle -> Int -> IO Chunk
+readHNChunk = BSS.hGet
 readHString :: Handle -> IO String
 readHString = hGetContents
 writeHBytes :: Handle -> Bytes -> IO ()
