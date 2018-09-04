@@ -1,5 +1,5 @@
 #!/bin/sh
-curly_version="0.59.4"
+curly_version="0.59.4.1"
 curly_url="https://www.curly-lang.org/pkg/curly-$curly_version.tar.xz"
 
 import_stdkeys=

@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                curly-core
-version:             0.7
+version:             0.7.1
 synopsis:            The core libraries for the Curly compiler.
 -- description:         
 license:             GPL-3

@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                curly
-version:             0.59.4
+version:             0.59.4.1
 synopsis:            A minimal cross-compiler for the simply-typed lambda-calculus
 -- description:         
 license:             GPL-3
