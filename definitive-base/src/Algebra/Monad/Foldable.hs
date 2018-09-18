@@ -45,21 +45,21 @@ instance Monad m => MonadError Void (ListT m) where
                                    l -> pure l)
 
 newtype TreeT m a = TreeT (Compose' Tree m a)
-                  deriving (Functor,Unit,SemiApplicative,Applicative,MonadFix,Foldable,MonadTrans)
+                  deriving (Functor,Unit,SemiApplicative,Applicative,MonadFix,Foldable,MonadTrans,MonadReader r,MonadWriter w,MonadState s)
 instance Monad m => Monad (TreeT m) where join = coerceJoin TreeT
 instance Traversable m => Traversable (TreeT m) where sequence = coerceSequence TreeT
 treeT :: Iso (TreeT m a) (TreeT n b) (m (Tree a)) (n (Tree b))
 treeT = i'Compose'.iso TreeT (\(TreeT t) -> t)
 
 newtype MaybeT m a = MaybeT (Compose' Maybe m a)
-                  deriving (Functor,SemiApplicative,Unit,Applicative,MonadFix,Foldable,MonadTrans)
+                  deriving (Semigroup,Monoid,Functor,SemiApplicative,Unit,Applicative,MonadFix,Foldable,MonadTrans,MonadReader r,MonadState s,MonadWriter w)
 instance Monad m => Monad (MaybeT m) where join = coerceJoin MaybeT
 instance Traversable m => Traversable (MaybeT m) where sequence = coerceSequence MaybeT
 maybeT :: Iso (MaybeT m a) (MaybeT m' b) (m (Maybe a)) (m' (Maybe b))
 maybeT = i'Compose'.iso MaybeT (\(MaybeT m) -> m)
 
 newtype StrictT m a = StrictT (Compose' Strict m a)
-                    deriving (Functor,SemiApplicative,Unit,Applicative,MonadFix,Foldable,MonadTrans)
+                    deriving (Functor,SemiApplicative,Unit,Applicative,MonadFix,Foldable,MonadTrans,MonadReader r,MonadWriter w,MonadState s)
 instance Monad m => Monad (StrictT m) where join = coerceJoin StrictT
 instance Traversable m => Traversable (StrictT m) where sequence = coerceSequence StrictT
 strictT :: Iso (StrictT m a) (StrictT m' b) (m (Strict a)) (m' (Strict b))

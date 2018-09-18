@@ -58,6 +58,8 @@ class StateRes t s a | t -> s a where
 instance StateRes (s,a) s a where evalS = snd ; execS = fst
 instance (StateRes r a b) => StateRes (Id r) a b where evalS = evalS . getId ; execS = execS . getId
 instance (StateRes r a b) => StateRes (s -> r) (s -> a) (s -> b) where evalS = map evalS ; execS = map execS
+instance Functor m => StateRes (StateT s m a) (s -> m s) (s -> m a) where
+  execS x = map2 execS (x^..stateT) ; evalS x = map2 evalS (x^..stateT)
 
 state :: Iso (State s a) (State t b) (s -> (s,a)) (t -> (t,b))
 state = mapping i'Id.stateT

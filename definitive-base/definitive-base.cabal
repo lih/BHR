@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                definitive-base
-version:             2.6.2
+version:             2.6.3
 synopsis:            A small Prelude wrapper to simplify my own Haskell developments 
 -- description:         
 license:             GPL-3
