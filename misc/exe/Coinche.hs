@@ -78,7 +78,7 @@ deck = [Carte h c | h <- [H7 .. HAs], c <- [Coeur .. Trefle]]
 main = do
   str <- words <$> getContents
   execS (foldr (\sym mr -> do
-                   execSymbol runBuiltin sym
+                   execSymbol runBuiltin (\_ -> return ()) sym
                    hasQuit <- runExtraState (getl halt)
                    unless hasQuit mr
                ) unit str^..concatT) (defaultState (fromAList [(x,StackBuiltin b)

@@ -23,12 +23,12 @@ library
   hs-source-dirs: src
   default-language: Haskell2010
                      
-executable misc
-  main-is:             Misc.hs
+executable capricon
+  main-is:             CaPriCon.hs
   default-extensions:  RebindableSyntax
   -- other-modules:       
   -- other-extensions:    
-  build-depends: base >=4.9 && <4.10,curly-core >=0.7 && <0.8,definitive-base >=2.6 && <2.7, definitive-parser, misc
+  build-depends: base >=4.9 && <4.10,curly-core >=0.7 && <0.8,definitive-base >=2.6 && <2.7, definitive-parser, misc, hreadline, directory, filepath
   ghc-options: -Wincomplete-patterns -Wname-shadowing -Werror
   hs-source-dirs:      exe
   default-language:    Haskell2010
