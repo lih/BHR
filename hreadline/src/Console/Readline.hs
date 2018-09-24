@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, PatternSynonyms #-}
-module Curly.Readline (readline,addHistory,setCompletionEntryFunction) where
+module Console.Readline (readline,addHistory,setCompletionEntryFunction) where
 
 import Definitive
 import Language.Parser

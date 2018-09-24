@@ -40,6 +40,7 @@ packages:
 - definitive-parser
 - definitive-network
 - definitive-filesystem
+- hreadline
 - curly-kademlia
 - curly-core
 - curly-system
