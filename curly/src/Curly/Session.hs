@@ -22,7 +22,7 @@ import Data.IORef
 import GHC.IO.Handle (hSetBuffering,hClose,BufferMode(..))
 import IO.Filesystem
 import Language.Format
-import Curly.Readline (readline,addHistory,setCompletionEntryFunction)
+import Console.Readline (readline,addHistory,setCompletionEntryFunction)
 import System.Directory (removeFile)
 import System.Environment
 import System.Exit (exitSuccess)
