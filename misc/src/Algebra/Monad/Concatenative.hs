@@ -57,6 +57,7 @@ instance StackSymbol String where
   atomClass "{" = OpenBrace
   atomClass "}" = CloseBrace
   atomClass ('\'':t) = Quoted t
+  atomClass ('"':t) = Quoted (init t)
   atomClass (':':t) = Comment t
   atomClass x = maybe (Other x) Number (matches Just readable x)
 

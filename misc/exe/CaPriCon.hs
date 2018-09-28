@@ -4,13 +4,14 @@ module Main where
 import Definitive
 import Language.Parser
 import Algebra.Monad.Concatenative
-import System.IO (hSetBuffering,hGetBuffering,hIsTerminalDevice,BufferMode(..))
+import System.IO (openFile,hSetBuffering,hGetBuffering,hIsTerminalDevice,BufferMode(..),IOMode(..),hClose)
 import System.Environment (getArgs)
 import Console.Readline (readline,addHistory,setCompletionEntryFunction)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Data.IORef
 import System.Directory (getXdgDirectory, XdgDirectory(..))
 import System.FilePath ((</>))
+import Data.List (sortBy)
 
 data BindType = Lambda | Prod
               deriving (Show,Eq,Ord)
@@ -213,9 +214,14 @@ substn val n | n>=0 = go n
 par lvl d msg | d>lvl = "("+msg+")"
               | otherwise = msg
 fresh env v = head $ select (not . (`elem` env)) (v:[v+show i | i <- [0..]])
-showNode :: [(String,Node)] -> Node -> String
-showNode = go 0
-  where go _ _ (Universe u) = "Set"+show u
+
+showNode = showNode' zero
+showNode' :: NodeDir String -> [(String,Node)] -> Node -> String
+showNode' dir = go 0
+  where go d env x | (pats,k):_ <- findPattern dir x = par (if empty pats then 1000 else 1) d $ intercalate " " $ (k:) $ [
+                       go 2 (env'+env) hole
+                       | (env',_,hole) <- sortBy (comparing (by l'2)) pats]
+        go _ _ (Universe u) = "Set"+show u
         go d env whole@(Bind t aname atype body) | t == Lambda || 0`isKeyIn`free_vars body = par 0 d $ bind_head t + drop 1 (bind_tail env whole)
                                                  | otherwise = par 0 d $ go 1 env atype + " -> " + go 0 ((aname,atype):env) body
           where bind_head Lambda = "λ"
@@ -304,14 +310,14 @@ mu_type root_type = yb maybeT $ go 0 root_type
 
 takeLast n l = drop (length l-n) l
 
-printStackVal ctx _x = putStrLn $ case _x of
+printStackVal o dir ctx _x = writeHString o . (+"\n") $ case _x of
   StackExtra (Opaque _x) -> case _x of
     COCExpr d e -> -- "<"+show d+">:"+
-      showNode (takeLast d ctx) e
+      showNode' dir (takeLast d ctx) e
     COCNull -> "(null)"
     COCDir d -> show d
   _ -> show _x
-data COCBuiltin = COCB_ShowStack | COCB_Show | COCB_Echo | COCB_Open | COCB_ExecModule
+data COCBuiltin = COCB_ShowStack | COCB_Show | COCB_Print | COCB_Open | COCB_ExecModule
                 | COCB_ToInt | COCB_Concat | COCB_Uni | COCB_Hyp
                 | COCB_ShowContext | COCB_Quit | COCB_Var
                 | COCB_Ap | COCB_Bind Bool BindType
@@ -319,12 +325,14 @@ data COCBuiltin = COCB_ShowStack | COCB_Show | COCB_Echo | COCB_Open | COCB_Exec
                 | COCB_HypBefore | COCB_Subst | COCB_Rename
                 | COCB_ContextVars
                 | COCB_GetShowDir | COCB_SetShowDir | COCB_InsertNodeDir
+                | COCB_Format
                 deriving Show
 
 data COCState = COCState {
   _endState :: Bool,
   _context :: [(String,Node)],
-  _showDir :: NodeDir String
+  _showDir :: NodeDir String,
+  _outputHandle :: Handle
   }
 endState :: Lens' COCState Bool
 endState = lens _endState (\x y -> x { _endState = y })
@@ -332,27 +340,56 @@ context :: Lens' COCState [(String,Node)]
 context = lens _context (\x y -> x { _context = y })
 showDir :: Lens' COCState (NodeDir String)
 showDir = lens _showDir (\x y -> x { _showDir = y })
+outputHandle :: Lens' COCState Handle
+outputHandle = lens _outputHandle (\x y -> x { _outputHandle = y })
+
+stringWords = fromBlank
+  where fromBlank (c:t) | c `elem` " \n\t\r" = fromBlank t
+                        | c == '"' = fromQuote id t
+                        | otherwise = fromWChar (c:) t
+        fromBlank "" = []
+        fromQuote k ('"':t) = ('"':k "\""):fromBlank t
+        fromQuote k ('\\':c:t) = fromQuote (k.(qChar c:)) t
+          where qChar 'n' = '\n' ; qChar 't' = '\t' ; qChar x = x
+        fromQuote k (c:t) = fromQuote (k.(c:)) t
+        fromQuote k "" = ['"':k "\""]
+        fromWChar k (c:t) | c `elem` " \n\t\r" = k "":fromBlank t
+                          | otherwise = fromWChar (k.(c:)) t
+        fromWChar k "" = [k ""]
 
 runCOCBuiltin COCB_Quit = runExtraState (endState =- True)
 runCOCBuiltin COCB_ShowStack = do
   s <- runStackState get
-  ctx <- runExtraState (getl context)
-  lift $ for_ (reverse s) $ printStackVal ctx
+  ex <- runExtraState get
+  lift $ for_ (reverse s) $ printStackVal (ex^.outputHandle) (ex^.showDir) (ex^.context)
 runCOCBuiltin COCB_ShowContext = do
-  ctx <- runExtraState (getl context)
+  ex <- runExtraState get
   lift $ snd $ foldr (\(name,typ) (ctx',pr) -> ((name,typ):ctx',do
                                                    pr
-                                                   putStrLn $ name+" : "+showNode ctx' typ
-                                                   )) ([],unit) ctx
+                                                   putStrLn $ name+" : "+showNode' (ex^.showDir) ctx' typ
+                                                   )) ([],unit) (ex^.context)
 runCOCBuiltin COCB_Show = do
   s <- runStackState get
-  ctx <- runExtraState (getl context)
-  lift $ for_ (take 1 s) $ printStackVal ctx
-runCOCBuiltin COCB_Echo = do
+  ex <- runExtraState get
+  lift $ for_ (take 1 s) $ printStackVal (ex^.outputHandle) (ex^.showDir) (ex^.context)
+runCOCBuiltin COCB_Print = do
   s <- runStackState get
+  o <- runExtraState (getl outputHandle)
   lift $ for_ (take 1 s) $ \case
-    StackSymbol s' -> putStrLn s'
+    StackSymbol s' -> writeHString o s'
     _ -> return ()
+
+runCOCBuiltin COCB_Format = do
+  ex <- runExtraState get
+  let format ('%':s) (StackSymbol h:t) = first (h+) (format s t)
+      format ('%':s) (StackInt h:t) = first (show h+) (format s t)
+      format ('%':s) (StackExtra (Opaque (COCExpr d h)):t) = first (showNode' (ex^.showDir) (takeLast d (ex^.context)) h+) (format s t)
+      format ('%':s) x = first ("(obj)"+) (format s (drop 1 x))
+      format (c:s) t = first (c:) (format s t)
+      format "" t = ("",t)
+  runStackState $ modify $ \case
+    StackSymbol s:t -> uncurry ((:) . StackSymbol) (format s t)
+    st -> st
 
 runCOCBuiltin COCB_Open = do
   s <- runStackState get
@@ -363,13 +400,15 @@ runCOCBuiltin COCB_Open = do
     _ -> return ()
   where literate = intercalate [":\n"] <$> sepBy' (cmdline (single '>') <+? cmdline (several "    ")
                                                             <+? commentline) (single '\n')
-        cmdline pre = map (\x -> (":<label><input type=\"checkbox\" class=\"capricon-hide\"/><span class=\"capricon-hidetext\"></span><pre class=\"capricon\">\n"+intercalate "\n" (map fst x)+"\n</pre></label>\n")
-                                 : ":<div class=\"capricon-result\">" : foldMap snd x + [":</div>"]) (sepBy1' go (single '\n'))
-          where go = do pre; many' (noneOf "\n") <&> \x -> (x,words x)
-        commentline = map (foldMap (pure . (':':) <|> \(x,t) -> t+[':':("<label><input type=\"checkbox\" class=\"capricon-hide\" checked=\"checked\"/><span class=\"capricon-hidetext\"></span>`"+x+"`{.capricon}</label>")])) $ (<* lookingAt eol)
-          $ many' (map Left (many1' (noneOf "$\n"))
-                    <+? map Right (between (several "$(") (single ')')
-                                    (many1' (noneOf ")") <&> \x -> (x,words x))))
+        wrapLabel hide x = "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\" checked=\"checked\"/><span class=\"capricon-"+hide+"\"></span><span class=\"capricon-reveal\">"+x+"</span></label>"
+        wrapResult x l = (":<div class=\"capricon-"+x+"result\">") : l + [":</div>"]
+        cmdline pre = map (\x -> (":"+wrapLabel "hideparagraph" ("<pre class=\"capricon capricon-paragraph\">\n"+intercalate "\n" (map fst x)+"\n</pre>"))
+                                 : wrapResult "paragraph" (foldMap snd x)) (sepBy1' go (single '\n'))
+          where go = do pre; many' (noneOf "\n") <&> \x -> (x,stringWords x)
+        commentline = map (foldMap (pure . (':':) <|> \(x,t) -> t+[':':(wrapLabel "hidestache" $ "<pre class=\"capricon\">"+x+"</pre>")])) $ (<* lookingAt eol)
+          $ many' (map Left (many1' (noneOf "{\n" <+? (fill '{' $ single '{' <* lookingAt (noneOf "{"))))
+                    <+? map Right (between (several "{{") (several "}}")
+                                    (many1' (noneOf "}" <+? fill '}' (single '{' <* lookingAt (noneOf "}"))) <&> \x -> (x,wrapResult "" (stringWords x)))))
                       
                       
 runCOCBuiltin COCB_ToInt = runStackState $ modify $ \case
@@ -403,15 +442,19 @@ runCOCBuiltin COCB_Ap = do
 runCOCBuiltin (COCB_Bind close bt) = do
   ctx <- runExtraState (getl context) 
   let d = length ctx
-      setStack (StackExtra (Opaque (COCExpr d' e')):t)
+      setVal (StackExtra (Opaque (COCExpr d' e')))
         | i <- d-d'
         , d==d' || not close
         , (ctxh,(x,tx):ctxt) <- splitAt i ctx
-        = StackExtra (Opaque (COCExpr (d'-1) (Bind bt x tx e'))):if close then setStack t else t
-      setStack (x:t) = x:if close then setStack t else t
+        = StackExtra (Opaque (COCExpr (d'-1) (Bind bt x tx e')))
+      setVal (StackDict dict) = StackDict (map setVal dict)
+      setVal (StackList l) = StackList (map setVal l)
+      setVal x = x
+      setStack (x:t) = setVal x:if close then setStack t else t
       setStack [] = []
                                                          
   ctx' <- runStackState $ id <~ map (,if close && nonempty ctx then tail ctx else ctx) setStack
+  runDictState $ modify $ map setVal
   runExtraState (context =- ctx')
 runCOCBuiltin COCB_Mu = do
   ctx <- runExtraState (getl context)
@@ -439,10 +482,14 @@ runCOCBuiltin COCB_TypeOf = do
 runCOCBuiltin COCB_ExecModule = do
   st <- runStackState get
   case st of
-    StackProg p:t -> do
+    StackSymbol f:StackProg p:t -> do
       old <- runDictState get
+      o <- lift $ openFile f WriteMode
+      oldH <- runExtraState (outputHandle <~ \x -> (o,x))
       traverse_ (execSymbol runCOCBuiltin runComment) p
       new <- runDictState (id <~ (old,))
+      runExtraState (outputHandle =- oldH)
+      lift $ hClose o
       runStackState $ put $ StackDict new:t
     _ -> return ()
 
@@ -519,18 +566,19 @@ runCOCBuiltin COCB_InsertNodeDir = do
 
 data COCValue = COCExpr Int Node | COCNull | COCDir (NodeDir (StackVal String COCBuiltin COCValue))
 
-cocDict = mkDict ((".",StackProg []):
+cocDict = mkDict ((".",StackProg []):("version",StackSymbol "0.6"):
                    [(x,StackBuiltin b) | (x,b) <- [
                        ("io/quit"                 , Builtin_Extra COCB_Quit               ),
                        ("io/show"                 , Builtin_Extra COCB_Show               ),
-                       ("io/echo"                 , Builtin_Extra COCB_Echo               ),
+                       ("io/print"                , Builtin_Extra COCB_Print              ),
                        ("io/stack"                , Builtin_Extra COCB_ShowStack          ),
                        ("io/context"              , Builtin_Extra COCB_ShowContext        ),
                        ("io/open"                 , Builtin_Extra COCB_Open               ),
+                       ("io/format"               , Builtin_Extra COCB_Format             ),
                        
                        ("def"                     , Builtin_Def                           ),
                        ("$"                       , Builtin_DeRef                         ),
-
+                       
                        ("arith/++"                , Builtin_Extra COCB_Concat             ),
                        ("arith/+"                 , Builtin_Add                           ),
                        ("arith/-"                 , Builtin_Sub                           ),
@@ -539,7 +587,6 @@ cocDict = mkDict ((".",StackProg []):
                        ("arith/mod"               , Builtin_Mod                           ),
                        ("arith/sign"              , Builtin_Sign                          ),
                        
-
                        ("exec"                    , Builtin_Exec                          ),
                        ("to-int"                  , Builtin_Extra COCB_ToInt              ),
                        ("clear"                   , Builtin_Clear                         ),
@@ -592,7 +639,9 @@ cocDict = mkDict ((".",StackProg []):
         atP (h,[]) = at h
         atP (h,x:t) = at h.l'Just (StackDict zero).t'StackDict.atP (x,t)
 
-runComment c = lift $ putStr c
+runComment c = do
+  o <- runExtraState (getl outputHandle)
+  lift $ writeHString o c
 
 main = do
   isTerm <- hIsTerminalDevice stdin
@@ -610,7 +659,7 @@ main = do
       "?":_ -> return sl
       wp:_ -> let wps = length wp-1; wp' = init wp in return [w | w <- sl, take wps w==wp']
       _ -> return []
-  str <- words <$> if isTerm then getAll else readHString stdin
+  str <- stringWords <$> if isTerm then getAll else readHString stdin
   args <- (foldMap (\x -> [libdir</>x,x]) <$> getArgs) >>= map (words . fold) . traverse (try (return []) . readString)
   execS (foldr (\sym mr -> do
                    execSymbol runCOCBuiltin runComment sym
@@ -618,4 +667,4 @@ main = do
                    d <- runDictState get
                    lift (writeIORef symList (keys d))
                    unless hasQuit mr
-               ) unit (args+str)^..concatT) (defaultState cocDict (COCState False [] zero))
+               ) unit (args+str)^..concatT) (defaultState cocDict (COCState False [] zero stdout))
