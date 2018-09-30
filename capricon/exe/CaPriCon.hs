@@ -343,6 +343,11 @@ showDir = lens _showDir (\x y -> x { _showDir = y })
 outputHandle :: Lens' COCState Handle
 outputHandle = lens _outputHandle (\x y -> x { _outputHandle = y })
 
+htmlQuote = foldMap qChar
+  where qChar '<' = "&lt;"
+        qChar '>' = "&gt;"
+        qChar '&' = "&amp;"
+        qChar c = [c]
 stringWords = fromBlank
   where fromBlank (c:t) | c `elem` " \n\t\r" = fromBlank t
                         | c == '"' = fromQuote id t
@@ -398,17 +403,18 @@ runCOCBuiltin COCB_Open = do
       xs <- lift (try (return []) (try (readString f) (readString (f+".md")) >>= maybe undefined return . matches Just literate))
       runStackState (put (StackProg xs:t))
     _ -> return ()
-  where literate = intercalate [":\n"] <$> sepBy' (cmdline (single '>') <+? cmdline (several "    ")
+  where literate = intercalate [":\n"] <$> sepBy' (cmdline (several "> ") <+? cmdline (several "$> ")
                                                             <+? commentline) (single '\n')
         wrapLabel hide x = "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\" checked=\"checked\"/><span class=\"capricon-"+hide+"\"></span><span class=\"capricon-reveal\">"+x+"</span></label>"
-        wrapResult x l = (":<div class=\"capricon-"+x+"result\">") : l + [":</div>"]
-        cmdline pre = map (\x -> (":"+wrapLabel "hideparagraph" ("<pre class=\"capricon capricon-paragraph\">\n"+intercalate "\n" (map fst x)+"\n</pre>"))
-                                 : wrapResult "paragraph" (foldMap snd x)) (sepBy1' go (single '\n'))
+        wrapResult tag x l = (":<"+tag+" class=\"capricon-"+x+"result\">") : l + [":</"+tag+">"]
+        
+        cmdline pre = map (\x -> (":"+wrapLabel "hideparagraph" ("<pre class=\"capricon capricon-paragraph\">"+htmlQuote (intercalate "\n" (map fst x))+"</pre>"))
+                                 : wrapResult "div" "paragraph" (foldMap snd x)) (sepBy1' go (single '\n'))
           where go = do pre; many' (noneOf "\n") <&> \x -> (x,stringWords x)
-        commentline = map (foldMap (pure . (':':) <|> \(x,t) -> t+[':':(wrapLabel "hidestache" $ "<pre class=\"capricon\">"+x+"</pre>")])) $ (<* lookingAt eol)
+        commentline = map (foldMap (pure . (':':) <|> \(x,t) -> t+[':':(wrapLabel "hidestache" $ "<code class=\"capricon\">"+htmlQuote x+"</code>")])) $ (<* lookingAt eol)
           $ many' (map Left (many1' (noneOf "{\n" <+? (fill '{' $ single '{' <* lookingAt (noneOf "{"))))
                     <+? map Right (between (several "{{") (several "}}")
-                                    (many1' (noneOf "}" <+? fill '}' (single '{' <* lookingAt (noneOf "}"))) <&> \x -> (x,wrapResult "" (stringWords x)))))
+                                    (many1' (noneOf "}" <+? fill '}' (single '{' <* lookingAt (noneOf "}"))) <&> \x -> (x,wrapResult "span" "" (stringWords x)))))
                       
                       
 runCOCBuiltin COCB_ToInt = runStackState $ modify $ \case

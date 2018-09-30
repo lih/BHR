@@ -10,9 +10,12 @@ endif
 ifdef PREFIX
 STACK_FLAGS += --local-install-root $(PREFIX)
 endif
+ifndef TARGETS
+TARGETS := curly
+endif
 
 build:
-	stack build $(STACK_FLAGS)
+	stack build $(STACK_FLAGS) $(TARGETS)
 
 doc: STACK_FLAGS += --haddock
 doc: build

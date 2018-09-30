@@ -57,6 +57,7 @@ script:
 branches:
   only:
   - master
+  - capricon
   - /^v\d+(\.\d+)*(-\S*)?$/
 
 deploy:
@@ -65,6 +66,7 @@ deploy:
   file:
   - curly~$TRAVIS_OS_NAME~$HOST_ARCH.tar.xz
   - curly-gateway~$TRAVIS_OS_NAME~$HOST_ARCH.tar.xz
+  - capricon~$TRAVIS_OS_NAME~$HOST_ARCH.tar.xz
   skip_cleanup: true
   on:
     tags: true

@@ -29,5 +29,5 @@ case "$BUILD" in
 	done
 	;;
 esac
-scripts/ci/build-package curly curly-gateway
+scripts/ci/build-package curly curly-gateway capricon
 set +ex
