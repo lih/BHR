@@ -15,7 +15,7 @@ case "$BUILD" in
 	    #  stack --no-terminal $ARGS solver --update-config)
 
 	# Build the dependencies
-	stack --no-terminal --install-ghc $ARGS test --bench --only-dependencies
+	stack --no-terminal --install-ghc $ARGS test --bench --only-dependencies curly capricon curly-gateway
 	;;
     cabal)
 	cabal --version
