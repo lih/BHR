@@ -59,6 +59,7 @@ branches:
   - master
   - capricon
   - /^v\d+(\.\d+)*(-\S*)?$/
+  - /^release-\S+-\d+(\.\d+)*(-\S*)?$/
 
 deploy:
   provider: releases

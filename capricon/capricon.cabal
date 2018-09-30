@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                capricon
-version:             0.5.4
+version:             0.6
 -- synopsis:            
 -- description:         
 license:             GPL-3
