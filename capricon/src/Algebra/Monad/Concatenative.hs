@@ -7,7 +7,7 @@ import Language.Parser
 newtype Opaque a = Opaque a
 instance Show (Opaque a) where show _ = "#<opaque>"
 data StackBuiltin b = Builtin_ListBegin | Builtin_ListEnd
-                    | Builtin_Clear
+                    | Builtin_Clear | Builtin_Stack
                     | Builtin_Pick 
                     | Builtin_Pop  | Builtin_PopN
                     | Builtin_Dup  | Builtin_DupN
@@ -95,6 +95,7 @@ execBuiltin runExtra onComment = go
                                                                                StackBuiltin Builtin_ListBegin -> True
                                                                                _ -> False) st
                                                   in StackList (reverse h):t
+    go Builtin_Stack = stack =~ \x -> StackList x:x
     go Builtin_Clear = stack =- []
     go Builtin_Pick = stack =~ \st -> case st of StackInt i:StackInt n:t | i<n, x:t' <- drop i t -> x:drop (n-i-1) t'
                                                  _ -> st

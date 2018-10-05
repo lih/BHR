@@ -1,4 +1,4 @@
-{-# LANGUAGE ImplicitParams, RankNTypes, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, LambdaCase, TupleSections, TypeFamilies, TypeOperators, ScopedTypeVariables, UndecidableInstances #-}
+{-# LANGUAGE ImplicitParams, RankNTypes, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, LambdaCase, TupleSections, TypeFamilies, TypeOperators, ScopedTypeVariables, UndecidableInstances, CPP #-}
 module Main where
 
 import Definitive
@@ -310,16 +310,18 @@ mu_type root_type = yb maybeT $ go 0 root_type
 
 takeLast n l = drop (length l-n) l
 
-printStackVal o dir ctx _x = writeHString o . (+"\n") $ case _x of
+showStackVal dir ctx _x = case _x of
   StackExtra (Opaque _x) -> case _x of
     COCExpr d e -> -- "<"+show d+">:"+
       showNode' dir (takeLast d ctx) e
     COCNull -> "(null)"
     COCDir d -> show d
+  StackSymbol s -> show s
+  StackInt n -> show n
   _ -> show _x
-data COCBuiltin = COCB_ShowStack | COCB_Show | COCB_Print | COCB_Open | COCB_ExecModule
+data COCBuiltin = COCB_Print | COCB_Open | COCB_ExecModule
                 | COCB_ToInt | COCB_Concat | COCB_Uni | COCB_Hyp
-                | COCB_ShowContext | COCB_Quit | COCB_Var
+                | COCB_Quit | COCB_Var
                 | COCB_Ap | COCB_Bind Bool BindType
                 | COCB_TypeOf | COCB_Mu
                 | COCB_HypBefore | COCB_Subst | COCB_Rename
@@ -363,20 +365,6 @@ stringWords = fromBlank
         fromWChar k "" = [k ""]
 
 runCOCBuiltin COCB_Quit = runExtraState (endState =- True)
-runCOCBuiltin COCB_ShowStack = do
-  s <- runStackState get
-  ex <- runExtraState get
-  lift $ for_ (reverse s) $ printStackVal (ex^.outputHandle) (ex^.showDir) (ex^.context)
-runCOCBuiltin COCB_ShowContext = do
-  ex <- runExtraState get
-  lift $ snd $ foldr (\(name,typ) (ctx',pr) -> ((name,typ):ctx',do
-                                                   pr
-                                                   putStrLn $ name+" : "+showNode' (ex^.showDir) ctx' typ
-                                                   )) ([],unit) (ex^.context)
-runCOCBuiltin COCB_Show = do
-  s <- runStackState get
-  ex <- runExtraState get
-  lift $ for_ (take 1 s) $ printStackVal (ex^.outputHandle) (ex^.showDir) (ex^.context)
 runCOCBuiltin COCB_Print = do
   s <- runStackState get
   o <- runExtraState (getl outputHandle)
@@ -386,10 +374,8 @@ runCOCBuiltin COCB_Print = do
 
 runCOCBuiltin COCB_Format = do
   ex <- runExtraState get
-  let format ('%':s) (StackSymbol h:t) = first (h+) (format s t)
-      format ('%':s) (StackInt h:t) = first (show h+) (format s t)
-      format ('%':s) (StackExtra (Opaque (COCExpr d h)):t) = first (showNode' (ex^.showDir) (takeLast d (ex^.context)) h+) (format s t)
-      format ('%':s) x = first ("(obj)"+) (format s (drop 1 x))
+  let format ('%':'s':s) (StackSymbol h:t) = first (h+) (format s t)
+      format ('%':'v':s) (x:t) = first (showStackVal (ex^.showDir) (ex^.context) x+) (format s t)
       format (c:s) t = first (c:) (format s t)
       format "" t = ("",t)
   runStackState $ modify $ \case
@@ -572,29 +558,14 @@ runCOCBuiltin COCB_InsertNodeDir = do
 
 data COCValue = COCExpr Int Node | COCNull | COCDir (NodeDir (StackVal String COCBuiltin COCValue))
 
-cocDict = mkDict ((".",StackProg []):("version",StackSymbol "0.6"):
+cocDict = mkDict ((".",StackProg []):("version",StackSymbol VERSION_capricon):
                    [(x,StackBuiltin b) | (x,b) <- [
-                       ("io/quit"                 , Builtin_Extra COCB_Quit               ),
-                       ("io/show"                 , Builtin_Extra COCB_Show               ),
-                       ("io/print"                , Builtin_Extra COCB_Print              ),
-                       ("io/stack"                , Builtin_Extra COCB_ShowStack          ),
-                       ("io/context"              , Builtin_Extra COCB_ShowContext        ),
-                       ("io/open"                 , Builtin_Extra COCB_Open               ),
-                       ("io/format"               , Builtin_Extra COCB_Format             ),
-                       
                        ("def"                     , Builtin_Def                           ),
                        ("$"                       , Builtin_DeRef                         ),
-                       
-                       ("arith/++"                , Builtin_Extra COCB_Concat             ),
-                       ("arith/+"                 , Builtin_Add                           ),
-                       ("arith/-"                 , Builtin_Sub                           ),
-                       ("arith/*"                 , Builtin_Mul                           ),
-                       ("arith/div"               , Builtin_Div                           ),
-                       ("arith/mod"               , Builtin_Mod                           ),
-                       ("arith/sign"              , Builtin_Sign                          ),
-                       
+                       ("lookup"                  , Builtin_Lookup                        ),
                        ("exec"                    , Builtin_Exec                          ),
-                       ("to-int"                  , Builtin_Extra COCB_ToInt              ),
+
+                       ("stack"                   , Builtin_Stack                         ),
                        ("clear"                   , Builtin_Clear                         ),
                        ("pop"                     , Builtin_Pop                           ),
                        ("popn"                    , Builtin_PopN                          ),
@@ -604,38 +575,52 @@ cocDict = mkDict ((".",StackProg []):("version",StackSymbol "0.6"):
                        ("swapn"                   , Builtin_SwapN                         ),
                        ("pick"                    , Builtin_Pick                          ),
 
-                       ("dict/current"            , Builtin_CurrentDict                   ),
+                       ("["                       , Builtin_ListBegin                     ),
+                       ("]"                       , Builtin_ListEnd                       ),
+                       
+                       ("io/exit"                 , Builtin_Extra COCB_Quit               ),
+                       ("io/print"                , Builtin_Extra COCB_Print              ),
+                       ("io/open"                 , Builtin_Extra COCB_Open               ),
+                                              
+                       ("string/format"           , Builtin_Extra COCB_Format             ),
+                       ("string/to-int"           , Builtin_Extra COCB_ToInt              ),
+                       
+                       ("arith/+"                 , Builtin_Add                           ),
+                       ("arith/-"                 , Builtin_Sub                           ),
+                       ("arith/*"                 , Builtin_Mul                           ),
+                       ("arith/div"               , Builtin_Div                           ),
+                       ("arith/mod"               , Builtin_Mod                           ),
+                       ("arith/sign"              , Builtin_Sign                          ),
+                       
+                       ("list/each"               , Builtin_Each                          ),
+                       ("list/range"              , Builtin_Range                         ),
+
+                       ("dict/vocabulary"         , Builtin_CurrentDict                   ),
                        ("dict/empty"              , Builtin_Empty                         ),
-                       ("lookup"                  , Builtin_Lookup                        ),
                        ("dict/insert"             , Builtin_Insert                        ),
                        ("dict/delete"             , Builtin_Delete                        ),
                        ("dict/keys"               , Builtin_Keys                          ),
                        ("dict/module"             , Builtin_Extra COCB_ExecModule         ),
 
-                       ("cocdict/get-show-dict"   , Builtin_Extra COCB_GetShowDir         ),
-                       ("cocdict/set-show-dict"   , Builtin_Extra COCB_SetShowDir         ),
-                       ("cocdict/insert-show-dict", Builtin_Extra COCB_InsertNodeDir      ),
+                       ("term-index/pattern-index"     , Builtin_Extra COCB_GetShowDir         ),
+                       ("term-index/set-pattern-index" , Builtin_Extra COCB_SetShowDir         ),
+                       ("term-index/index-insert"      , Builtin_Extra COCB_InsertNodeDir      ),
                        
-                       ("["                       , Builtin_ListBegin                     ),
-                       ("]"                       , Builtin_ListEnd                       ),
-                       ("list/each"               , Builtin_Each                          ),
-                       ("list/range"              , Builtin_Range                         ),
-                       
-                       ("coc/universe"            , Builtin_Extra COCB_Uni                ),
-                       ("coc/hypothesis"          , Builtin_Extra COCB_Var                ),
-                       ("coc/apply"               , Builtin_Extra COCB_Ap                 ),
-                       ("coc/lambda"              , Builtin_Extra (COCB_Bind False Lambda )),
-                       ("coc/forall"              , Builtin_Extra (COCB_Bind False Prod   )  ),
-                       ("coc/mu"                  , Builtin_Extra COCB_Mu                 ),
+                       ("term/universe"            , Builtin_Extra COCB_Uni                ),
+                       ("term/variable"            , Builtin_Extra COCB_Var                ),
+                       ("term/apply"               , Builtin_Extra COCB_Ap                 ),
+                       ("term/lambda"              , Builtin_Extra (COCB_Bind False Lambda )),
+                       ("term/forall"              , Builtin_Extra (COCB_Bind False Prod   )  ),
+                       ("term/mu"                  , Builtin_Extra COCB_Mu                 ),
 
                        ("context/intro"           , Builtin_Extra COCB_Hyp                ),
                        ("context/intro-before"    , Builtin_Extra COCB_HypBefore          ),
-                       ("context/conclude-lambda" , Builtin_Extra (COCB_Bind True Lambda  ) ),
-                       ("context/conclude-forall" , Builtin_Extra (COCB_Bind True Prod    )   ),
+                       ("context/extro-lambda"    , Builtin_Extra (COCB_Bind True Lambda  ) ),
+                       ("context/extro-forall"    , Builtin_Extra (COCB_Bind True Prod    )   ),
                        ("context/rename"          , Builtin_Extra COCB_Rename             ),
-                       ("context/subst"           , Builtin_Extra COCB_Subst              ),
+                       ("context/substitute"      , Builtin_Extra COCB_Subst              ),
                        ("context/type"            , Builtin_Extra COCB_TypeOf             ),
-                       ("context/context-vars"    , Builtin_Extra COCB_ContextVars        )
+                       ("context/hypotheses"      , Builtin_Extra COCB_ContextVars        )
                        ]])
   where mkDict = foldr addElt (c'map zero)
         addElt (x,v) = atP (splitPath x) %- Just v
@@ -666,7 +651,7 @@ main = do
       wp:_ -> let wps = length wp-1; wp' = init wp in return [w | w <- sl, take wps w==wp']
       _ -> return []
   str <- stringWords <$> if isTerm then getAll else readHString stdin
-  args <- (foldMap (\x -> [libdir</>x,x]) <$> getArgs) >>= map (words . fold) . traverse (try (return []) . readString)
+  args <- (foldMap (\x -> [libdir</>x,x]) <$> getArgs) >>= map (stringWords . fold) . traverse (try (return []) . readString)
   execS (foldr (\sym mr -> do
                    execSymbol runCOCBuiltin runComment sym
                    hasQuit <- runExtraState (getl endState)
