@@ -1,4 +1,4 @@
-{-# LANGUAGE ImplicitParams, RankNTypes, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, LambdaCase, TupleSections, TypeFamilies, TypeOperators, ScopedTypeVariables, UndecidableInstances, CPP #-}
+{-# LANGUAGE ImplicitParams, RankNTypes, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, LambdaCase, TupleSections, TypeFamilies, TypeOperators, ScopedTypeVariables, UndecidableInstances, CPP, ViewPatterns #-}
 module Main where
 
 import Definitive
@@ -82,9 +82,6 @@ i'AHDir = iso (uncurry AHDir) (\(AHDir x y) -> (x,y))
 i'Cofree :: Iso (Cofree f a) (Cofree f' a') (a,Coforest f a) (a',Coforest f' a')
 i'Cofree = iso (uncurry Step) (\(Step x y) -> (x,y))
 
-mayLens :: Lens (Maybe b) (Maybe b') a a' -> Lens (Maybe b) (Maybe b') (Maybe a) (Maybe a')
-mayLens l = lens (\ma -> ma >>= by l) (\ma mb' -> maybe Nothing (trace "Just" . Just . set l mb') ma)
-
 instance Semigroup (NodeDir a) where NodeDir a b c + NodeDir a' b' c' = NodeDir (a+a') (b+b') (c+c')
 instance Monoid (NodeDir a) where zero = NodeDir zero zero zero
 instance DataMap (NodeDir a) Node a where
@@ -114,7 +111,7 @@ findPattern = \x y -> go [] x y^..writerT
   where go :: [(String,Node)] -> NodeDir a -> Node -> WriterT [([(String,Node)],Int,Node)] [] a
         go_a :: [(String,Node)] -> ApDir a -> Application -> WriterT [([(String,Node)],Int,Node)] [] a
         go_ah :: [(String,Node)] -> AHDir a -> ApHead -> WriterT [([(String,Node)],Int,Node)] [] a
-        withEnv env d x m = foldr (\(i,as) ma -> ma <++> (foldl'.foldl') (\l a -> (tell [(env,i,x)] >> return a) <++> l) zero as)
+        withEnv env d x m = foldr (\(i,as) ma -> ma <++> (foldl'.foldl') (\l a -> (tell [(env,i-length env,x)] >> return a) <++> l) zero as)
                             m (d^??from i'NodeDir.l'2.from i'AHDir.l'1.ascList.each.sat ((>=length env) . fst))
         go env d wh@(Bind t x tx e) = withEnv env d wh $ do
           d' <- mayChoose (d^.from i'NodeDir.l'1.at t)
@@ -159,6 +156,7 @@ adjust_depth f = go 0
                                             (go_a (d+length env) a')) (map (go d) subs)
 inc_depth 0 = \x -> x
 inc_depth dx = adjust_depth (+dx)
+adjust_telescope_depth field f = zipWith (field . adjust_depth . \i j -> if j<i then j else i+f (j-i)) [0..]
 free_vars :: Node -> Set Int
 free_vars (Bind _ _ tx e) = free_vars tx + delete (-1) (map (subtract 1) (free_vars e))
 free_vars (Cons a) = freeA a
@@ -185,11 +183,14 @@ substn val n | n>=0 = go n
             LT -> return $ Cons $ Ap (Sym i) xs'
             GT -> return $ Cons $ Ap (Sym (i-1)) xs'
         go_a d (Ap (Mu e t a) xs) = do
-          x <- go_a d a
+          x <- go_a (d+length e) a
           xs' <- traverse (go d) xs
+          e' <- sequence $ reverse $ zipWith (\d' (y,ty,ty') -> liftA2 (y,,) (go (d+d') ty) (go (d+d') ty'))
+                [0..] (reverse e)
+          t' <- sequence $ zipWith (\d' -> go (d+d')) [length e..] t
           case x of
-            Cons a' -> return (Cons (Ap (Mu e t a') xs'))
-            _ -> rec_subst xs' =<< go_mu d e t x
+            Cons a' -> return (Cons (Ap (Mu e' t' a') xs'))
+            _ -> rec_subst xs' =<< go_mu d e' t' x
   
         go_mu d env (tx':t) (Bind Lambda x tx e) = go_mu d ((x,tx,tx'):env) t e
         go_mu d env _ (Cons (Ap (Sym i) xs))
@@ -215,12 +216,19 @@ par lvl d msg | d>lvl = "("+msg+")"
               | otherwise = msg
 fresh env v = head $ select (not . (`elem` env)) (v:[v+show i | i <- [0..]])
 
+type StringPattern = [String :+: Int]
+
 showNode = showNode' zero
-showNode' :: NodeDir String -> [(String,Node)] -> Node -> String
+showNode' :: NodeDir ([String],StringPattern) -> [(String,Node)] -> Node -> String
 showNode' dir = go 0
-  where go d env x | (pats,k):_ <- findPattern dir x = par (if empty pats then 1000 else 1) d $ intercalate " " $ (k:) $ [
-                       go 2 (env'+env) hole
-                       | (env',_,hole) <- sortBy (comparing (by l'2)) pats]
+  where go d env x | (pats,(_,k)):_ <- findPattern dir x =
+                       let holes = c'map $ fromAList [(i,(env',hole)) | (env',i,hole) <- pats] in
+                         par (if empty pats then 1000 else 1) d $ intercalate " " [
+                         case word of
+                           Left w -> w
+                           Right i | Just (env',hole) <- lookup i holes -> go 2 (env'+env) hole
+                                   | otherwise -> ""
+                         | word <- k]
         go _ _ (Universe u) = "Set"+show u
         go d env whole@(Bind t aname atype body) | t == Lambda || 0`isKeyIn`free_vars body = par 0 d $ bind_head t + drop 1 (bind_tail env whole)
                                                  | otherwise = par 0 d $ go 1 env atype + " -> " + go 0 ((aname,atype):env) body
@@ -256,7 +264,7 @@ type_of = yb maybeT . go
                     ti:_ -> rec_subst subs (inc_depth (i+1) ti)
                     _ -> zero
                 go' (Ap (Mu env _ a') subs) = do
-                  ta <- local (map (by l'2) env+) (go' a')
+                  ta <- local (map (by l'2) env +) (go' a')
                   preret <- maybeT $^ mu_type $ foldl' (\e (x,tx,_) -> Bind Prod x tx e) ta env
                   rec_subst subs =<< subst (Cons a') preret
                       
@@ -265,7 +273,7 @@ type_of = yb maybeT . go
                 rec_subst _ x = zero
 
 mu_type :: MonadReader Env m => Node -> m (Maybe Node)
-mu_type root_type = yb maybeT $ go 0 root_type
+mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
   where
     root_args = go' root_type
       where go' (Bind Prod x tx e) = (x,tx):go' e
@@ -284,7 +292,8 @@ mu_type root_type = yb maybeT $ go 0 root_type
     go_col d xn = go_col' 0 (c'set zero)
       where go_col' d' recs (Bind Prod x tx@(Cons (Ap (Sym i) subs)) e)
               | constr_ind d d' i = do
-                  let tx' = bind Prod root_args (adjust_depth (\i' -> if constr_ind d d' i' then (i'-d')+(nargs-d) else i'+nargs) tx)
+                  let tx' = bind Prod (adjust_telescope_depth second (+(d+d')) root_args)
+                            (adjust_depth (\i' -> if constr_ind d d' i' then (i'-d')+(nargs-d) else i'+nargs) tx)
                       tIx = Cons $ Ap (Sym (i+1)) $ map (inc_depth 1) subs + [Cons (Ap (Sym 0) [])]
                   e' <- local ((tx:) . (undefined:)) (go_col' (d'+2) (touch (1 :: Int) (map (+2) recs))
                                                       (adjust_depth (\j -> if j==0 then j else j+1) e))
@@ -293,18 +302,19 @@ mu_type root_type = yb maybeT $ go 0 root_type
             go_col' d' recs (Cons a@(Ap (Sym i) xs))
               | constr_ind d d' i = do
                   let args = select (not . (`isKeyIn`recs)) [0..d'-1]
-                      lastE = bind Lambda root_args (Cons (Ap (Sym (nargs-d-1))
-                                                           [Cons (Ap (Sym (j'+nargs)) args')
-                                                           | j <- args
-                                                           , let (j',args') | (j+1)`isKeyIn`recs = (j+1,[Cons (Ap (Sym k) []) | k <- reverse [0..nargs-1]])
-                                                                            | otherwise = (j,[])
-                                                           ]))
+                      lastE = bind Lambda (adjust_telescope_depth second (+(d+d')) root_args)
+                              (Cons (Ap (Sym (nargs-d-1))
+                                     [Cons (Ap (Sym (j'+nargs)) args')
+                                     | j <- args
+                                     , let (j',args') | (j+1)`isKeyIn`recs = (j+1,[Cons (Ap (Sym k) []) | k <- reverse [0..nargs-1]])
+                                                      | otherwise = (j,[])
+                                     ]))
                   return $ Cons (Ap (Sym i) $ xs+[lastE])
                   
             go_col' d' recs (Universe u) = do
               envargs <- take d' <$> ask
-              let tIH = bind Prod root_args ihRoot
-                  ihRoot = Cons (Ap (Sym (nargs-d-1)) [Cons (Ap (Sym (j+nargs)) []) | j <- reverse [0..d-1]])
+              let tIH = bind Prod (adjust_telescope_depth second (+(d+d')) root_args) ihRoot
+                  ihRoot = Cons (Ap (Sym (nargs-d-1)) [Cons (Ap (Sym (j+nargs)) []) | j <- reverse [0..d'-1]])
               return $ Bind Prod xn tIH (Universe (u+1))
             go_col' _ _ _ = zero
 
@@ -333,14 +343,14 @@ data COCBuiltin = COCB_Print | COCB_Open | COCB_ExecModule
 data COCState = COCState {
   _endState :: Bool,
   _context :: [(String,Node)],
-  _showDir :: NodeDir String,
+  _showDir :: NodeDir ([String],StringPattern),
   _outputHandle :: Handle
   }
 endState :: Lens' COCState Bool
 endState = lens _endState (\x y -> x { _endState = y })
 context :: Lens' COCState [(String,Node)]
 context = lens _context (\x y -> x { _context = y })
-showDir :: Lens' COCState (NodeDir String)
+showDir :: Lens' COCState (NodeDir ([String],StringPattern))
 showDir = lens _showDir (\x y -> x { _showDir = y })
 outputHandle :: Lens' COCState Handle
 outputHandle = lens _outputHandle (\x y -> x { _outputHandle = y })
@@ -544,19 +554,23 @@ runCOCBuiltin COCB_ContextVars = do
 
 runCOCBuiltin COCB_GetShowDir = do
   dir <- runExtraState (getl showDir)
-  runStackState $ modify $ (StackExtra (Opaque (COCDir (map StackSymbol dir))):)
+  runStackState $ modify $ (StackExtra (Opaque (COCDir (map (\(c,l) -> (c,StackSymbol (intercalate " " $ map (id <|> head . flip drop c) l))) dir))):)
 runCOCBuiltin COCB_SetShowDir = do
   mod' <- runStackState $ id <~ \case
-    StackExtra (Opaque (COCDir d)):t -> (t,showDir =- map (\(StackSymbol s) -> s) d)
+    StackExtra (Opaque (COCDir d)):t -> (t,showDir =- map (\(c,StackSymbol ws) -> (c,[case select ((==w) . fst) (zip c [0..]) of
+                                                                                        (_,i):_ -> Right i
+                                                                                        _ -> Left w
+                                                                                     | w <- words ws])) d)
     st -> (st,return ())
   runExtraState mod'
 runCOCBuiltin COCB_InsertNodeDir = do
+  ctx <- runExtraState (getl context)
   runStackState $ modify $ \case
     x:StackExtra (Opaque (COCExpr d e)):StackExtra (Opaque (COCDir dir)):t ->
-      StackExtra (Opaque (COCDir (dir&at e %- Just x))):t
+      StackExtra (Opaque (COCDir (insert e (map fst (takeLast d ctx),x) dir))):t
     st -> st
 
-data COCValue = COCExpr Int Node | COCNull | COCDir (NodeDir (StackVal String COCBuiltin COCValue))
+data COCValue = COCExpr Int Node | COCNull | COCDir (NodeDir ([String],StackVal String COCBuiltin COCValue))
 
 cocDict = mkDict ((".",StackProg []):("version",StackSymbol VERSION_capricon):
                    [(x,StackBuiltin b) | (x,b) <- [
