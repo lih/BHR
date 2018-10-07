@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                capricon
-version:             0.6.3
+version:             0.6.3.1
 -- synopsis:            
 -- description:         
 license:             GPL-3
@@ -16,20 +16,20 @@ extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules: Algebra.Monad.Concatenative
-  default-extensions: RebindableSyntax
+  exposed-modules: Algebra.Monad.Concatenative Data.CaPriCon
+  default-extensions: RebindableSyntax, ViewPatterns, TupleSections, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, LambdaCase, TypeOperators, RankNTypes, GeneralizedNewtypeDeriving, TypeFamilies
   build-depends: base >=4.9 && <4.10,definitive-base >=2.6 && <2.7, definitive-parser
-  ghc-options: -Wincomplete-patterns -Wname-shadowing -Werror
+  ghc-options: -Wincomplete-patterns -Wname-shadowing -W -Werror
   hs-source-dirs: src
   default-language: Haskell2010
                      
 executable capricon
   main-is:             CaPriCon.hs
-  default-extensions:  RebindableSyntax
+  default-extensions: RebindableSyntax, ViewPatterns, TupleSections, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, LambdaCase, TypeOperators, RankNTypes, GeneralizedNewtypeDeriving, TypeFamilies
   -- other-modules:       
   -- other-extensions:    
   build-depends: base >=4.9 && <4.10,definitive-base >=2.6 && <2.7, definitive-parser, capricon, hreadline, directory, filepath
-  ghc-options: -Wincomplete-patterns -Wname-shadowing -Werror
+  ghc-options: -Wincomplete-patterns -Wname-shadowing -W -Werror
   hs-source-dirs:      exe
   default-language:    Haskell2010
 -- executable coinche
