@@ -17,6 +17,7 @@ data StackBuiltin b = Builtin_ListBegin | Builtin_ListEnd
                     | Builtin_DeRef | Builtin_Def
                     | Builtin_Exec
                     | Builtin_CurrentDict | Builtin_Empty | Builtin_Insert | Builtin_Lookup | Builtin_Delete | Builtin_Keys
+                    | Builtin_Quote
                     | Builtin_Extra b
                     deriving Show
 data StackVal s b a = StackBuiltin (StackBuiltin b)
@@ -109,14 +110,14 @@ execBuiltin runExtra onComment = go
           _ -> st
       _ -> st
     go Builtin_Dup = stack =~ \st -> case st of x:t -> x:x:t ; _ -> st
-    go Builtin_DupN = stack =~ \st -> case st of StackInt n:t | (h,x:t') <- splitAt n t -> (x:h)+(x:t') ; _ -> st
+    go Builtin_DupN = stack =~ \st -> case st of StackInt n:t | x:_ <- drop n t -> x:t ; _ -> st
     go Builtin_Range = stack =~ \st -> case st of StackInt n:t -> StackList [StackInt i | i <- [0..n-1]]:t ; _ -> st
     go Builtin_Each = do
       st <- get
       case st^.stack of
         e:StackList l:t -> do
           stack =- t
-          for_ l $ \x -> do stack =~ (e:) . (x:) ; go Builtin_Exec
+          for_ l $ \x -> do stack =~ (x:) ; execVal e
         _ -> return ()
 
     go Builtin_CurrentDict = getl dict >>= \d -> stack =~ (StackDict d:)
@@ -127,11 +128,12 @@ execBuiltin runExtra onComment = go
     go Builtin_Delete = stack =~ \case
       StackSymbol s:StackDict d:t -> StackDict (delete s d):t
       st -> st
-    go Builtin_Lookup = stack =~ \case
-      StackSymbol s:StackDict d:t -> case lookup s d of
-        Just x -> StackSymbol s:x:t
-        Nothing -> StackDict d:t
-      st -> st
+    go Builtin_Lookup = join $ do
+      stack <~ \case
+        el:th:StackSymbol s:StackDict d:t -> case lookup s d of
+          Just x -> (x:t,execVal th)
+          Nothing -> (t,execVal el)
+        st -> (st,return ())
     go Builtin_Keys = stack =~ \case
       StackDict d:t -> StackList (map StackSymbol (keys d)):t
       st -> st
@@ -154,11 +156,18 @@ execBuiltin runExtra onComment = go
     go Builtin_Exec = do
       st <- get
       case st^.stack of
-        StackProg p:t -> do stack =- t ; traverse_ (execSymbolImpl go onComment) p
-        StackBuiltin b:t -> do stack =- t ; go b
+        StackProg p:t -> do stack =- t ; execVal (StackProg p)
+        StackBuiltin p:t -> do stack =- t ; execVal (StackBuiltin p)
         _ -> return ()
+    go Builtin_Quote = stack =~ \case
+      StackList l:t -> StackProg [s | StackSymbol s <- l]:t
+      st -> st
+      
     go (Builtin_Extra x) = runExtra x
 
+    execVal (StackProg p) = traverse_ (execSymbolImpl go onComment) p
+    execVal (StackBuiltin b) = go b
+    execVal _ = return ()
 
 class (StackSymbol s,Monad m) => MonadStack st s b a m | m -> st s b a where
   execSymbol :: (b -> m ()) -> (s -> m ()) -> s -> m ()

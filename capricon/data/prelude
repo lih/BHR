@@ -1,0 +1,52 @@
+'nop { { } } def
+'get { nop nop lookup } def
+
+'each list 1 dupn get def
+'dict-keys dict 'keys get def
+'import-keys {
+  { 1 dupn 1 dupn get def } each
+  pop
+} def
+
+'import {
+  dup dict-keys import-keys 
+} def
+
+[ dict term-index term context io list arith string ] { import } each
+
+'Type { 0 universe } def
+
+'times { range { pop dup exec } each pop } def
+
+'foralls { { extro-forall } swap times } def
+'lambdas { { extro-lambda } swap times } def
+'applys { range { pop apply } each } def
+'applyl { { swap apply } each } def
+
+'printf { format print pop } def
+'show { "%v\n" printf } def
+'show-stack { stack { show } each } def
+'show-context { "" hypotheses { dup variable type swap "%s : %v\n%s" format } each print pop } def
+
+'showdef { pattern-index 1 swapn swap index-insert set-pattern-index } def
+
+'external { dup open swap "%s.html" format module } def
+'stache { "%v" printf } def
+
+'vis { show-context "-------\n" printf show-stack } def
+
+'-> { dup 1 swapn swap intro dup [ swap "'%s" format 'variable ] quote def } def
+'! 'extro-lambda $ def
+'? 'extro-forall $ def
+
+'use {
+  dup open swap
+  cache-dir "%s/%s.mdc" format module
+  dup 'exports { import-keys } { pop } lookup
+} def
+'export { 'exports swap def } def
+
+'( '[ $ def
+') { ] applyl } def
+
+'defconstr { 1 dupn swap showdef def } def

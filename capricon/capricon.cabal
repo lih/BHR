@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                capricon
-version:             0.6.3.1
+version:             0.6.4
 -- synopsis:            
 -- description:         
 license:             GPL-3
@@ -14,7 +14,9 @@ maintainer:          marc@coiffier.net
 build-type:          Simple
 extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
-
+data-dir: data
+data-files: prelude
+                             
 library
   exposed-modules: Algebra.Monad.Concatenative Data.CaPriCon
   default-extensions: RebindableSyntax, ViewPatterns, TupleSections, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, LambdaCase, TypeOperators, RankNTypes, GeneralizedNewtypeDeriving, TypeFamilies

@@ -5,7 +5,7 @@ import Definitive
 import Language.Parser
 import Algebra.Monad.Concatenative
 import System.IO (openFile,hIsTerminalDevice,IOMode(..),hClose)
-import System.Environment (getArgs)
+import System.Environment (getArgs,lookupEnv)
 import Console.Readline (readline,addHistory,setCompletionEntryFunction)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Data.IORef
@@ -24,7 +24,7 @@ showStackVal dir ctx _x = case _x of
   StackSymbol s -> show s
   StackInt n -> show n
   _ -> show _x
-data COCBuiltin = COCB_Print | COCB_Open | COCB_ExecModule
+data COCBuiltin = COCB_Print | COCB_Open | COCB_ExecModule | COCB_GetEnv
                 | COCB_ToInt | COCB_Concat | COCB_Uni | COCB_Hyp
                 | COCB_Quit | COCB_Var
                 | COCB_Ap | COCB_Bind Bool BindType
@@ -75,6 +75,13 @@ runCOCBuiltin COCB_Print = do
   o <- runExtraState (getl outputHandle)
   lift $ for_ (take 1 s) $ \case
     StackSymbol s' -> writeHString o s'
+    _ -> return ()
+runCOCBuiltin COCB_GetEnv = do
+  st <- runStackState get
+  case st of
+    StackSymbol s:t -> do
+      v <- lift $ lookupEnv s
+      runStackState (put (StackSymbol (maybe "" id v):t))
     _ -> return ()
 
 runCOCBuiltin COCB_Format = do
@@ -273,6 +280,7 @@ cocDict = mkDict ((".",StackProg []):("version",StackSymbol VERSION_capricon):
                        ("$"                       , Builtin_DeRef                         ),
                        ("lookup"                  , Builtin_Lookup                        ),
                        ("exec"                    , Builtin_Exec                          ),
+                       ("quote"                   , Builtin_Quote                         ),
 
                        ("stack"                   , Builtin_Stack                         ),
                        ("clear"                   , Builtin_Clear                         ),
@@ -289,8 +297,9 @@ cocDict = mkDict ((".",StackProg []):("version",StackSymbol VERSION_capricon):
                        
                        ("io/exit"                 , Builtin_Extra COCB_Quit               ),
                        ("io/print"                , Builtin_Extra COCB_Print              ),
-                       ("io/open"                 , Builtin_Extra COCB_Open               ),
-                                              
+                       ("io/open"                 , Builtin_Extra COCB_Open               ), 
+                       ("io/get-env"              , Builtin_Extra COCB_GetEnv             ),
+                                             
                        ("string/format"           , Builtin_Extra COCB_Format             ),
                        ("string/to-int"           , Builtin_Extra COCB_ToInt              ),
                        
