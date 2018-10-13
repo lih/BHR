@@ -4,3 +4,8 @@ curly/doc/bundle
 woosh
 grow
 Curly_Test.hs
+*.hi
+*.o
+*.js
+*.jsmod
+*/dist

@@ -205,6 +205,9 @@ substn val n | n>=0 = go n
 par lvl d msg | d>lvl = "("+msg+")"
               | otherwise = msg
 fresh env v = head $ select (not . (`elem` env)) (v:[v+show i | i <- [0..]])
+freshContext = go []
+  where go env ((n,v):t) = let n' = fresh env n in (n',(n,v)):go (n':env) t
+        go _ [] = []
 
 type StringPattern = [String :+: Int]
 
