@@ -109,9 +109,9 @@ getSession :: (?sessionState :: IORef SessionState,MonadIO m) => Lens' SessionSt
 getSession l = liftIO (readIORef ?sessionState <&> by l)
 
 data KeyInfo = KeyInfo PublicKey Metadata (Maybe PrivateKey)
-instance Serializable KeyInfo where
-  encode (KeyInfo x y z) = encode (x,z,y)
-instance Format KeyInfo where
+instance Serializable Word8 Builder Bytes KeyInfo where
+  encode p (KeyInfo x y z) = encode p (x,z,y)
+instance Format Word8 Builder Bytes KeyInfo where
   datum = (\x y z -> KeyInfo x z y) <$> datum <*> datum <*> (datum <+? fill (Metadata zero) (remaining >>= guard . (==0) . bytesSize))
 
 data KeyOps = KeyOps {
@@ -151,15 +151,15 @@ absPath lim = (single '.' >> symPath lim)
               <+? (liftA2 subPath (getSession wd) (symPath lim))
 
 
-data CurlyDNSQuery = DomainVC (WithResponse (String,PortNumber))
-                   | DomainKey String (WithResponse (Zesty KeyInfo))
-dns_lookup :: (MonadIO m,Read a) => (WithResponse a -> CurlyDNSQuery) -> m (Maybe a)
+data CurlyDNSQuery = DomainVC (Proxy (String,PortNumber))
+                   | DomainKey String (Proxy (Zesty KeyInfo))
+dns_lookup :: (MonadIO m,Read a) => (Proxy a -> CurlyDNSQuery) -> m (Maybe a)
 dns_lookup k = liftIO $ do
   p <- curlyDataFileName "dns-lookup.sh"
-  let t = WithResponse
+  let t = Proxy
   case k t of
     DomainVC _ -> readProcess "sh" [p,"domain-vc"] "" <&> \s -> map (response t) (matches Just readable s)
     DomainKey d _ -> readProcess "sh" [p,"domain-key",d] "" <&> \s -> map (response t) (matches Just readable s)
 
-  where response :: WithResponse a -> a -> a
+  where response :: Proxy a -> a -> a
         response _ x = x

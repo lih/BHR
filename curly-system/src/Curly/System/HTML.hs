@@ -6,7 +6,7 @@ import Curly.Core
 import Curly.Core.Library
 import Language.Format
 
-system = System "html" id (Standalone (void . rawProgram [TextSection])) Nothing $ RawSystem (yb bytesBuilder . foldMap encode . htmlDoc . catMain . genLeaf (c'set zero))
+system = System "html" id (Standalone (void . rawProgram [TextSection])) Nothing $ RawSystem (yb bytesBuilder . foldMap (encode (Proxy :: Proxy Bytes)) . htmlDoc . catMain . genLeaf (c'set zero))
   where htmlDoc d = c'string $ format (fold ["<!DOCTYPE html>"
                                             ,"<html><head><link type='text/css' rel='stylesheet' href='curly.css' />"
                                             ,"<script type='text/javascript' src='curly.js'></script>"

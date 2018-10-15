@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, DeriveGeneric #-}
+{-# LANGUAGE GADTs, DeriveGeneric, UndecidableInstances #-}
 module Curly.Core.Security(
   -- * Keys and Secrets
   Access(..),PrivateKey,PublicKey,SharedSecret,KeyFingerprint,Signature,Signed,
@@ -32,7 +32,7 @@ newtype PublicKey = PublicKey (Integer,Integer)
                   deriving (Show,Eq)
 data Signature = Signature Integer Integer
                deriving (Eq,Ord,Generic,Show)
-instance Serializable Signature ; instance Format Signature
+instance Serializable Word8 Builder Bytes Signature ; instance Format Word8 Builder Bytes Signature
 
 newtype KeyFingerprint = KeyFingerprint Chunk
                        deriving (Eq,Ord)
@@ -50,8 +50,8 @@ instance Read Access where
                                          ,("admin",Admin),("almighty",Almighty)]]
 instance Semigroup Access where (+) = max
 instance Monoid Access where zero = minBound
-instance Serializable Access where encode a = encode (fromEnum a)
-instance Format Access where datum = toEnum <$> datum
+instance Serializable Word8 Builder Bytes Access where encode p a = encode p (fromEnum a)
+instance Format Word8 Builder Bytes Access where datum = toEnum <$> datum
 
 -- | This function is useless, but it makes textual representations of data look more
 -- "random".
@@ -77,9 +77,9 @@ zest bs = pack $ zipWith xor (unpack bs) zestBytes
           ]
 
 newtype Zesty a = Zesty a
-instance Serializable a => Show (Zesty a) where
+instance Serializable Word8 Builder Bytes a => Show (Zesty a) where
   show (Zesty a) = show (B64Chunk (zest (serialize a)^.chunk))
-instance Format a => Read (Zesty a) where
+instance Format Word8 Builder Bytes a => Read (Zesty a) where
   readsPrec _ = readsParser ((readable <&> \(B64Chunk c) -> zest (c^..chunk)) >*> (Zesty<$>datum))
 
 fpSize :: Int
@@ -90,12 +90,12 @@ instance Bounded KeyFingerprint where
   minBound = KeyFingerprint (pack [0 :: Word8 | _ <- [1..fpSize]])
   maxBound = KeyFingerprint (pack [0xff :: Word8 | _ <- [1..fpSize]])
 
-instance Serializable PrivateKey where encode = coerceEncode PrivateKey
-instance Format PrivateKey where datum = coerceDatum PrivateKey
-instance Serializable PublicKey where encode = coerceEncode PublicKey
-instance Format PublicKey where datum = coerceDatum PublicKey
-instance Serializable KeyFingerprint where encode (KeyFingerprint f) = f^.chunkBuilder
-instance Format KeyFingerprint where datum = KeyFingerprint<$>getChunk fpSize
+instance Serializable Word8 Builder Bytes PrivateKey where encode = coerceEncode PrivateKey
+instance Format Word8 Builder Bytes PrivateKey where datum = coerceDatum PrivateKey
+instance Serializable Word8 Builder Bytes PublicKey where encode = coerceEncode PublicKey
+instance Format Word8 Builder Bytes PublicKey where datum = coerceDatum PublicKey
+instance Serializable Word8 Builder Bytes KeyFingerprint where encode _ (KeyFingerprint f) = f^.chunkBuilder
+instance Format Word8 Builder Bytes KeyFingerprint where datum = KeyFingerprint<$>getChunk fpSize
 
 chunkToInteger :: Chunk -> Integer
 chunkToInteger c = fromMaybe 0 $ matches Just datum
@@ -137,18 +137,18 @@ bezout a b = (v',u'-(k*v'),g)
 
 data Signed a = Signed a Signature
               deriving (Eq,Ord,Show,Generic)
-instance Serializable a => Serializable (Signed a)
-instance Format a => Format (Signed a)
+instance Serializable Word8 Builder Bytes a => Serializable Word8 Builder Bytes (Signed a)
+instance Format Word8 Builder Bytes a => Format Word8 Builder Bytes (Signed a)
 
 unsafeExtractSigned :: Signed a -> a
 unsafeExtractSigned (Signed a _) = a
-extractSignedBy :: Serializable a => PublicKey -> Signed a -> Maybe a
+extractSignedBy :: Serializable Word8 Builder Bytes a => PublicKey -> Signed a -> Maybe a
 extractSignedBy pub (Signed a s) | isValidSignatureFrom pub s (serialize a) = Just a
                                  | otherwise = Nothing
-signValue :: (MonadIO m,Serializable a) => PrivateKey -> a -> m (Signed a)
+signValue :: (MonadIO m,Serializable Word8 Builder Bytes a) => PrivateKey -> a -> m (Signed a)
 signValue priv a = Signed a <$> signBytes priv (serialize a)
 
-signedDatum :: Format a => PublicKey -> Parser Bytes (Signed a)
+signedDatum :: Format Word8 Builder Bytes a => PublicKey -> Parser Bytes (Signed a)
 signedDatum pub = datum >>= maybe zero return . extractSignedBy pub
 
 timingRef :: IORef Seconds
@@ -158,7 +158,7 @@ publicKey :: PrivateKey -> PublicKey
 publicKey (PrivateKey n) = thunk $^ do
   let ret = EC.pmul EC.basePoint n
   start <- currentTime
-  serialize ret `deepseq` unit
+  (serialize ret :: Bytes) `deepseq` unit
   end <- currentTime
   let time = end - start
   -- This function pads the key computing time to the maximum observed
@@ -189,11 +189,11 @@ sharedSecret isClient (PrivateKey priv) (PublicKey pub) = liftIO $ do
   logLine Debug $ format "Shared secret : %s" (show (B64Chunk kh))
   SharedSecret <$> mkCtx isClient AES.Decrypt <*> mkCtx (not isClient) AES.Encrypt
 
-decrypt :: (MonadIO m,Format a, ?secret :: SharedSecret) => ParserT Bytes m a
+decrypt :: (MonadIO m,Format Word8 Builder Bytes a, ?secret :: SharedSecret) => ParserT Bytes m a
 decrypt = receive >*> do
   remaining >>= liftIO . AES.crypt (readCxt ?secret) . by chunk >>= runStreamState . put . yb chunk
   receive
-encrypt :: (MonadIO m,Serializable a,?secret :: SharedSecret) => a -> m Bytes
+encrypt :: (MonadIO m,Serializable Word8 Builder Bytes a,?secret :: SharedSecret) => a -> m Bytes
 encrypt a = liftIO $ yb chunk <$> AES.crypt (writeCxt ?secret) (serialize a ^. chunk)
 
 type KeyStore = Map String (KeyFingerprint,PublicKey,Maybe PrivateKey,Metadata,Map String Access)

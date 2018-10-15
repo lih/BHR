@@ -26,8 +26,8 @@ import System.Environment (lookupEnv)
 -- | A documentation node (similar to a HTML node, but simpler)
 data DocNode a = DocTag String [(String,String)] [a]
                deriving (Eq,Ord,Show,Generic)
-instance Serializable a => Serializable (DocNode a)
-instance Format a => Format (DocNode a)
+instance Serializable Word8 Builder Bytes a => Serializable Word8 Builder Bytes (DocNode a)
+instance Format Word8 Builder Bytes a => Format Word8 Builder Bytes (DocNode a)
 instance Functor DocNode where map f (DocTag t a xs) = DocTag t a (map f xs)
 instance Foldable DocNode where fold (DocTag _ _ l) = fold l
 instance Traversable DocNode where sequence (DocTag t as l) = DocTag t as<$>sequence l
@@ -51,10 +51,10 @@ instance Documented Int where
   document n = docTag' "int" [Pure (show n)]
 
 newtype Metadata = Metadata (Forest (Map String) String)
-                 deriving (Semigroup,Monoid,Serializable)
+                 deriving (Semigroup,Monoid,Serializable Word8 Builder Bytes)
 i'Metadata :: Iso' (Forest (Map String) String) Metadata
 i'Metadata = iso Metadata (\(Metadata m) -> m)
-instance Format Metadata where datum = coerceDatum Metadata
+instance Format Word8 Builder Bytes Metadata where datum = coerceDatum Metadata
 instance DataMap Metadata String (Free (Map String) String) where 
   at i = from i'Metadata.at i
 instance Show Metadata where

@@ -22,24 +22,24 @@ type Commit = Compressed (Patch LibraryID Metadata,Maybe Hash)
 type Branches = Map String ((PublicKey,String):+:Hash)
 data StampedBranches = StampedBranches Int Branches
                      deriving (Show,Generic)
-instance Serializable StampedBranches
-instance Format StampedBranches where
+instance Serializable Word8 Builder Bytes StampedBranches
+instance Format Word8 Builder Bytes StampedBranches where
   datum = liftA2 StampedBranches (option 0 datum) datum
 instance Lens1 Int Int StampedBranches StampedBranches where
   l'1 = lens (\(StampedBranches x _) -> x) (\(StampedBranches _ x) y -> StampedBranches y x)
 instance Lens2 Branches Branches StampedBranches StampedBranches where
   l'2 = lens (\(StampedBranches _ x) -> x) (\(StampedBranches x _) y -> StampedBranches x y)
 
-data VCKey o = LibraryKey LibraryID (WithResponse Bytes)
-             | AdditionalKey LibraryID String (WithResponse (Signed (String,Bytes)))
-             | BranchesKey PublicKey (WithResponse (Signed StampedBranches))
-             | CommitKey Hash (WithResponse Commit)
+data VCKey o = LibraryKey LibraryID (Proxy Bytes)
+             | AdditionalKey LibraryID String (Proxy (Signed (String,Bytes)))
+             | BranchesKey PublicKey (Proxy (Signed StampedBranches))
+             | CommitKey Hash (Proxy Commit)
              | OtherKey o
            deriving (Show,Generic)
-instance Serializable o => Serializable (VCKey o)
-instance Format o => Format (VCKey o)
-instance Serializable o => Eq (VCKey o) where a==b = compare a b==EQ
-instance Serializable o => Ord (VCKey o) where compare = comparing serialize
+instance Serializable Word8 Builder Bytes o => Serializable Word8 Builder Bytes (VCKey o)
+instance Format Word8 Builder Bytes o => Format Word8 Builder Bytes (VCKey o)
+instance Serializable Word8 Builder Bytes o => Eq (VCKey o) where a==b = compare a b==EQ
+instance Serializable Word8 Builder Bytes o => Ord (VCKey o) where compare = comparing (\x -> serialize x :: Bytes)
 instance Functor VCKey where
   map f (OtherKey o) = OtherKey (f o)
   map _ (LibraryKey a b) = LibraryKey a b
@@ -48,12 +48,12 @@ instance Functor VCKey where
   map _ (BranchesKey a b) = BranchesKey a b
 
 class MonadIO vc => MonadVC vc s | vc -> s where
-  vcStore :: Serializable a => s -> (WithResponse a -> VCKey ()) -> a -> vc ()
-  vcLoad :: Format a => s -> (WithResponse a -> VCKey ()) -> vc (Maybe a)
+  vcStore :: Serializable Word8 Builder Bytes a => s -> (Proxy a -> VCKey ()) -> a -> vc ()
+  vcLoad :: Format Word8 Builder Bytes a => s -> (Proxy a -> VCKey ()) -> vc (Maybe a)
   runVC :: vc a -> IO a
 
-keyName :: (WithResponse a -> VCKey ()) -> String
-keyName k = show (B64Chunk (serialize (k WithResponse :: VCKey ())^.chunk))
+keyName :: (Proxy a -> VCKey ()) -> String
+keyName k = show (B64Chunk (serialize (k Proxy :: VCKey ())^.chunk))
 
 newtype Dummy_VC a = Dummy_VC (IO a)
                    deriving (Functor,SemiApplicative,Unit,Applicative)
@@ -106,7 +106,7 @@ instance Monad Client_VC where join = coerceJoin Client_VC
 instance MonadIO Client_VC where liftIO = Client_VC
 instance MonadVC Client_VC Client_Handle where
   vcStore (Client_Handle lock conn) k l = liftIO $ withMVar lock $ \_ -> 
-    writeHSerial conn ((True,k WithResponse),l)
+    writeHSerial conn ((True,k Proxy),l)
   vcLoad (Client_Handle lock conn) k = liftIO $ withMVar lock $ \_ ->
     try (return Nothing)
     $ runConnection Just False conn
@@ -133,10 +133,10 @@ instance (MonadVC vc1 conn1, MonadVC vc2 conn2) => MonadVC (Combined_VC vc1 vc2)
       _ -> lift (vcLoad c2 k)
   runVC (Combined_VC (Compose m)) = runVC m >>= runVC
 
-pMaybe :: WithResponse (Maybe a) -> WithResponse a
-pMaybe _ = WithResponse
-maybeP :: WithResponse a -> WithResponse (Maybe a)
-maybeP _ = WithResponse
+pMaybe :: Proxy (Maybe a) -> Proxy a
+pMaybe _ = Proxy
+maybeP :: Proxy a -> Proxy (Maybe a)
+maybeP _ = Proxy
 
 vcServer :: (?write :: Bytes -> IO (), MonadIO m) => VCSBackend -> ParserT Bytes m ()
 vcServer (VCSB_Native _ st run) = do
@@ -155,11 +155,11 @@ vcServer (VCSB_Native _ st run) = do
     BranchesKey pub t       -> sending (maybeP t) =<< liftIO (run $ vcLoad st (BranchesKey pub))
     OtherKey ()             -> return ()
 
-vcbStore :: (Serializable a,MonadIO m) => VCSBackend -> (WithResponse a -> VCKey ()) -> a -> m ()
+vcbStore :: (Serializable Word8 Builder Bytes a,MonadIO m) => VCSBackend -> (Proxy a -> VCKey ()) -> a -> m ()
 vcbStore (VCSB_Native _ st run) k a = liftIO (run (vcStore st k a))
-vcbLoad :: (Format a,MonadIO m) => VCSBackend -> (WithResponse a -> VCKey ()) -> m (Maybe a)
+vcbLoad :: (Format Word8 Builder Bytes a,MonadIO m) => VCSBackend -> (Proxy a -> VCKey ()) -> m (Maybe a)
 vcbLoad (VCSB_Native _ st run) k = liftIO (run (vcLoad st k))
-vcbLoadP :: (Format a,MonadIO m) => VCSBackend -> (WithResponse a -> VCKey ()) -> ParserT s m a
+vcbLoadP :: (Format Word8 Builder Bytes a,MonadIO m) => VCSBackend -> (Proxy a -> VCKey ()) -> ParserT s m a
 vcbLoadP b k = vcbLoad b k >>= maybe zero return
 
 data VCSBackend = forall m s. MonadVC m s => VCSB_Native [String] s (forall a. m a -> IO a)

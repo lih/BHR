@@ -12,9 +12,9 @@ import Curly.System.Base
 newtype Instruction = Instruction String
 
 strEncode :: String -> Builder
-strEncode = foldMap encode
+strEncode = foldMap (encode (Proxy :: Proxy Bytes))
 instance BCSerializable Instruction where
-  bcEncode (Instruction s) = BC 1 1 (foldMap encode (s+";")^..bytesBuilder)
+  bcEncode (Instruction s) = BC 1 1 (foldMap (encode (Proxy :: Proxy Bytes)) (s+";")^..bytesBuilder)
 
 system = System "javascript" id (Standalone (void . rawProgram [TextSection])) Nothing
          (RawSystem (yb bytesBuilder . strEncode . generateJS . anonymous . by leafVal))

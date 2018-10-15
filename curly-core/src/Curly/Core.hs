@@ -59,8 +59,8 @@ instance Foldable (ExprNode s) where
 instance Traversable (ExprNode s) where
   sequence (Lambda s a) = Lambda s<$>a
   sequence (Apply ff fx) = Apply<$>ff<*>fx
-instance (Serializable a,Serializable s) => Serializable (ExprNode s a)
-instance (Format a,Format s) => Format (ExprNode s a)
+instance (Serializable Word8 Builder Bytes a,Serializable Word8 Builder Bytes s) => Serializable Word8 Builder Bytes (ExprNode s a)
+instance (Format Word8 Builder Bytes a,Format Word8 Builder Bytes s) => Format Word8 Builder Bytes (ExprNode s a)
 
 c'Expression :: Constraint (Expression a b)
 c'Expression = c'_
@@ -203,14 +203,14 @@ curlyCommitDir = curlyDirPath (curlyUserDir + "/commits")
 -- | A Curly log level
 data LogLevel = Quiet | Chatty | Verbose | Debug
               deriving (Eq,Ord,Show,Generic)
-instance Serializable LogLevel
-instance Format LogLevel
+instance Serializable Word8 Builder Bytes LogLevel
+instance Format Word8 Builder Bytes LogLevel
 data LogMessage = LogLine LogLevel String
                 | LogActionStart String
                 | LogActionEnd String Bool
                 deriving (Show,Generic)
-instance Format LogMessage
-instance Serializable LogMessage
+instance Format Word8 Builder Bytes LogMessage
+instance Serializable Word8 Builder Bytes LogMessage
 
 -- The global log level, as set by the environment variable CURLY_LOGLEVEL
 envLogLevel :: LogLevel
@@ -368,7 +368,7 @@ instance HasIdents s s' t t' => HasIdents s s' (Maybe t) (Maybe t') where
 
 data RelocationSize = RS_16 | RS_32 | RS_64
                     deriving (Eq,Ord,Show,Generic)
-instance Serializable RelocationSize ; instance Format RelocationSize
+instance Serializable Word8 Builder Bytes RelocationSize ; instance Format Word8 Builder Bytes RelocationSize
 data BinaryRelocation = BinaryRelocation {
   _br_PCRelative :: Bool,
   _br_size :: RelocationSize,
@@ -376,8 +376,8 @@ data BinaryRelocation = BinaryRelocation {
   _br_symoffset :: Int
   }
                       deriving (Eq,Ord,Show,Generic)
-instance Serializable BinaryRelocation
-instance Format BinaryRelocation
+instance Serializable Word8 Builder Bytes BinaryRelocation
+instance Format Word8 Builder Bytes BinaryRelocation
 -- | The type of all Curly builtins
 data Builtin = B_Undefined
              | B_Seq
@@ -421,15 +421,15 @@ instance Documented Builtin where
     where show' (B_Number n) = show n
           show' (B_String s) = show s
           show' b = show b
-instance Serializable Builtin where
-instance Format Builtin where
+instance Serializable Word8 Builder Bytes Builtin where
+instance Format Word8 Builder Bytes Builtin where
 instance NFData Builtin where rnf b = b`seq`()
 
 newtype Compressed a = Compressed { unCompressed :: a }
                      deriving (Show,Eq,Ord)
-instance Serializable a => Serializable (Compressed a) where
-  encode (Compressed a) = encode (compress (serialize a))
-instance Format a => Format (Compressed a) where
+instance Serializable Word8 Builder Bytes a => Serializable Word8 Builder Bytes (Compressed a) where
+  encode p (Compressed a) = encode p (compress (serialize a))
+instance Format Word8 Builder Bytes a => Format Word8 Builder Bytes (Compressed a) where
   datum = (datum <&> decompress) >*> (Compressed <$> datum)
 
 noCurlySuf :: FilePath -> Maybe FilePath
@@ -445,18 +445,18 @@ instance Show Hash where
   show (Hash h) = show (B64Chunk h)
 instance Read Hash where
   readsPrec _ = readsParser (readable <&> \(B64Chunk h) -> Hash h)
-instance Serializable Hash where
-  encode (Hash h) = h^.chunkBuilder
-instance Format Hash where
+instance Serializable Word8 Builder Bytes Hash where
+  encode _ (Hash h) = h^.chunkBuilder
+instance Format Word8 Builder Bytes Hash where
   datum = Hash<$>getChunk 32
 
 newtype LibraryID = LibraryID Chunk
                 deriving (Eq,Ord,Generic)
 idSize :: Int
 idSize = 32
-instance Serializable LibraryID where
-  encode (LibraryID x) = x^.chunkBuilder
-instance Format LibraryID where
+instance Serializable Word8 Builder Bytes LibraryID where
+  encode _ (LibraryID x) = x^.chunkBuilder
+instance Format Word8 Builder Bytes LibraryID where
   datum = LibraryID<$>getChunk idSize
 instance NFData LibraryID
 instance Show LibraryID where
@@ -473,8 +473,8 @@ instance Documented GlobalID where
              else \(GlobalID n _) -> Pure n
     where showL (Just (n,l)) = "["+show l+":"+n+"]"
           showL _ = "[]"
-instance Serializable GlobalID
-instance Format GlobalID
+instance Serializable Word8 Builder Bytes GlobalID
+instance Format Word8 Builder Bytes GlobalID
 instance NFData GlobalID
 instance Identifier GlobalID where
   pureIdent n = GlobalID n Nothing

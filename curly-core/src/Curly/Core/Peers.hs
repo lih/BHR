@@ -10,19 +10,19 @@ import System.IO (hSetBuffering,BufferMode(..))
 
 type InstanceName = String
 type PeerErrorMessage = String
-data PeerPacket = DeclareInstance InstanceName (WithResponse (Either PeerErrorMessage PeerPort))
-                | RedeclareInstance InstanceName PeerPort (WithResponse Bool)
-                | AskInstance InstanceName (WithResponse (Either PeerErrorMessage PeerPort))
-                | AskInstances (WithResponse [InstanceName])
+data PeerPacket = DeclareInstance InstanceName (Proxy (Either PeerErrorMessage PeerPort))
+                | RedeclareInstance InstanceName PeerPort (Proxy Bool)
+                | AskInstance InstanceName (Proxy (Either PeerErrorMessage PeerPort))
+                | AskInstances (Proxy [InstanceName])
                 deriving Generic
 
 newtype PeerPort = PeerPort { getPeerPortNumber :: PortNumber }
-instance Serializable PeerPort where
-  encode = encode . c'int . fromIntegral . getPeerPortNumber
-instance Format PeerPort where
+instance Serializable Word8 Builder Bytes PeerPort where
+  encode p = encode p . c'int . fromIntegral . getPeerPortNumber
+instance Format Word8 Builder Bytes PeerPort where
   datum = PeerPort . fromIntegral . c'int <$> datum
-instance Serializable PeerPacket
-instance Format PeerPacket
+instance Serializable Word8 Builder Bytes PeerPacket
+instance Format Word8 Builder Bytes PeerPacket
 
 processInstances :: IORef (Set InstanceName)
 processInstances = newIORef zero^.thunk

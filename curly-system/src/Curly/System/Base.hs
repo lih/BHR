@@ -87,7 +87,7 @@ bcEstimate = lens _bcEstimate (\x y -> x { _bcEstimate = y })
 bData :: Lens' BinaryCode Bytes
 bData = lens _bData (\x y -> x { _bData = y })
 
-binaryCode :: Serializable s => (Maybe Int,Int) -> s -> BinaryCode
+binaryCode :: Serializable Word8 Builder Bytes s => (Maybe Int,Int) -> s -> BinaryCode
 binaryCode (mlo,hi) s = bytesCode (mlo,hi) (serialize s)
 bytesCode :: (Maybe Int,Int) -> Bytes -> BinaryCode
 bytesCode (mlo,hi) bs = BC lo hi bs
