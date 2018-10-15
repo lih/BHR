@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                capricon
-version:             0.7
+version:             0.7.1
 -- synopsis:            
 -- description:         
 license:             GPL-3
@@ -37,6 +37,17 @@ executable capricon
   -- other-extensions:    
   build-depends: base,definitive-base, definitive-parser, capricon
   ghc-options: -Wincomplete-patterns -Wname-shadowing -W -Werror
+  hs-source-dirs:      exe
+  default-language:    Haskell2010
+executable WiQEE.js
+  if !impl(haste)
+    buildable: False
+  main-is:             WiQEE.hs
+  default-extensions: RebindableSyntax, ViewPatterns, TupleSections, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, LambdaCase, TypeOperators, RankNTypes, GeneralizedNewtypeDeriving, TypeFamilies
+  -- other-modules:       
+  -- other-extensions:    
+  haste-options: --opt-all
+  build-depends: base,definitive-base, definitive-parser, capricon, haste-lib, filepath
   hs-source-dirs:      exe
   default-language:    Haskell2010
 -- executable coinche

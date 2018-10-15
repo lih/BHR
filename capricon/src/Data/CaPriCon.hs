@@ -1,20 +1,28 @@
-{-# LANGUAGE UndecidableInstances #-}
-module Data.CaPriCon where
+{-# LANGUAGE UndecidableInstances, OverloadedStrings, NoMonomorphismRestriction, DeriveGeneric, ConstraintKinds #-}
+module Data.CaPriCon(
+  -- * Expression nodes
+  IsCapriconString(..),BindType(..),Node(..),ApHead(..),Application(..),
+  -- ** Managing De Bruijin indices
+  adjust_depth,adjust_telescope_depth,inc_depth,free_vars,
+  -- ** General term substitution and type inference
+  subst,substn,type_of,mu_type,
+  -- ** Expression directories
+  StringPattern,NodeDir(..),AHDir(..),ApDir,
+  findPattern,freshContext,
+  -- * Showing nodes
+  showNode,showNode'
+  ) where
 
 import Definitive
+import Language.Format
+import GHC.Generics (Generic)
 
-data BindType = Lambda | Prod
-              deriving (Show,Eq,Ord)
-data Node = Bind BindType String Node Node
-          | Cons Application
-          | Universe Int
-          deriving Show
-data ApHead = Sym Int | Mu [(String,Node,Node)] [Node] Application
-            deriving Show
-data Application = Ap ApHead [Node]
-                 deriving Show 
-type Env = [Node]
+sequence2 :: (Applicative f,Traversable t,Traversable u) => t (u (f a)) -> f (t (u a))
+sequence2 = sequence.map sequence
+sequence3 :: (Applicative f,Traversable t,Traversable u,Traversable v) => t (u (v (f a))) -> f (t (u (v a)))
+sequence3 = sequence.map sequence2
 
+type FreeMap f a = Cofree f (Maybe a)
 instance (Semigroup a, Semigroup (Coforest f a)) => Semigroup (Cofree f a) where
   Step a b + Step a' b' = Step (a+a') (b+b')
 instance (Monoid a, Monoid (Coforest f a)) => Monoid (Cofree f a) where
@@ -25,70 +33,102 @@ instance (DataMap (f (FreeMap f a)) k (FreeMap f a)) => DataMap (FreeMap f a) [k
 coforest :: Lens' (Cofree f a) (Coforest f a)
 coforest = lens (\(Step _ m) -> m) (\(Step a _) m -> Step a m)
 
-type FreeMap f a = Cofree f (Maybe a)
+class (Ord str,Show str,Monoid str,Sequence str,IsString str) => IsCapriconString str where
+  toString :: str -> String
+instance IsCapriconString String where
+  toString = id
 
-data NodeDir a = NodeDir
-  (Map BindType (NodeDir (NodeDir a)))
-  (ApDir a)
+type ListStream = [Word8]
+type ListBuilder = ListStream -> ListStream
+instance SerialStream Word8 ListBuilder ListStream where
+  encodeByte _ b = (b:)
+  toSerialStream k = k []
+
+-- | Inductive types
+data BindType = Lambda | Prod
+              deriving (Show,Eq,Ord,Generic)
+data Node str = Bind BindType str (Node str) (Node str)
+              | Cons (Application str)
+              | Universe Int
+          deriving (Show,Generic)
+data ApHead str = Sym Int | Mu [(str,Node str,Node str)] [Node str] (Application str)
+            deriving (Show,Generic)
+data Application str = Ap (ApHead str) [Node str]
+                 deriving (Show,Generic) 
+type Env str = [Node str]
+
+type ListSerializable a = (Serializable Word8 ListBuilder ListStream a)
+type ListFormat a = (Format Word8 ListBuilder ListStream a)
+instance ListSerializable BindType
+instance ListFormat BindType
+instance ListSerializable str => ListSerializable (Node str)
+instance ListFormat str => ListFormat (Node str)
+instance ListSerializable str => ListSerializable (ApHead str)
+instance ListFormat str => ListFormat (ApHead str)
+instance ListSerializable str => ListSerializable (Application str)
+instance ListFormat str => ListFormat (Application str)
+
+data NodeDir str a = NodeDir
+  (Map BindType (NodeDir str (NodeDir str a)))
+  (ApDir str a)
   (Map Int a)
-  deriving (Eq,Ord,Show)
-instance Functor NodeDir where
+  deriving (Eq,Ord,Show,Generic)
+instance Functor (NodeDir str) where
   map f (NodeDir a b c) = NodeDir (map3 f a) (map3 f b) (map f c)
-instance Foldable NodeDir where
+instance Foldable (NodeDir str) where
   fold (NodeDir a b c) = (fold.map fold.map2 fold) a + (fold.map fold.map2 fold) b + fold c
-instance Traversable NodeDir where
+instance Traversable (NodeDir str) where
   sequence (NodeDir a b c) = NodeDir<$>sequence3 a<*>sequence3 b<*>sequence c
+instance (ListSerializable str, ListSerializable a) => ListSerializable (NodeDir str a)
+instance (ListFormat str, ListFormat a) => ListFormat (NodeDir str a)
 
-sequence2 :: (Applicative f,Traversable t,Traversable u) => t (u (f a)) -> f (t (u a))
-sequence2 = sequence.map sequence
-sequence3 :: (Applicative f,Traversable t,Traversable u,Traversable v) => t (u (v (f a))) -> f (t (u (v a)))
-sequence3 = sequence.map sequence2
-
-i'NodeDir :: Iso (NodeDir a) (NodeDir a')
-             ((,,) (Map BindType (NodeDir (NodeDir a)))
-               (ApDir a)
+i'NodeDir :: Iso (NodeDir str a) (NodeDir str' a')
+             ((,,) (Map BindType (NodeDir str (NodeDir str a)))
+               (ApDir str a)
                (Map Int a))
-             ((,,) (Map BindType (NodeDir (NodeDir a')))
-               (ApDir a')
+             ((,,) (Map BindType (NodeDir str' (NodeDir str' a')))
+               (ApDir str' a')
                (Map Int a'))
 i'NodeDir = iso (\(x,y,z) -> NodeDir x y z) (\(NodeDir x y z) -> (x,y,z))
 
-type ApDir a = AHDir (FreeMap NodeDir a)
-data AHDir a = AHDir
+type ApDir str a = AHDir str (FreeMap (NodeDir str) a)
+data AHDir str a = AHDir
   (Map Int a)
-  (Map Int (ApDir a))
-  deriving (Eq,Ord,Show)
-instance Functor AHDir where
+  (Map Int (ApDir str a))
+  deriving (Eq,Ord,Show,Generic)
+instance Functor (AHDir str) where
   map f (AHDir a b) = AHDir (map f a) ((map2.map2) f b)
-instance Foldable AHDir where
+instance Foldable (AHDir str) where
   fold (AHDir a b) = fold a + (fold.map fold.map2 fold.map3 fold) b
-instance Traversable AHDir where
+instance Traversable (AHDir str) where
   sequence (AHDir a b) = AHDir<$>sequence a<*>(sequence3.map3 sequence) b
-i'AHDir :: Iso (AHDir a) (AHDir a')
-           ((,) (Map Int a) (Map Int (ApDir a)))
-           ((,) (Map Int a') (Map Int (ApDir a')))
+instance (ListSerializable str, ListSerializable a) => ListSerializable (AHDir str a)
+instance (ListFormat str, ListFormat a) => ListFormat (AHDir str a)
+i'AHDir :: Iso (AHDir str a) (AHDir str' a')
+           ((,) (Map Int a) (Map Int (ApDir str a)))
+           ((,) (Map Int a') (Map Int (ApDir str' a')))
 i'AHDir = iso (uncurry AHDir) (\(AHDir x y) -> (x,y))
 
 i'Cofree :: Iso (Cofree f a) (Cofree f' a') (a,Coforest f a) (a',Coforest f' a')
 i'Cofree = iso (uncurry Step) (\(Step x y) -> (x,y))
 
-instance Semigroup (NodeDir a) where NodeDir a b c + NodeDir a' b' c' = NodeDir (a+a') (b+b') (c+c')
-instance Monoid (NodeDir a) where zero = NodeDir zero zero zero
-instance DataMap (NodeDir a) Node a where
+instance Semigroup (NodeDir str a) where NodeDir a b c + NodeDir a' b' c' = NodeDir (a+a') (b+b') (c+c')
+instance Monoid (NodeDir str a) where zero = NodeDir zero zero zero
+instance DataMap (NodeDir str a) (Node str) a where
   at (Bind t _ tx e) = from i'NodeDir.l'1.at t.l'Just zero.at tx.l'Just zero.at e
   at (Cons a) = from i'NodeDir.l'2.atAp a
   at (Universe u) = from i'NodeDir.l'3.at u
 
-instance Semigroup (AHDir a) where AHDir a b + AHDir a' b' = AHDir (a+a') (b+b')
-instance Monoid (AHDir a) where zero = AHDir zero zero
-instance DataMap (AHDir a) ApHead a where
+instance Semigroup (AHDir str a) where AHDir a b + AHDir a' b' = AHDir (a+a') (b+b')
+instance Monoid (AHDir str a) where zero = AHDir zero zero
+instance DataMap (AHDir str a) (ApHead str) a where
   at (Sym i) = from i'AHDir.l'1.at i
   at (Mu xs _ a) = from i'AHDir.l'2.at (length xs).l'Just zero.atAp a
 
-  
-atAp :: Application -> Lens' (ApDir a) (Maybe a)
-atAp (Ap h xs) = at h.l'Just zero.at xs
+type StringPattern str = [str :+: Int]
 
+atAp :: Application str -> Lens' (ApDir str a) (Maybe a)
+atAp (Ap h xs) = at h.l'Just zero.at xs
 
 mayChoose (Just x) = return x
 mayChoose Nothing = zero
@@ -96,11 +136,11 @@ mayChoose Nothing = zero
 (<++>) :: WriterT w [] a -> WriterT w [] a -> WriterT w [] a
 a <++> b = a & from writerT %~ (+ b^..writerT)
 
-findPattern :: NodeDir a -> Node -> [([([(String,Node)],Int,Node)],a)]
+findPattern :: NodeDir str a -> Node str -> [([([(str,Node str)],Int,Node str)],a)]
 findPattern = \x y -> go [] x y^..writerT
-  where go :: [(String,Node)] -> NodeDir a -> Node -> WriterT [([(String,Node)],Int,Node)] [] a
-        go_a :: [(String,Node)] -> ApDir a -> Application -> WriterT [([(String,Node)],Int,Node)] [] a
-        go_ah :: [(String,Node)] -> AHDir a -> ApHead -> WriterT [([(String,Node)],Int,Node)] [] a
+  where go :: [(str,Node str)] -> NodeDir str a -> Node str -> WriterT [([(str,Node str)],Int,Node str)] [] a
+        go_a :: [(str,Node str)] -> ApDir str a -> Application str -> WriterT [([(str,Node str)],Int,Node str)] [] a
+        go_ah :: [(str,Node str)] -> AHDir str a -> ApHead str -> WriterT [([(str,Node str)],Int,Node str)] [] a
         withEnv env d x m = foldr (\(i,as) ma -> ma <++> (foldl'.foldl') (\l a -> (tell [(env,i-length env,x)] >> return a) <++> l) zero as)
                             m (d^??from i'NodeDir.l'2.from i'AHDir.l'1.ascList.each.sat ((>=length env) . fst))
         go env d wh@(Bind t x tx e) = withEnv env d wh $ do
@@ -147,7 +187,7 @@ adjust_depth f = go 0
 inc_depth 0 = \x -> x
 inc_depth dx = adjust_depth (+dx)
 adjust_telescope_depth field f = zipWith (field . adjust_depth . \i j -> if j<i then j else i+f (j-i)) [0..]
-free_vars :: Node -> Set Int
+free_vars :: Node str -> Set Int
 free_vars (Bind _ _ tx e) = free_vars tx + delete (-1) (map (subtract 1) (free_vars e))
 free_vars (Cons a) = freeA a
   where freeA (Ap (Sym i) xs) = singleton' i + foldMap free_vars xs
@@ -156,9 +196,9 @@ free_vars (Cons a) = freeA a
           where envS = length env
 free_vars _ = zero
 
-subst :: MonadReader Env m => Node -> Node -> m Node
+subst :: (IsCapriconString str, MonadReader (Env str) m) => Node str -> Node str -> m (Node str)
 subst = flip substn 0
-substn :: MonadReader Env m => Node -> Int -> Node -> m Node
+substn :: (IsCapriconString str, MonadReader (Env str) m) => Node str -> Int -> Node str -> m (Node str)
 substn val n | n>=0 = go n
              | otherwise = error "'subst' should not be called with a negative index"
   where go d (Bind t x tx e) = do
@@ -195,39 +235,37 @@ substn val n | n>=0 = go n
                                | x <- xs])
               return $ foldl' (\e (x,_,tx) -> Bind Lambda x tx e) a' env
         go_mu _ e t (Cons a) = return $ Cons (Ap (Mu e t a) [])
-        go_mu _ _ _ x' = error $ "Cannot produce an induction principle for a term : "+show x'
+        go_mu _ _ _ x' = error $ fromString "Cannot produce an induction principle for a term : "+fromString (show x')
 
         rec_subst (y:t) (Bind Lambda _ _ e) = rec_subst t =<< subst y e
         rec_subst xs (Cons (Ap h hxs)) = return (Cons (Ap h (hxs+xs)))
         rec_subst [] x = return x
-        rec_subst _ x = error $ "Invalid substitution of non-lambda expression : "+show x
+        rec_subst _ x = error $ fromString "Invalid substitution of non-lambda expression : "+fromString (show x)
 
 par lvl d msg | d>lvl = "("+msg+")"
               | otherwise = msg
-fresh env v = head $ select (not . (`elem` env)) (v:[v+show i | i <- [0..]])
+fresh env v = head $ select (not . (`elem` env)) (v:[v+fromString (show i) | i <- [0..]])
 freshContext = go []
   where go env ((n,v):t) = let n' = fresh env n in (n',(n,v)):go (n':env) t
         go _ [] = []
 
-type StringPattern = [String :+: Int]
-
 showNode = showNode' zero
-showNode' :: NodeDir ([String],StringPattern) -> [(String,Node)] -> Node -> String
+showNode' :: IsCapriconString str => NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> Node str -> str
 showNode' dir = go 0
   where go d env x | (pats,(_,k)):_ <- findPattern dir x =
                        let holes = c'map $ fromAList [(i,(env',hole)) | (env',i,hole) <- pats] in
-                         par (if empty pats then 1000 else 1) d $ intercalate " " [
+                         par (if empty pats then 1000 else 1 :: Int) d $ intercalate (fromString " ") [
                          case word of
                            Left w -> w
                            Right i | Just (env',hole) <- lookup i holes -> go 2 (env'+env) hole
-                                   | otherwise -> ""
+                                   | otherwise -> zero
                          | word <- k]
-        go _ _ (Universe u) = "Set"+show u
+        go _ _ (Universe u) = "Set"+fromString (show u)
         go d env whole@(Bind t aname atype body) | t == Lambda || 0`isKeyIn`free_vars body = par 0 d $ bind_head t + drop 1 (bind_tail env whole)
-                                                 | otherwise = par 0 d $ go 1 env atype + " -> " + go 0 ((aname,atype):env) body
+                                                 | otherwise = par 0 d $ go 1 env atype + fromString " -> " + go 0 ((aname,atype):env) body
           where bind_head Lambda = "λ"
                 bind_head Prod = "∀"
-                bind_tail env' (Bind t' x tx e) | t==t' && (t==Lambda || 0`isKeyIn`free_vars e) = " ("+x'+":"+go 0 env' tx+")"+bind_tail ((x',tx):env') e
+                bind_tail env' (Bind t' x tx e) | t==t' && (t==Lambda || 0`isKeyIn`free_vars e) = fromString " ("+x'+fromString ":"+go 0 env' tx+fromString ")"+bind_tail ((x',tx):env') e
                   where x' = fresh (map fst env') x
                 bind_tail env' x = ", "+go 0 env' x
         go d env (Cons a) = showA d a
@@ -235,12 +273,12 @@ showNode' dir = go 0
                   let ni = case h of
                              Sym i -> case drop i env of
                                         (h',_):_ -> h'
-                                        _ -> "#"+show i
+                                        _ -> "#"+fromString (show i)
                              Mu _ _ a' -> "μ("+showA 0 a'+")"
                       lvl = if empty xs then 1000 else 1
                   in par lvl d $ ni+foldMap ((" "+) . go 2 env) xs
 
-type_of :: MonadReader Env m => Node -> m (Maybe Node)
+type_of :: (IsCapriconString str,MonadReader (Env str) m) => Node str -> m (Maybe (Node str))
 type_of = yb maybeT . go
   where go (Bind Lambda x tx e) = Bind Prod x tx <$> local (tx:) (go e)
         go (Bind Prod _ tx e) = do
@@ -265,7 +303,7 @@ type_of = yb maybeT . go
                 rec_subst [] x = return x
                 rec_subst _ _ = zero
 
-mu_type :: MonadReader Env m => Node -> m (Maybe Node)
+mu_type :: MonadReader (Env str) m => Node str -> m (Maybe (Node str))
 mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
   where
     root_args = go' root_type

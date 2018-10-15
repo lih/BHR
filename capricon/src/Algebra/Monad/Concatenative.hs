@@ -1,10 +1,12 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, GeneralizedNewtypeDeriving, LambdaCase #-}
-module Algebra.Monad.Concatenative(ConcatT,concatT,MonadStack(..),StackBuiltin(..),StackVal(..),t'StackDict,StackState,defaultState,Opaque(..)) where
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, GeneralizedNewtypeDeriving, LambdaCase, DeriveGeneric #-}
+module Algebra.Monad.Concatenative(StackBuiltin(..),StackVal(..),t'StackDict,StackState,defaultState,StackSymbol(..),AtomClass(..),ConcatT,concatT,MonadStack(..),Opaque(..)) where
 
 import Definitive
 import Language.Parser
+import GHC.Generics
 
 newtype Opaque a = Opaque a
+                 deriving (Generic)
 instance Show (Opaque a) where show _ = "#<opaque>"
 data StackBuiltin b = Builtin_ListBegin | Builtin_ListEnd
                     | Builtin_Clear | Builtin_Stack
@@ -19,7 +21,7 @@ data StackBuiltin b = Builtin_ListBegin | Builtin_ListEnd
                     | Builtin_CurrentDict | Builtin_Empty | Builtin_Insert | Builtin_Lookup | Builtin_Delete | Builtin_Keys
                     | Builtin_Quote
                     | Builtin_Extra b
-                    deriving Show
+                    deriving (Show,Generic)
 data StackVal s b a = StackBuiltin (StackBuiltin b)
                     | StackInt Int
                     | StackSymbol s
@@ -27,7 +29,7 @@ data StackVal s b a = StackBuiltin (StackBuiltin b)
                     | StackDict (Map s (StackVal s b a))
                     | StackProg [s]
                     | StackExtra (Opaque a)
-                    deriving Show
+                    deriving (Show,Generic)
 
 t'StackDict :: Traversal' (StackVal s b a) (Map s (StackVal s b a))
 t'StackDict k (StackDict d) = StackDict <$> k d
@@ -40,6 +42,7 @@ data StackState st s b a = StackState {
   _dict :: Map s (StackVal s b a),
   _extraState :: st
   }
+  deriving Generic
 
 stack :: Lens' (StackState st s b a) [StackVal s b a]
 stack = lens _stack (\x y -> x { _stack = y })
@@ -176,7 +179,7 @@ class (StackSymbol s,Monad m) => MonadStack st s b a m | m -> st s b a where
   runDictState :: State (Map s (StackVal s b a)) x -> m x
 
 newtype ConcatT st b o s m a = ConcatT { _concatT :: StateT (StackState st s b o) m a }
-                          deriving (Functor,SemiApplicative,Unit,Applicative,MonadIO,MonadTrans)
+                          deriving (Functor,SemiApplicative,Unit,Applicative,MonadTrans)
 instance Monad m => Monad (ConcatT st b o s m) where join = coerceJoin ConcatT
 instance (StackSymbol s,Monad m) => MonadStack st s b a (ConcatT st b a s m) where
   execSymbol x y z = ConcatT $ execSymbolImpl (execBuiltin (map _concatT x) (map _concatT y)) (map _concatT y) z

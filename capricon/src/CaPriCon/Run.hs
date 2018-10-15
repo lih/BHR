@@ -1,56 +1,61 @@
-{-# LANGUAGE CPP, NoMonomorphismRestriction #-}
+{-# LANGUAGE CPP, NoMonomorphismRestriction, OverloadedStrings, ScopedTypeVariables, DeriveGeneric, ConstraintKinds, UndecidableInstances #-}
 module CaPriCon.Run where
 
 import Definitive
-import Language.Parser
+import Language.Format
 import Algebra.Monad.Concatenative
-import System.Environment (lookupEnv)
 import Data.CaPriCon
+import GHC.Generics (Generic)
+
+class Monad m => MonadSubIO io m where
+  liftSubIO :: io a -> m a
+instance MonadSubIO IO IO where liftSubIO = id
+instance MonadSubIO io m => MonadSubIO io (ConcatT st b o s m) where
+  liftSubIO ma = lift $ liftSubIO ma
 
 takeLast n l = drop (length l-n) l
 
+showStackVal :: IsCapriconString str => NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> StackVal str (COCBuiltin io str) (COCValue io str) -> str
 showStackVal dir ctx _x = case _x of
   StackExtra (Opaque _x) -> case _x of
     COCExpr d e -> -- "<"+show d+">:"+
       showNode' dir (map (second snd) $ takeLast d (freshContext ctx)) e
     COCNull -> "(null)"
-    COCDir d -> show d
-  StackSymbol s -> show s
-  StackInt n -> show n
-  _ -> show _x
-data COCBuiltin = COCB_Print | COCB_Open | COCB_ExecModule | COCB_GetEnv
-                | COCB_ToInt | COCB_Concat | COCB_Uni | COCB_Hyp
-                | COCB_Quit | COCB_Var
-                | COCB_Ap | COCB_Bind Bool BindType
-                | COCB_TypeOf | COCB_Mu
-                | COCB_HypBefore | COCB_Subst | COCB_Rename
-                | COCB_ContextVars
-                | COCB_GetShowDir | COCB_SetShowDir | COCB_InsertNodeDir
-                | COCB_Format
-                deriving Show
+    COCDir d -> fromString $ show d
+  StackSymbol s -> fromString $ show s
+  StackInt n -> fromString $ show n
+  _ -> fromString $ show _x
+data COCBuiltin io str = COCB_Print | COCB_Open (OpenImpl io str) | COCB_ExecModule (WriteImpl io str) | COCB_GetEnv
+                       | COCB_ToInt | COCB_Concat | COCB_Uni | COCB_Hyp
+                       | COCB_Quit | COCB_Var
+                       | COCB_Ap | COCB_Bind Bool BindType
+                       | COCB_TypeOf | COCB_Mu
+                       | COCB_HypBefore | COCB_Subst | COCB_Rename
+                       | COCB_ContextVars
+                       | COCB_GetShowDir | COCB_SetShowDir | COCB_InsertNodeDir
+                       | COCB_Format
+                       deriving (Show,Generic)
+data OpenImpl io str = OpenImpl (str -> io str)
+data WriteImpl io str = WriteImpl (str -> str -> io ())
+instance Show (OpenImpl io str) where show _ = "#<open>"
+instance Show (WriteImpl io str) where show _ = "#<write>"
 
-data COCState = COCState {
-  _endState :: Bool,
-  _context :: [(String,Node)],
-  _showDir :: NodeDir ([String],StringPattern),
-  _outputText :: String -> String
-  }
-endState :: Lens' COCState Bool
-endState = lens _endState (\x y -> x { _endState = y })
-context :: Lens' COCState [(String,Node)]
-context = lens _context (\x y -> x { _context = y })
-showDir :: Lens' COCState (NodeDir ([String],StringPattern))
-showDir = lens _showDir (\x y -> x { _showDir = y })
-outputText :: Lens' COCState (String -> String)
-outputText = lens _outputText (\x y -> x { _outputText = y })
+type ListSerializable a = (Serializable Word8 ([Word8] -> [Word8]) [Word8] a)
+type ListFormat a = (Format Word8 ([Word8] -> [Word8]) [Word8] a)
+instance Serializable Word8 ([Word8] -> [Word8]) [Word8] (OpenImpl io str) where encode _ _ = id
+instance Serializable Word8 ([Word8] -> [Word8]) [Word8] (WriteImpl io str) where encode _ _ = id
+instance ListSerializable str => ListSerializable (COCBuiltin io str)
+instance (ListFormat str,ListFormat (OpenImpl io str), ListFormat (WriteImpl io str)) => ListFormat (COCBuiltin io str)
 
-htmlQuote = foldMap qChar
+htmlQuote :: IsCapriconString str => str -> str
+htmlQuote = fromString . foldMap qChar . toString
   where qChar '<' = "&lt;"
         qChar '>' = "&gt;"
         qChar '&' = "&amp;"
         qChar c = [c]
-stringWords = fromBlank
-  where fromBlank (c:t) | c `elem` " \n\t\r" = fromBlank t
+stringWords :: IsCapriconString str => str -> [str]
+stringWords = map fromString . fromBlank . toString
+  where fromBlank (c:t) | c `elem` [' ', '\t', '\r', '\n'] = fromBlank t
                         | c == '"' = fromQuote id t
                         | otherwise = fromWChar (c:) t
         fromBlank "" = []
@@ -59,10 +64,43 @@ stringWords = fromBlank
           where qChar 'n' = '\n' ; qChar 't' = '\t' ; qChar x = x
         fromQuote k (c:t) = fromQuote (k.(c:)) t
         fromQuote k "" = ['"':k "\""]
-        fromWChar k (c:t) | c `elem` " \n\t\r" = k "":fromBlank t
+        fromWChar k (c:t) | c `elem` [' ', '\t', '\r', '\n'] = k "":fromBlank t
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
 
+literate :: forall str. IsCapriconString str => Parser String [str]
+literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " <+? cmdline "$> " <+? commentline) (single '\n')
+  where
+    wrapResult :: Bool -> [str] -> [str]
+    wrapResult isParagraph l = (if isParagraph then ":rbp" else ":rbs") : l + [if isParagraph then ":rep" else ":res"]
+    cmdline :: Parser String () -> Parser String [str]
+    cmdline pre = map (\x -> [":cp"+intercalate "\n" (map fst x)]
+                             + wrapResult True (foldMap snd x))
+                  (sepBy1' go (single '\n'))
+      where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x))
+    commentline = map (foldMap (pure . (":s"+) <|> \(x,t) -> t+[":cs"+x])) $ (<* lookingAt eol)
+      $ many' (map (Left . fromString) (many1' (noneOf ['{','\n'] <+?
+                                                (fill '{' $ single '{' <* lookingAt (noneOf ['{']))))
+                <+? map Right (between "{{" "}}"
+                                (many1' (noneOf ['}'] <+? fill '}' (single '}' <* lookingAt (noneOf ['}'])))
+                                 <&> \x -> (fromString x,wrapResult False (stringWords (fromString x))))))
+
+data COCState str = COCState {
+  _endState :: Bool,
+  _context :: [(str,Node str)],
+  _showDir :: NodeDir str ([str],StringPattern str),
+  _outputText :: str -> str
+  }
+endState :: Lens' (COCState str) Bool
+endState = lens _endState (\x y -> x { _endState = y })
+context :: Lens' (COCState str) [(str,Node str)]
+context = lens _context (\x y -> x { _context = y })
+showDir :: Lens' (COCState str) (NodeDir str ([str],StringPattern str))
+showDir = lens _showDir (\x y -> x { _showDir = y })
+outputText :: Lens' (COCState str) (str -> str)
+outputText = lens _outputText (\x y -> x { _outputText = y })
+
+runCOCBuiltin :: (MonadSubIO io m,IsCapriconString str, MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m) => COCBuiltin io str -> m ()
 runCOCBuiltin COCB_Quit = runExtraState (endState =- True)
 runCOCBuiltin COCB_Print = do
   s <- runStackState get
@@ -72,44 +110,32 @@ runCOCBuiltin COCB_Print = do
 runCOCBuiltin COCB_GetEnv = do
   st <- runStackState get
   case st of
-    StackSymbol s:t -> do
-      v <- lift $ lookupEnv s
-      runStackState (put (StackSymbol (maybe "" id v):t))
+    StackSymbol _:t -> do
+      -- v <- liftIO $ lookupEnv (toString s)
+      let v = Nothing -- TODO
+      runStackState (put (StackSymbol (fromString $ maybe "" id v):t))
     _ -> return ()
 
 runCOCBuiltin COCB_Format = do
   ex <- runExtraState get
   let format ('%':'s':s) (StackSymbol h:t) = first (h+) (format s t)
       format ('%':'v':s) (x:t) = first (showStackVal (ex^.showDir) (ex^.context) x+) (format s t)
-      format (c:s) t = first (c:) (format s t)
+      format (c:s) t = first (fromString [c]+) (format s t)
       format "" t = ("",t)
   runStackState $ modify $ \case
-    StackSymbol s:t -> uncurry ((:) . StackSymbol) (format s t)
+    StackSymbol s:t -> uncurry ((:) . StackSymbol) (format (toString s) t)
     st -> st
 
-runCOCBuiltin COCB_Open = do
+runCOCBuiltin (COCB_Open (OpenImpl getResource)) = do
   s <- runStackState get
   case s of
     StackSymbol f:t -> do
-      xs <- lift (try (return []) (try (readString f) (readString (f+".md")) >>= maybe undefined return . matches Just literate))
+      xs <- liftSubIO (getResource (f+".md")) >>= maybe undefined return . matches Just literate . toString
       runStackState (put (StackProg xs:t))
     _ -> return ()
-  where literate = intercalate [":\n"] <$> sepBy' (cmdline (several "> ") <+? cmdline (several "$> ")
-                                                            <+? commentline) (single '\n')
-        wrapLabel hide x = "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\" checked=\"checked\"/><span class=\"capricon-"+hide+"\"></span><span class=\"capricon-reveal\">"+x+"</span></label>"
-        wrapResult tag x l = (":<"+tag+" class=\"capricon-"+x+"result\">") : l + [":</"+tag+">"]
-        userInput = "<div class=\"user-input\"><input type=\"text\" class=\"capricon-input\" /><pre class=\"capricon-output\"></pre><button class=\"capricon-submit\">Run</button></div>"
-        cmdline pre = map (\x -> (":"+wrapLabel "hideparagraph" ("<div class=\"capricon-steps\"><pre class=\"capricon capricon-paragraph capricon-context\">"+htmlQuote (intercalate "\n" (map fst x))+"</pre>"+userInput+"</div>"))
-                                 : wrapResult "div" "paragraph" (foldMap snd x)) (sepBy1' go (single '\n'))
-          where go = do pre; many' (noneOf "\n") <&> \x -> (x,stringWords x)
-        commentline = map (foldMap (pure . (':':) <|> \(x,t) -> t+[':':(wrapLabel "hidestache" $ "<code class=\"capricon\">"+htmlQuote x+"</code>")])) $ (<* lookingAt eol)
-          $ many' (map Left (many1' (noneOf "{\n" <+? (fill '{' $ single '{' <* lookingAt (noneOf "{"))))
-                    <+? map Right (between (several "{{") (several "}}")
-                                    (many1' (noneOf "}" <+? fill '}' (single '{' <* lookingAt (noneOf "}"))) <&> \x -> (x,wrapResult "span" "" (stringWords x)))))
-                      
-                      
+                     
 runCOCBuiltin COCB_ToInt = runStackState $ modify $ \case
-  StackSymbol s:t -> StackInt (read s):t
+  StackSymbol s:t -> StackInt (read (toString s)):t
   st -> st
 runCOCBuiltin COCB_Concat = runStackState $ modify $ \case
   StackSymbol s:StackSymbol s':t -> StackSymbol (s'+s):t
@@ -176,7 +202,7 @@ runCOCBuiltin COCB_TypeOf = do
       Nothing -> COCNull
     st -> st
 
-runCOCBuiltin COCB_ExecModule = do
+runCOCBuiltin (COCB_ExecModule (WriteImpl writeResource)) = do
   st <- runStackState get
   case st of
     StackSymbol f:StackProg p:t -> do
@@ -185,7 +211,7 @@ runCOCBuiltin COCB_ExecModule = do
       traverse_ (execSymbol runCOCBuiltin outputComment) p
       new <- runDictState (id <~ (old,))
       newH <- runExtraState (outputText <~ \x -> (oldH,x))
-      lift $ writeString f (newH "")
+      liftSubIO $ writeResource f (newH "")
       runStackState $ put $ StackDict new:t
     _ -> return ()
 
@@ -254,7 +280,7 @@ runCOCBuiltin COCB_SetShowDir = do
     StackExtra (Opaque (COCDir d)):t -> (t,showDir =- map (\(c,StackSymbol ws) -> (c,[case select ((==w) . fst) (zip c [0..]) of
                                                                                         (_,i):_ -> Right i
                                                                                         _ -> Left w
-                                                                                     | w <- words ws])) d)
+                                                                                     | w <- map fromString $ words (toString ws)])) d)
     st -> (st,return ())
   runExtraState mod'
 runCOCBuiltin COCB_InsertNodeDir = do
@@ -264,9 +290,21 @@ runCOCBuiltin COCB_InsertNodeDir = do
       StackExtra (Opaque (COCDir (insert e (map fst (takeLast d ctx),x) dir))):t
     st -> st
 
-data COCValue = COCExpr Int Node | COCNull | COCDir (NodeDir ([String],StackVal String COCBuiltin COCValue))
+data COCValue io str = COCExpr Int (Node str) | COCNull | COCDir (NodeDir str ([str],StackVal str (COCBuiltin io str) (COCValue io str)))
+                     deriving Generic
+instance (ListSerializable s,ListSerializable b,ListSerializable a) => ListSerializable (StackVal s b a)
+instance (IsCapriconString s,ListFormat s,ListFormat b,ListFormat a) => ListFormat (StackVal s b a)
+instance (ListSerializable b) => ListSerializable (StackBuiltin b)
+instance (ListFormat b) => ListFormat (StackBuiltin b)
+instance (ListSerializable a) => ListSerializable (Opaque a)
+instance (ListFormat a) => ListFormat (Opaque a)
 
-cocDict version =
+instance ListSerializable str => ListSerializable (COCValue io str)
+instance (IsCapriconString str,ListFormat str,ListFormat (OpenImpl io str), ListFormat (WriteImpl io str)) => ListFormat (COCValue io str)
+type COCDict io str = Map str (StackVal str (COCBuiltin io str) (COCValue io str))
+
+cocDict :: forall io str. IsCapriconString str => str -> (str -> io str) -> (str -> str -> io ()) -> COCDict io str
+cocDict version getResource writeResource =
   mkDict ((".",StackProg []):("version",StackSymbol version):
            [(x,StackBuiltin b) | (x,b) <- [
                ("def"                     , Builtin_Def                           ),
@@ -290,7 +328,7 @@ cocDict version =
                
                ("io/exit"                 , Builtin_Extra COCB_Quit               ),
                ("io/print"                , Builtin_Extra COCB_Print              ),
-               ("io/open"                 , Builtin_Extra COCB_Open               ), 
+               ("io/open"                 , Builtin_Extra (COCB_Open (OpenImpl getResource))), 
                ("io/get-env"              , Builtin_Extra COCB_GetEnv             ),
                                      
                ("string/format"           , Builtin_Extra COCB_Format             ),
@@ -311,7 +349,7 @@ cocDict version =
                ("dict/insert"             , Builtin_Insert                        ),
                ("dict/delete"             , Builtin_Delete                        ),
                ("dict/keys"               , Builtin_Keys                          ),
-               ("dict/module"             , Builtin_Extra COCB_ExecModule         ),
+               ("dict/module"             , Builtin_Extra (COCB_ExecModule (WriteImpl writeResource))),
 
                ("term-index/pattern-index"     , Builtin_Extra COCB_GetShowDir         ),
                ("term-index/set-pattern-index" , Builtin_Extra COCB_SetShowDir         ),
@@ -333,13 +371,33 @@ cocDict version =
                ("context/type"            , Builtin_Extra COCB_TypeOf             ),
                ("context/hypotheses"      , Builtin_Extra COCB_ContextVars        )
                ]])
-  where mkDict = foldr addElt (c'map zero)
-        addElt (x,v) = atP (splitPath x) %- Just v
-        splitPath ('/':x) = ("",uncurry (:) (splitPath x))
+  where mkDict :: [(str,StackVal str (COCBuiltin io str) (COCValue io str))] -> Map str (StackVal str (COCBuiltin io str) (COCValue io str))
+        mkDict = foldr addElt (c'map zero)
+        addElt (x,v) = atP (first fromString $ splitPath $ toString x) %- Just v
+        splitPath ('/':x) = ("",uncurry (:) (first fromString $ splitPath x))
         splitPath (h:t) = let ~(w,l) = splitPath t in (h:w,l)
         splitPath [] = ("",[])
         atP (h,[]) = at h
         atP (h,x:t) = at h.l'Just (StackDict zero).t'StackDict.atP (x,t)
 
-outputComment c = runExtraState $ do outputText =~ \o t -> o (c+t)
+outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
+  where commentText = case toString c of
+          'r':'b':p:[] -> let x = if p=='p' then "paragraph" else ""
+                              tag = if p=='p' then "div" else "span"
+                          in "<"+tag+" class=\"capricon-"+x+"result\">"
+          'r':'e':p:[] -> "</"+(if p=='p' then "div" else "span")+">"
+          'c':'p':_ -> let nlines = length (lines (toString c))
+                       in wrapStart True nlines+"<div class=\"capricon-steps\"><pre class=\"capricon capricon-paragraph capricon-context\">"
+                          +htmlQuote (drop 2 c)+"</pre>"+userInput+"</div>"+wrapEnd
+          'c':'s':_ -> wrapStart False 1+"<code class=\"capricon\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
+          's':_ -> drop 1 c
+          _ -> ""
 
+        wrapStart isP nlines =
+          let hide = if isP then "hideparagraph" else "hidestache"
+          in "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\" checked=\"checked\"/><span class=\"capricon-"
+             + hide +"\"></span><span class=\"capricon-reveal\" data-linecount=\""
+             + fromString (show nlines)+"\">"
+        wrapEnd = "</span></label>"
+        userInput = "<div class=\"user-input\"><button class=\"capricon-trigger\">Open/Close console</button><span class=\"capricon-input-prefix\">Enter some code: </span><input type=\"text\" class=\"capricon-input\" /><pre class=\"capricon-output\"></pre></div>"
+  

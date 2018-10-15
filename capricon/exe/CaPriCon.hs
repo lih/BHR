@@ -12,12 +12,12 @@ import System.Directory (getXdgDirectory, XdgDirectory(..))
 import System.FilePath ((</>))
 import CaPriCon.Run
 
-myDict = cocDict VERSION_capricon
+nativeDict = cocDict VERSION_capricon readString writeString
 
 main = do
   isTerm <- hIsTerminalDevice stdin
   libdir <- getXdgDirectory XdgData "capricon"
-  symList <- newIORef (keys myDict)
+  symList <- newIORef (keys nativeDict)
   let getAll = unsafeInterleaveIO $ do
         ln <- readline "CaPriCon> "
         lns <- getAll
@@ -34,9 +34,9 @@ main = do
   args <- (foldMap (\x -> [libdir</>x,x]) <$> getArgs) >>= map (stringWords . fold) . traverse (try (return []) . readString)
   execS (foldr (\sym mr -> do
                    execSymbol runCOCBuiltin outputComment sym
-                   (hasQuit,out) <- runExtraState (liftA2 (,) (getl endState) (getl outputText))
+                   (hasQuit,out) <- runExtraState (liftA2 (,) (getl endState) (getl outputText) <* (outputText =- id))
                    d <- runDictState get
                    lift (writeIORef symList (keys d))
                    lift (putStr (out ""))
                    unless hasQuit mr
-               ) unit (args+str)^..concatT) (defaultState myDict (COCState False [] zero id))
+               ) unit (args+str)^..concatT) (defaultState nativeDict (COCState False [] zero id))
