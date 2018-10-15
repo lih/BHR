@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, TypeFamilies, ScopedTypeVariables, PatternSynonyms #-}
+{-# LANGUAGE DeriveGeneric, TypeFamilies, ScopedTypeVariables, PatternSynonyms, UndecidableInstances #-}
 module Curly.DHT.Kademlia (
   DHTIndex,DHTValue,
   DHTInstance,DHTNode,pattern DHTNode,
@@ -12,18 +12,18 @@ import Network.Kademlia (JoinResult(..))
 
 newtype K a = K { getK :: a }
             deriving (Eq,Ord)
-instance K.Serialize a => Serializable (K a) where
-  encode (K a) = encode (K.toBS a^..chunk)
-instance K.Serialize a => Format (K a) where
+instance K.Serialize a => Serializable Word8 Builder Bytes (K a) where
+  encode p (K a) = encode p (K.toBS a^..chunk)
+instance K.Serialize a => Format Word8 Builder Bytes (K a) where
   datum = datum >>= (const zero <|> return) . map (K . fst) . K.fromBS . by chunk
-instance Format a => K.Serialize (K a) where
+instance Format Word8 Builder Bytes a => K.Serialize (K a) where
   fromBS b = case (datum^..parser) (b^..chunk) of
     (s,a):_ -> Right (K a,s^.chunk)
     [] -> Left "Parse error"
   toBS (K a) = serialize a^.chunk
 
-class (Ord a,Format a) => DHTIndex a
-class (Eq a,Format a) => DHTValue a
+class (Ord a,Format Word8 Builder Bytes a) => DHTIndex a
+class (Eq a,Format Word8 Builder Bytes a) => DHTValue a
 newtype DHTInstance i a = DHTInstance { _getDHTInstance :: K.KademliaInstance (K i) (K a) }
 newtype DHTNode i = DHTNodeImpl { _getDHTNode :: K.Node (K i) }
 pattern DHTNode h p i = DHTNodeImpl (K.Node (K.Peer h p) (K i))

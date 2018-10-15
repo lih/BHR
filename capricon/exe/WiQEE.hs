@@ -46,7 +46,7 @@ instance MonadSubIO JS.CIO JS.CIO where liftSubIO = id
 runComment c = unit
 
 hasteDict :: COCDict JS.CIO String
-hasteDict = cocDict ("0.7.1-js" :: String) get (\_ _ -> return ())
+hasteDict = cocDict ("0.7.1.1-js" :: String) get (\_ _ -> return ())
   where get file = do
           mres <- liftIO $ JS.getItem (fromString file)
           case mres of

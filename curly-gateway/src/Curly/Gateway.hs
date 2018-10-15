@@ -25,19 +25,19 @@ instance DHTIndex (VCKey DHTKey)
 data DHTKey = DataKey ValID
             | NodeKey String
             deriving (Eq,Ord,Generic)
-instance Serializable DHTKey ; instance Format DHTKey
+instance Serializable Word8 Builder Bytes DHTKey ; instance Format Word8 Builder Bytes DHTKey
 type Key = VCKey DHTKey
 
 newtype ValID = ValID Hash
               deriving (Eq,Ord,Show,Generic)
-instance Serializable ValID; instance Format ValID
+instance Serializable Word8 Builder Bytes ValID; instance Format Word8 Builder Bytes ValID
 
 data Val = PartialVal [ValID]
          | DataVal Bytes
          deriving (Show,Generic)
-instance Serializable Val ; instance Format Val
+instance Serializable Word8 Builder Bytes Val ; instance Format Word8 Builder Bytes Val
 instance Eq Val where a==b = compare a b==EQ
-instance Ord Val where compare = comparing serialize
+instance Ord Val where compare = comparing (serialize :: Val -> Bytes)
 instance DHTValue Val
 
 newtype DHT_VC a = DHT_VC { runDHT_VC :: IO a }
@@ -75,10 +75,10 @@ lookupMPBytes dht k = do
       return (fold <$> sequence parts)
     Nothing -> return Nothing
 
-lookupMP :: (Format a,MonadIO m) => DHTInstance Key Val -> (WithResponse a -> Key) -> m (Maybe a)
-lookupMP dht fk = liftIO $ lookupMPBytes dht (fk WithResponse) <&> (>>= matches Just datum)
-insertMP :: (Serializable a,MonadIO m) => DHTInstance Key Val -> (WithResponse a -> Key) -> a -> m ()
-insertMP dht fk a = liftIO $ insertMPBytes dht (serialize a) >>= \cid -> insertDHT dht (fk WithResponse) (PartialVal [cid])
+lookupMP :: (Format Word8 Builder Bytes a,MonadIO m) => DHTInstance Key Val -> (Proxy a -> Key) -> m (Maybe a)
+lookupMP dht fk = liftIO $ lookupMPBytes dht (fk Proxy) <&> (>>= matches Just datum)
+insertMP :: (Serializable Word8 Builder Bytes a,MonadIO m) => DHTInstance Key Val -> (Proxy a -> Key) -> a -> m ()
+insertMP dht fk a = liftIO $ insertMPBytes dht (serialize a) >>= \cid -> insertDHT dht (fk Proxy) (PartialVal [cid])
 
 isValidAssoc (OtherKey (DataKey h)) v = valID v == h
 isValidAssoc _ _ = True
@@ -135,11 +135,11 @@ data HTTPMessage = HTTPMessage {
   messageBody :: Bytes
   }
                  deriving Show
-instance Serializable HTTPMessageType where
-  encode (GET uri) = foldMap encode ("GET " + uri + " HTTP/1.1\r\n")
-  encode (PUT uri) = foldMap encode ("PUT " + uri + " HTTP/1.1\r\n")
-  encode Response = foldMap encode ("HTTP/1.1 200 OK\r\n")
-instance Format HTTPMessageType where
+instance Serializable Word8 Builder Bytes HTTPMessageType where
+  encode p (GET uri) = foldMap (encode p) ("GET " + uri + " HTTP/1.1\r\n")
+  encode p (PUT uri) = foldMap (encode p) ("PUT " + uri + " HTTP/1.1\r\n")
+  encode p Response = foldMap (encode p) ("HTTP/1.1 200 OK\r\n")
+instance Format Word8 Builder Bytes HTTPMessageType where
   datum = req <+? resp
     where req = do
             t <- (GET <$ kw "GET") <+? (PUT <$ kw "PUT")
@@ -149,13 +149,13 @@ instance Format HTTPMessageType where
             return (t uri)
           resp = kw "HTTP/1.1" >> skipMany' (charOut "\r\n") >> kw "\r\n" >> return Response
   
-instance Serializable HTTPMessage where
-  encode (HTTPMessage t hdrs body) =
-    encode t
-    + foldMap (\(n,v) -> foldMap encode (n+": "+v+"\r\n")) (hdrs^.ascList)
-    + foldMap encode "\r\n"
+instance Serializable Word8 Builder Bytes HTTPMessage where
+  encode p (HTTPMessage t hdrs body) =
+    encode p t
+    + foldMap (\(n,v) -> foldMap (encode p) (n+": "+v+"\r\n")) (hdrs^.ascList)
+    + foldMap (encode p) "\r\n"
     + body^.bytesBuilder
-instance Format HTTPMessage where
+instance Format Word8 Builder Bytes HTTPMessage where
   datum = do
     t <- datum
     hdrs <- map fromAList $ many' $ do
@@ -194,7 +194,7 @@ main = do
             let msgKeyName = select (/='/') msgURI
                 msgKey :: Maybe (VCKey ())
                 msgKey = matches Just ((readable <&> \(B64Chunk b) -> b^..chunk) >*> datum) msgKeyName
-                getKey, putKey :: Format a => (WithResponse a -> VCKey ()) -> ParserT Bytes IO ()
+                getKey, putKey :: Format Word8 Builder Bytes a => (Proxy a -> VCKey ()) -> ParserT Bytes IO ()
                 getKey k = vcbLoad backend k >>= \res -> do
                   case res of
                     Just body -> send (HTTPMessage Response (fromAList [("connection","close")]) (serialize body))

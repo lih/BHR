@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                capricon
-version:             0.7.1
+version:             0.7.1.1
 -- synopsis:            
 -- description:         
 license:             GPL-3
@@ -20,7 +20,7 @@ data-files: prelude
 library
   exposed-modules: Algebra.Monad.Concatenative Data.CaPriCon CaPriCon.Run
   default-extensions: RebindableSyntax, ViewPatterns, TupleSections, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, LambdaCase, TypeOperators, RankNTypes, GeneralizedNewtypeDeriving, TypeFamilies
-  build-depends: base,definitive-base, definitive-parser
+  build-depends: base >=4.8 && <4.10,definitive-base >=2.6 && <2.7,definitive-parser >=3.0 && <3.1
   if !impl(haste)
     ghc-options: -Wincomplete-patterns -Wname-shadowing -W -Werror
   hs-source-dirs: src
@@ -30,12 +30,12 @@ executable capricon
   if impl(haste)
     buildable: False
   else
-    build-depends: hreadline, directory, filepath
+    build-depends: directory >=1.3 && <1.4,filepath >=1.4 && <1.5,hreadline >=0.2 && <0.3
   main-is:             CaPriCon.hs
   default-extensions: RebindableSyntax, ViewPatterns, TupleSections, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, LambdaCase, TypeOperators, RankNTypes, GeneralizedNewtypeDeriving, TypeFamilies
   -- other-modules:       
   -- other-extensions:    
-  build-depends: base,definitive-base, definitive-parser, capricon
+  build-depends: base >=4.8 && <4.10,capricon >=0.7 && <0.8,definitive-base >=2.6 && <2.7,definitive-parser >=3.0 && <3.1
   ghc-options: -Wincomplete-patterns -Wname-shadowing -W -Werror
   hs-source-dirs:      exe
   default-language:    Haskell2010
@@ -47,7 +47,7 @@ executable WiQEE.js
   -- other-modules:       
   -- other-extensions:    
   haste-options: --opt-all
-  build-depends: base,definitive-base, definitive-parser, capricon, haste-lib, filepath
+  build-depends: base >=4.8 && <4.10,capricon >=0.7 && <0.8,definitive-base >=2.6 && <2.7,definitive-parser >=3.0 && <3.1,filepath >=1.4 && <1.5,haste-lib
   hs-source-dirs:      exe
   default-language:    Haskell2010
 -- executable coinche
@@ -55,7 +55,7 @@ executable WiQEE.js
 --   default-extensions:  RebindableSyntax
 --   -- other-modules:       
 --   -- other-extensions:    
---   build-depends: base >=4.9 && <4.10,definitive-base >=2.6 && <2.7, definitive-parser, misc, random, random-shuffle
+--   build-depends: base >=4.9 && <4.10,definitive-base >=2.6 && <2.7,definitive-parser >=3.0 && <3.1,misc >=. && <.1,random >=1.1 && <1.2,random-shuffle >=. && <.1
 --   ghc-options: -Wincomplete-patterns -Wname-shadowing -Werror
 --   hs-source-dirs:      exe
 --   default-language:    Haskell2010

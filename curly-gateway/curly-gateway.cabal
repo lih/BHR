@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                curly-gateway
-version:             0.1.1
+version:             0.2
 synopsis:            A DHT-backed implementation of the Curly VCS protocol
 -- description:         
 license:             GPL-3
@@ -29,6 +29,6 @@ executable curly-gateway
                        GeneralizedNewtypeDeriving
                        RankNTypes
   other-extensions:    DeriveGeneric, TypeFamilies, ScopedTypeVariables, PatternSynonyms, ViewPatterns
-  build-depends: base >=4.9 && <4.10,curly-core >=0.7 && <0.8,curly-kademlia >=1.1 && <1.2,definitive-base >=2.6 && <2.7,definitive-network >=1.4 && <1.5,definitive-parser >=2.5 && <2.6
+  build-depends: base >=4.9 && <4.10,curly-core >=0.7 && <0.8,curly-kademlia >=1.1 && <1.2,definitive-base >=2.6 && <2.7,definitive-network >=1.4 && <1.5,definitive-parser >=3.0 && <3.1
   hs-source-dirs:      src
   default-language:    Haskell2010

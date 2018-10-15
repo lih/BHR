@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                curly-system
-version:             0.3.2
+version:             0.3.3
 synopsis:            System-specific code generation libraries for the Curly compiler
 -- description:         
 license:             GPL-3
@@ -33,7 +33,7 @@ library
                        GeneralizedNewtypeDeriving
                        RankNTypes
   other-extensions:    UndecidableInstances, RecursiveDo, ScopedTypeVariables, NoMonomorphismRestriction, PatternSynonyms, CPP, TypeFamilies, StandaloneDeriving
-  build-depends: base >=4.9 && <4.10,curly-core >=0.7 && <0.8,definitive-base >=2.6 && <2.7,definitive-filesystem >=2.1 && <2.2,definitive-parser >=2.5 && <2.6
+  build-depends: base >=4.9 && <4.10,curly-core >=0.7 && <0.8,definitive-base >=2.6 && <2.7,definitive-filesystem >=2.1 && <2.2,definitive-parser >=3.0 && <3.1
   hs-source-dirs:      src
   if flag(paranoid)
     ghc-options:         -Werror

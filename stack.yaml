@@ -39,10 +39,11 @@ packages: []
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-- AES-0.2.9
-- kademlia-1.1.0.0
 - ./curly
 - ./capricon
+- ./curly-gateway
+- AES-0.2.9
+- kademlia-1.1.0.0
 - ./definitive-base
 - ./definitive-parser
 - ./definitive-network
@@ -51,7 +52,6 @@ extra-deps:
 - ./curly-kademlia
 - ./curly-core
 - ./curly-system
-- ./curly-gateway
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
