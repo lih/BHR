@@ -90,7 +90,7 @@ setBytes :: String -> [Word8] -> JS.CIO ()
 setBytes f v = setString f (map (toEnum . fromIntegral) v)
 
 hasteDict :: COCDict JS.CIO String
-hasteDict = cocDict ("0.8-js" :: String) getString getBytes setString setBytes
+hasteDict = cocDict ("0.8.1-js" :: String) getString getBytes setString setBytes
 
 main :: IO ()
 main = JS.concurrent $ void $ do
@@ -107,40 +107,48 @@ main = JS.concurrent $ void $ do
   prelude <- JS.withElem "capricon-prelude" (\e -> JS.getProp e "textContent")
   (initState,_) <- runWordsState (map fromString $ stringWords prelude) (defaultState hasteDict (COCState False [] zero id))
 
-  roots <- JS.elemsByClass "capricon-steps"
+  roots <- JS.elemsByQS JS.documentBody ".capricon-steps, code.capricon"
   Just console <- JS.elemById "capricon-console"
 
-  (\k -> foldr k (const unit) roots initState) $ \root next state -> do
-    JS.wait 10
+  (\k -> foldr k (\_ _ -> unit) roots initState "") $ \root next state pref -> do
+    isCode <- JS.hasClass root "capricon"
 
-    root' <- cloneNode root
-    JS.toggleClass root' "capricon-frame"
-    rootChildren <- JS.getChildren root'
-    rootTitle <- JS.newElem "h3" <*= \head -> JS.appendChild head =<< JS.newTextElem "CaPriCon Console"
-    closeBtn <- JS.newElem "button" <*= \but -> JS.appendChild but =<< JS.newTextElem "Close"
-    JS.appendChild rootTitle closeBtn
-    JS.appendChild console root'
-    JS.setChildren root' (rootTitle:rootChildren)
-
-    withSubElems root ["capricon-trigger"] $ \[trig] -> void $ do
-      withSubElems root' ["capricon-input"] $ \[inp] -> void $ do
-        let toggleActive = do
-              JS.toggleClass root' "active"
-              JS.focus inp
-        JS.onEvent closeBtn JS.Click (const toggleActive)
-        JS.onEvent trig JS.Click $ \_ -> toggleActive
-    withSubElems root' ["capricon-input","capricon-output"] $ \[inp,out] -> do
-      JS.withElemsQS root' ".capricon-context" $ \case
-        [con] -> do
-          context <- JS.getProp con "textContent"
-          (state',_) <- runWordsState (stringWords (fromString context)) state
-          JS.onEvent inp JS.KeyPress $ \case
-            JS.KeyData 13 False False False False -> do
-              Just v <- JS.getValue inp
-              (_,x) <- runWordsState (stringWords v) state'
-              JS.setProp out "textContent" (toString x)
-            _ -> unit
-          next state'
+    if isCode
+      then do
+      p <- JS.getProp root "textContent"
+      next state (pref+" "+p)
+      else do
+        JS.wait 10
+    
+        root' <- cloneNode root
+        JS.toggleClass root' "capricon-frame"
+        rootChildren <- JS.getChildren root'
+        rootTitle <- JS.newElem "h3" <*= \head -> JS.appendChild head =<< JS.newTextElem "CaPriCon Console"
+        closeBtn <- JS.newElem "button" <*= \but -> JS.appendChild but =<< JS.newTextElem "Close"
+        JS.appendChild rootTitle closeBtn
+        JS.appendChild console root'
+        JS.setChildren root' (rootTitle:rootChildren)
+    
+        withSubElems root ["capricon-trigger"] $ \[trig] -> void $ do
+          withSubElems root' ["capricon-input"] $ \[inp] -> void $ do
+            let toggleActive = do
+                  JS.toggleClass root' "active"
+                  JS.focus inp
+            JS.onEvent closeBtn JS.Click (const toggleActive)
+            JS.onEvent trig JS.Click $ \_ -> toggleActive
+        withSubElems root' ["capricon-input","capricon-output"] $ \[inp,out] -> do
+          JS.withElemsQS root' ".capricon-context" $ \case
+            [con] -> do
+              context <- JS.getProp con "textContent"
+              let text = pref+" "+context
+              (state',_) <- runWordsState (stringWords text) state
+              JS.onEvent inp JS.KeyPress $ \case
+                JS.KeyData 13 False False False False -> do
+                  Just v <- JS.getValue inp
+                  (_,x) <- runWordsState (stringWords v) state'
+                  JS.setProp out "textContent" (toString x)
+                _ -> unit
+              next state' ""
 
 cloneNode :: MonadIO m => JS.Elem -> m JS.Elem
 cloneNode x = liftIO $ JS.ffi "(function (n) { return n.cloneNode(true); })" x

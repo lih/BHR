@@ -3,7 +3,7 @@ module Data.CaPriCon(
   -- * Expression nodes
   IsCapriconString(..),BindType(..),Node(..),ApHead(..),Application(..),
   -- ** Managing De Bruijin indices
-  adjust_depth,adjust_telescope_depth,inc_depth,free_vars,
+  adjust_depth,adjust_telescope_depth,inc_depth,free_vars,is_free_in,
   -- ** General term substitution and type inference
   subst,substn,type_of,mu_type,
   -- ** Expression directories
@@ -196,6 +196,14 @@ free_vars (Cons a) = freeA a
           where envS = length env
 free_vars _ = zero
 
+is_free_in :: Int -> Node str -> Bool
+is_free_in = map2 not go
+  where go v (Bind _ _ t e) = go v t && go (v+1) e
+        go v (Cons a) = go_a v a
+        go _ (Universe _) = True
+        go_a v (Ap (Sym v') subs) = v/=v' && all (go v) subs
+        go_a v (Ap (Mu env _ a) subs) = go_a (v+length env) a && all (go v) subs
+
 subst :: (IsCapriconString str, MonadReader (Env str) m) => Node str -> Node str -> m (Node str)
 subst = flip substn 0
 substn :: (IsCapriconString str, MonadReader (Env str) m) => Node str -> Int -> Node str -> m (Node str)
@@ -252,20 +260,14 @@ freshContext = go []
 showNode = showNode' zero
 showNode' :: IsCapriconString str => NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> Node str -> str
 showNode' dir = go 0
-  where go d env x | (pats,(_,k)):_ <- findPattern dir x =
-                       let holes = c'map $ fromAList [(i,(env',hole)) | (env',i,hole) <- pats] in
-                         par (if empty pats then 1000 else 1 :: Int) d $ intercalate (fromString " ") [
-                         case word of
-                           Left w -> w
-                           Right i | Just (env',hole) <- lookup i holes -> go 2 (env'+env) hole
-                                   | otherwise -> zero
-                         | word <- k]
+  where go d env x | Just ret <- toPat d env x = ret
         go _ _ (Universe u) = "Set"+fromString (show u)
-        go d env whole@(Bind t aname atype body) | t == Lambda || 0`isKeyIn`free_vars body = par 0 d $ bind_head t + drop 1 (bind_tail env whole)
+        go d env whole@(Bind t aname atype body) | t == Lambda || 0`is_free_in`body = par 0 d $ bind_head t + drop 1 (bind_tail env whole)
                                                  | otherwise = par 0 d $ go 1 env atype + fromString " -> " + go 0 ((aname,atype):env) body
           where bind_head Lambda = "λ"
                 bind_head Prod = "∀"
-                bind_tail env' (Bind t' x tx e) | t==t' && (t==Lambda || 0`isKeyIn`free_vars e) = fromString " ("+x'+fromString ":"+go 0 env' tx+fromString ")"+bind_tail ((x',tx):env') e
+                bind_tail env' x | Just ret <- toPat 0 (env'+env) x = ", "+ret
+                bind_tail env' (Bind t' x tx e) | t==t' && (t==Lambda || 0`is_free_in`e) = fromString " ("+x'+fromString ":"+go 0 env' tx+fromString ")"+bind_tail ((x',tx):env') e
                   where x' = fresh (map fst env') x
                 bind_tail env' x = ", "+go 0 env' x
         go d env (Cons a) = showA d a
@@ -277,6 +279,27 @@ showNode' dir = go 0
                              Mu _ _ a' -> "μ("+showA 0 a'+")"
                       lvl = if empty xs then 1000 else 1
                   in par lvl d $ ni+foldMap ((" "+) . go 2 env) xs
+
+        toPat d env x
+          | (pats,(_,k)):_ <- findPattern dir x =
+              let holes = c'map $ fromAList [(i,(env',hole)) | (env',i,hole) <- pats] in
+                Just $ par (if empty pats then 1000 else 1 :: Int) d $ intercalate (fromString " ")
+                [case word of
+                   Left w -> w
+                   Right i | Just (env',hole) <- lookup i holes ->
+                               go 2 env $
+                               let (hole',env'') =
+                                     fix (\kj -> \case
+                                             (Cons (Ap h t@(_:_)),_:env0)
+                                               | Cons (Ap (Sym 0) []) <- debug $ last t
+                                               , not (is_free_in 0 (Cons (Ap h (init t))))
+                                                 -> kj (inc_depth (-1) (Cons (Ap h (init t))),env0)
+                                             (Cons (Ap (Sym j') []),_:env0) | j'>0 -> kj (Cons (Ap (Sym (j'-1)) []),env0)
+                                             e -> e) (hole,env')
+                               in foldl' (\e (n,t) -> Bind Lambda n t e) hole' env''
+                           | otherwise -> zero
+                | word <- k]
+          | otherwise = Nothing
 
 type_of :: (IsCapriconString str,MonadReader (Env str) m) => Node str -> m (Maybe (Node str))
 type_of = yb maybeT . go
@@ -332,7 +355,7 @@ mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
             go_col' d' recs (Bind Prod x tx e) = Bind Prod x tx <$> local (tx:) (go_col' (d'+1) (map (+1) recs) e)
             go_col' d' recs (Cons (Ap (Sym i) xs))
               | constr_ind d d' i = do
-                  let args = select (not . (`isKeyIn`recs)) [0..d'-1]
+                  let args = reverse $ select (not . (`isKeyIn`recs)) [0..d'-1]
                       lastE = bind Lambda (adjust_telescope_depth second (+(d+d')) root_args)
                               (Cons (Ap (Sym (nargs-d-1))
                                      [Cons (Ap (Sym (j'+nargs)) args')

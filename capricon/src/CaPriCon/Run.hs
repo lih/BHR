@@ -82,13 +82,13 @@ literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " <+? cmdline "$> " <+? c
     cmdline pre = map (\x -> [":cp"+intercalate "\n" (map fst x)]
                              + wrapResult True (foldMap snd x))
                   (sepBy1' go (single '\n'))
-      where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x))
+      where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x+["steps."]))
     commentline = map (foldMap (pure . (":s"+) <|> \(x,t) -> t+[":cs"+x])) $ (<* lookingAt eol)
       $ many' (map (Left . fromString) (many1' (noneOf ['{','\n'] <+?
                                                 (fill '{' $ single '{' <* lookingAt (noneOf ['{']))))
                 <+? map Right (between "{{" "}}"
                                 (many1' (noneOf ['}'] <+? fill '}' (single '}' <* lookingAt (noneOf ['}'])))
-                                 <&> \x -> (fromString x,wrapResult False (stringWords (fromString x))))))
+                                 <&> \x -> (fromString x,wrapResult False (stringWords (fromString x)+["mustache."])))))
 
 data COCState str = COCState {
   _endState :: Bool,
@@ -322,7 +322,7 @@ type COCDict io str = Map str (StackVal str (COCBuiltin io str) (COCValue io str
 
 cocDict :: forall io str. IsCapriconString str => str -> (str -> io (Maybe str)) -> (str -> io (Maybe [Word8])) -> (str -> str -> io ()) -> (str -> [Word8] -> io ()) -> COCDict io str
 cocDict version getResource getBResource writeResource writeBResource =
-  mkDict ((".",StackProg []):("version",StackSymbol version):
+  mkDict ((".",StackProg []):("steps.",StackProg []):("mustache.",StackProg []):("version",StackSymbol version):
            [(x,StackBuiltin b) | (x,b) <- [
                ("def"                     , Builtin_Def                           ),
                ("$"                       , Builtin_DeRef                         ),
