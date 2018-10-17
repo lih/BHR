@@ -2,6 +2,7 @@
 module Main where
 
 import Definitive
+import Language.Format
 import Algebra.Monad.Concatenative
 import System.IO (hIsTerminalDevice)
 import System.Environment (getArgs)
@@ -12,7 +13,17 @@ import System.Directory (getXdgDirectory, XdgDirectory(..))
 import System.FilePath ((</>))
 import CaPriCon.Run
 
-nativeDict = cocDict VERSION_capricon readString writeString
+instance Serializable Word8 ([Word8] -> [Word8]) [Word8] Char where encode _ c = (fromIntegral (fromEnum c):)
+instance Format Word8 ([Word8] -> [Word8]) [Word8] Char where datum = datum <&> \x -> toEnum (fromEnum (x::Word8))
+instance Format Word8 ([Word8] -> [Word8]) [Word8] (ReadImpl IO String String) where datum = return (ReadImpl f_readString)
+instance Format Word8 ([Word8] -> [Word8]) [Word8] (ReadImpl IO String [Word8]) where datum = return (ReadImpl f_readBytes)
+instance Format Word8 ([Word8] -> [Word8]) [Word8] (WriteImpl IO String String) where datum = return (WriteImpl writeString)
+instance Format Word8 ([Word8] -> [Word8]) [Word8] (WriteImpl IO String [Word8]) where datum = return (WriteImpl (\x -> writeBytes x . pack))
+
+f_readString = (\x -> try (return Nothing) (Just<$>readString x))
+f_readBytes = (\x -> try (return Nothing) (Just . unpack<$>readBytes x))
+
+nativeDict = cocDict VERSION_capricon f_readString f_readBytes writeString (\x -> writeBytes x . pack)
 
 main = do
   isTerm <- hIsTerminalDevice stdin

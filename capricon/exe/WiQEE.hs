@@ -2,7 +2,7 @@
 module Main where
 
 import Definitive
-import Language.Parser
+import Language.Format
 import Algebra.Monad.Concatenative
 import System.IO (openFile,hIsTerminalDevice,IOMode(..),hClose)
 import System.Environment (getArgs,lookupEnv)
@@ -19,7 +19,9 @@ import qualified Haste.Concurrent as JS
 import qualified Haste.Ajax as JS
 import qualified Haste.JSString as JSS
 import qualified Haste.LocalStorage as JS
+import qualified Haste.Binary as JS
 import qualified Prelude as P
+import qualified Data.Array.Unboxed as Arr
 
 instance Semigroup JS.JSString where (+) = JSS.append
 instance Monoid JS.JSString where zero = JSS.empty
@@ -43,27 +45,53 @@ instance Monad JS.CIO where join = (P.>>=id)
 instance MonadIO JS.CIO where liftIO = JS.liftIO
 instance MonadSubIO JS.CIO JS.CIO where liftSubIO = id
 
+instance Serializable Word8 ([Word8] -> [Word8]) [Word8] Char where encode _ c = (fromIntegral (fromEnum c):)
+instance Format Word8 ([Word8] -> [Word8]) [Word8] Char where datum = datum <&> \x -> toEnum (fromEnum (x::Word8))
+instance Format Word8 ([Word8] -> [Word8]) [Word8] (ReadImpl  JS.CIO String String) where datum = return (ReadImpl getString)
+instance Format Word8 ([Word8] -> [Word8]) [Word8] (ReadImpl  JS.CIO String [Word8]) where datum = return (ReadImpl getBytes)
+instance Format Word8 ([Word8] -> [Word8]) [Word8] (WriteImpl JS.CIO String String) where datum = return (WriteImpl setString)
+instance Format Word8 ([Word8] -> [Word8]) [Word8] (WriteImpl JS.CIO String [Word8]) where datum = return (WriteImpl setBytes)
+
 runComment c = unit
+toWordList :: JS.JSString -> [Word8]
+toWordList = map (fromIntegral . fromEnum) . toString 
+
+getString :: String -> JS.CIO (Maybe String)
+getString file = do
+  mres <- liftIO $ JS.getItem (fromString file)
+  case mres of
+    Right res -> return (Just $ toString (res :: JS.JSString))
+    Left _ -> do
+      here <- toString <$> JS.getLocationHref
+        
+      let url = fromString (dropFileName here</>file)
+      res <- JS.ajax JS.GET url
+      case res of
+        Left JS.NetworkError -> fill Nothing $ JS.alert $ "Network error while retrieving "+url
+        Left (JS.HttpError n msg) -> fill Nothing $ JS.alert $ "HTTP error "+fromString (show n)+": "+msg
+        Right val -> map Just $ liftIO $ JS.setItem (fromString file) val >> return (toString (val :: JS.JSString))
+getBytes :: String -> JS.CIO (Maybe [Word8])
+getBytes file = do
+  mres <- liftIO $ JS.getItem (fromString file)
+  case mres of
+    Right res -> return (Just $ toWordList (res :: JS.JSString))
+    Left _ -> do
+      here <- toString <$> JS.getLocationHref
+        
+      let url = fromString (dropFileName here</>file)
+      res <- JS.ajax JS.GET url
+      case res of
+        Left JS.NetworkError -> fill Nothing $ JS.alert $ "Network error while retrieving "+url
+        Left (JS.HttpError n msg) -> fill Nothing $ JS.alert $ "HTTP error "+fromString (show n)+": "+msg
+        Right val -> map Just $ liftIO $ JS.setItem (fromString file) val >> return (toWordList val)
+setString :: String -> String -> JS.CIO ()
+setString f v = liftIO $ JS.setItem (fromString f) (fromString v :: JS.JSString)
+setBytes :: String -> [Word8] -> JS.CIO ()
+setBytes f v = setString f (map (toEnum . fromIntegral) v)
 
 hasteDict :: COCDict JS.CIO String
-hasteDict = cocDict ("0.7.1.1-js" :: String) get (\_ _ -> return ())
-  where get file = do
-          mres <- liftIO $ JS.getItem (fromString file)
-          case mres of
-            Right res -> return res
-            Left _ -> do
-              here <- toString <$> JS.getLocationHref
-                
-              let url = fromString (dropFileName here</>file)
-              res <- JS.ajax JS.GET url
-              case res of
-                Left JS.NetworkError -> fill "" $ JS.alert $ "Network error while retrieving "+url
-                Left (JS.HttpError n msg) -> fill "" $ JS.alert $ "HTTP error "+fromString (show n)+": "+msg
-                Right val -> liftIO $ JS.setItem (fromString file) val >> return (toString (val :: JS.JSString))
+hasteDict = cocDict ("0.8-js" :: String) getString getBytes setString setBytes
 
-foo :: Bytes
-foo = "abcdef"
-        
 main :: IO ()
 main = JS.concurrent $ void $ do
   let runWordsState ws st = ($st) $ from (stateT.concatT) $^ do
@@ -84,13 +112,23 @@ main = JS.concurrent $ void $ do
 
   (\k -> foldr k (const unit) roots initState) $ \root next state -> do
     JS.wait 10
+
     root' <- cloneNode root
+    JS.toggleClass root' "capricon-frame"
+    rootChildren <- JS.getChildren root'
+    rootTitle <- JS.newElem "h3" <*= \head -> JS.appendChild head =<< JS.newTextElem "CaPriCon Console"
+    closeBtn <- JS.newElem "button" <*= \but -> JS.appendChild but =<< JS.newTextElem "Close"
+    JS.appendChild rootTitle closeBtn
     JS.appendChild console root'
+    JS.setChildren root' (rootTitle:rootChildren)
+
     withSubElems root ["capricon-trigger"] $ \[trig] -> void $ do
       withSubElems root' ["capricon-input"] $ \[inp] -> void $ do
-        JS.onEvent trig JS.Click $ \_ -> do
-          JS.toggleClass root' "active"
-          JS.focus inp
+        let toggleActive = do
+              JS.toggleClass root' "active"
+              JS.focus inp
+        JS.onEvent closeBtn JS.Click (const toggleActive)
+        JS.onEvent trig JS.Click $ \_ -> toggleActive
     withSubElems root' ["capricon-input","capricon-output"] $ \[inp,out] -> do
       JS.withElemsQS root' ".capricon-context" $ \case
         [con] -> do
