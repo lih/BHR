@@ -47,11 +47,11 @@ instance SerialStream Word8 Builder Bytes where
   encodeByte _ = word8
   toSerialStream = toLazyByteString
 
-class SerialStream char builder stream => Serializable char builder stream t | stream -> builder char where
+class SerialStream char builder stream => Serializable char builder stream t | t stream -> builder char where
   encode :: Proxy stream -> t -> builder
   default encode :: (Gen.Generic t, GenSerializable char builder stream (Gen.Rep t)) => Proxy stream -> t -> builder
   encode = defaultEncode
-class Serializable char builder stream t => Format char builder stream t | stream -> builder char where
+class Serializable char builder stream t => Format char builder stream t | t stream -> builder char where
   datum :: Parser stream t
   default datum :: (Gen.Generic t, GenFormat char builder stream (Gen.Rep t)) => Parser stream t
   datum = defaultDatum
