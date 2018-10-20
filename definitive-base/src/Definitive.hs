@@ -2,8 +2,12 @@
 module Definitive (
   module Definitive.Base,
   module Data.Containers,
-#ifdef __GLASGOW_HASKELL__
+#ifndef __GLASGOW_HASKELL__
+{-
+#endif
   module Data.Containers.Sequence,
+#ifndef __GLASGOW_HASKELL__
+-}
 #endif
   trace,tracing,trace2,mtrace,debug,
 
@@ -13,8 +17,12 @@ module Definitive (
 import Definitive.Base 
 import System.Environment (getArgs)
 import Data.Containers
-#ifdef __GLASGOW_HASKELL__
+#ifndef __GLASGOW_HASKELL__
+{-
+#endif
 import Data.Containers.Sequence
+#ifndef __GLASGOW_HASKELL__
+-}
 #endif
 
 trace :: String -> a -> a
