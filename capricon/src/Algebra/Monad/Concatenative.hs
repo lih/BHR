@@ -10,7 +10,7 @@ newtype Opaque a = Opaque a
 instance Show (Opaque a) where show _ = "#<opaque>"
 data StackBuiltin b = Builtin_ListBegin | Builtin_ListEnd
                     | Builtin_Clear | Builtin_Stack
-                    | Builtin_Pick 
+                    | Builtin_Pick | Builtin_Shift | Builtin_Shaft
                     | Builtin_Pop  | Builtin_PopN
                     | Builtin_Dup  | Builtin_DupN
                     | Builtin_Swap | Builtin_SwapN
@@ -112,6 +112,12 @@ execBuiltin runExtra onComment = go
           (x:tx,y:ty) -> y:tx+(x:ty)
           _ -> st
       _ -> st
+    go Builtin_Shift = stack =~ \case
+      StackInt n:st' | (h,v:t) <- splitAt n st' -> v:(h+t)
+      st -> st
+    go Builtin_Shaft = stack =~ \case
+      StackInt n:v:st' | (h,t) <- splitAt n st' -> h+(v:t)
+      st -> st
     go Builtin_Dup = stack =~ \st -> case st of x:t -> x:x:t ; _ -> st
     go Builtin_DupN = stack =~ \st -> case st of StackInt n:t | x:_ <- drop n t -> x:t ; _ -> st
     go Builtin_Range = stack =~ \st -> case st of StackInt n:t -> StackList [StackInt i | i <- [0..n-1]]:t ; _ -> st

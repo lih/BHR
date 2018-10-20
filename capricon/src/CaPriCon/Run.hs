@@ -15,11 +15,11 @@ instance MonadSubIO io m => MonadSubIO io (ConcatT st b o s m) where
 
 takeLast n l = drop (length l-n) l
 
-showStackVal :: IsCapriconString str => NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> StackVal str (COCBuiltin io str) (COCValue io str) -> str
-showStackVal dir ctx _x = case _x of
+showStackVal :: IsCapriconString str => (NodeDoc str -> str) -> NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> StackVal str (COCBuiltin io str) (COCValue io str) -> str
+showStackVal toRaw dir ctx _x = case _x of
   StackExtra (Opaque _x) -> case _x of
     COCExpr d e -> -- "<"+show d+">:"+
-      showNode' dir (map (second snd) $ takeLast d (freshContext ctx)) e
+      toRaw $ showNode' dir (map (second snd) $ takeLast d (freshContext ctx)) e
     COCNull -> "(null)"
     COCError e -> "<!"+e+"!>"
     COCDir d -> fromString $ show d
@@ -119,7 +119,8 @@ runCOCBuiltin COCB_Print = do
 runCOCBuiltin COCB_Format = do
   ex <- runExtraState get
   let format ('%':'s':s) (StackSymbol h:t) = first (h+) (format s t)
-      format ('%':'v':s) (x:t) = first (showStackVal (ex^.showDir) (ex^.context) x+) (format s t)
+      format ('%':'v':s) (x:t) = first (showStackVal doc2raw (ex^.showDir) (ex^.context) x+) (format s t)
+      format ('%':'l':s) (x:t) = first (showStackVal doc2latex (ex^.showDir) (ex^.context) x+) (format s t)
       format (c:s) t = first (fromString [c]+) (format s t)
       format "" t = ("",t)
   runStackState $ modify $ \case
@@ -305,6 +306,7 @@ runCOCBuiltin COCB_InsertNodeDir = do
       StackExtra (Opaque (COCDir (insert e (map fst (takeLast d ctx),x) dir))):t
     st -> st
 
+data UniverseConstraints = UniverseConstraints Int [Int]
 data COCValue io str = COCExpr Int (Node str)
                      | COCNull | COCError str
                      | COCDir (NodeDir str ([str],StackVal str (COCBuiltin io str) (COCValue io str)))
@@ -332,6 +334,8 @@ cocDict version getResource getBResource writeResource writeBResource =
 
                ("stack"                   , Builtin_Stack                         ),
                ("clear"                   , Builtin_Clear                         ),
+               ("shift"                   , Builtin_Shift                         ),
+               ("shaft"                   , Builtin_Shaft                         ),
                ("pop"                     , Builtin_Pop                           ),
                ("popn"                    , Builtin_PopN                          ),
                ("dup"                     , Builtin_Dup                           ),

@@ -10,7 +10,7 @@ module Data.CaPriCon(
   StringPattern,NodeDir(..),AHDir(..),ApDir,
   findPattern,freshContext,
   -- * Showing nodes
-  showNode,showNode'
+  NodeDoc(..),doc2raw,doc2latex,showNode,showNode'
   ) where
 
 import Definitive
@@ -250,54 +250,87 @@ substn val n | n>=0 = go n
         rec_subst [] x = return x
         rec_subst _ x = error $ fromString "Invalid substitution of non-lambda expression : "+fromString (show x)
 
-par lvl d msg | d>lvl = "("+msg+")"
-              | otherwise = msg
 fresh env v = head $ select (not . (`elem` env)) (v:[v+fromString (show i) | i <- [0..]])
 freshContext = go []
   where go env ((n,v):t) = let n' = fresh env n in (n',(n,v)):go (n':env) t
         go _ [] = []
 
+data NodeDoc str = DocSeq [NodeDoc str]
+                 | DocParen (NodeDoc str)
+                 | DocMu (NodeDoc str)
+                 | DocSubscript (NodeDoc str) (NodeDoc str)
+                 | DocAssoc str (NodeDoc str)
+                 | DocText str
+                 | DocArrow
+                 | DocSpace
+                 deriving Show
+par lvl d msg | d>lvl = DocParen msg
+              | otherwise = msg
+
+instance IsString str => IsString (NodeDoc str) where fromString = DocText . fromString
+
+doc2raw :: IsCapriconString str => NodeDoc str -> str
+doc2raw (DocSeq l) = fold (map doc2raw l)
+doc2raw (DocParen p) = "("+doc2raw p+")"
+doc2raw (DocMu m) = "μ("+doc2raw m+")"
+doc2raw (DocSubscript v x) = doc2raw v+doc2raw x
+doc2raw (DocAssoc x v) = "("+x+" : "+doc2raw v+")"
+doc2raw DocArrow = " -> "
+doc2raw (DocText x) = x
+doc2raw DocSpace = " "
+
+doc2latex :: IsCapriconString str => NodeDoc str -> str
+doc2latex (DocSeq l) = fold (map doc2latex l)
+doc2latex (DocParen p) = "("+doc2latex p+")"
+doc2latex (DocMu m) = "\\mu("+doc2latex m+")"
+doc2latex (DocSubscript v x) = doc2latex v+"_{"+doc2latex x+"}"
+doc2latex (DocAssoc x v) = "("+x+":"+doc2latex v+")"
+doc2latex DocArrow = " \\rightarrow "
+doc2latex (DocText x) = x
+doc2latex DocSpace = "\\,"
+
 showNode = showNode' zero
-showNode' :: IsCapriconString str => NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> Node str -> str
+showNode' :: IsCapriconString str => NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> Node str -> NodeDoc str
 showNode' dir = go 0
   where go d env x | Just ret <- toPat d env x = ret
-        go _ _ (Universe u) = "Set"+fromString (show u)
-        go d env whole@(Bind t aname atype body) | t == Lambda || 0`is_free_in`body = par 0 d $ bind_head t + drop 1 (bind_tail env whole)
-                                                 | otherwise = par 0 d $ go 1 env atype + fromString " -> " + go 0 ((aname,atype):env) body
+        go _ _ (Universe u) = DocSubscript "Set" (fromString (show u))
+        go d env whole@(Bind t aname atype body) | t == Lambda || 0`is_free_in`body = par 0 d $ DocSeq (DocText (bind_head t):drop 1 (bind_tail env whole))
+                                                 | otherwise = par 0 d $ DocSeq [go 1 env atype,DocArrow,go 0 ((aname,atype):env) body]
           where bind_head Lambda = "λ"
                 bind_head Prod = "∀"
-                bind_tail env' x | Just ret <- toPat 0 (env'+env) x = ", "+ret
-                bind_tail env' (Bind t' x tx e) | t==t' && (t==Lambda || 0`is_free_in`e) = fromString " ("+x'+fromString ":"+go 0 env' tx+fromString ")"+bind_tail ((x',tx):env') e
+                bind_tail env' x | Just ret <- toPat 0 (env'+env) x = [",",DocSpace,ret]
+                bind_tail env' (Bind t' x tx e) | t==t' && (t==Lambda || 0`is_free_in`e) =
+                                                  [DocSpace,DocAssoc x' (go 0 env' tx)] + bind_tail ((x',tx):env') e
                   where x' = fresh (map fst env') x
-                bind_tail env' x = ", "+go 0 env' x
+                bind_tail env' x = [",",DocSpace,go 0 env' x]
         go d env (Cons a) = showA d a
           where showA _ (Ap h xs) =
                   let ni = case h of
-                             Sym i -> case drop i env of
-                                        (h',_):_ -> h'
-                                        _ -> "#"+fromString (show i)
-                             Mu _ _ a' -> "μ("+showA 0 a'+")"
+                             Sym i -> DocText $ case drop i env of
+                               (h',_):_ -> h'
+                               _ -> "#"+fromString (show i)
+                             Mu _ _ a' -> DocMu (showA 0 a')
                       lvl = if empty xs then 1000 else 1
-                  in par lvl d $ ni+foldMap ((" "+) . go 2 env) xs
+                  in par lvl d $ DocSeq $ intercalate [DocSpace] $ map pure (ni:map (go 2 env) xs)
 
         toPat d env x
           | (pats,(_,k)):_ <- findPattern dir x =
               let holes = c'map $ fromAList [(i,(env',hole)) | (env',i,hole) <- pats] in
-                Just $ par (if empty pats then 1000 else 1 :: Int) d $ intercalate (fromString " ")
+                Just $ par (if all (has t'1) k then 1000 else 1 :: Int) d $ DocSeq $ intercalate [DocSpace] $ map pure $
                 [case word of
-                   Left w -> w
+                   Left w -> DocText w
                    Right i | Just (env',hole) <- lookup i holes ->
                                go 2 env $
                                let (hole',env'') =
                                      fix (\kj -> \case
                                              (Cons (Ap h t@(_:_)),_:env0)
-                                               | Cons (Ap (Sym 0) []) <- debug $ last t
+                                               | Cons (Ap (Sym 0) []) <- last t
                                                , not (is_free_in 0 (Cons (Ap h (init t))))
                                                  -> kj (inc_depth (-1) (Cons (Ap h (init t))),env0)
                                              (Cons (Ap (Sym j') []),_:env0) | j'>0 -> kj (Cons (Ap (Sym (j'-1)) []),env0)
                                              e -> e) (hole,env')
                                in foldl' (\e (n,t) -> Bind Lambda n t e) hole' env''
-                           | otherwise -> zero
+                           | otherwise -> DocText "?"
                 | word <- k]
           | otherwise = Nothing
 
