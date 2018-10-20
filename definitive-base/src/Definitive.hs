@@ -2,7 +2,9 @@
 module Definitive (
   module Definitive.Base,
   module Data.Containers,
+#ifdef __GLASGOW_HASKELL__
   module Data.Containers.Sequence,
+#endif
   trace,tracing,trace2,mtrace,debug,
 
   cli
