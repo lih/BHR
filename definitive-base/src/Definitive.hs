@@ -1,4 +1,4 @@
-{-# LANGUAGE ImplicitParams, StandaloneDeriving #-}
+{-# LANGUAGE ImplicitParams, StandaloneDeriving, CPP #-}
 module Definitive (
   module Definitive.Base,
   module Data.Containers,
@@ -11,7 +11,9 @@ module Definitive (
 import Definitive.Base 
 import System.Environment (getArgs)
 import Data.Containers
+#ifdef __GLASGOW_HASKELL__
 import Data.Containers.Sequence
+#endif
 
 trace :: String -> a -> a
 trace s x = (putStrLn s^.thunk)`seq`x
