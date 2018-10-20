@@ -1,5 +1,6 @@
 {-# LANGUAGE ImplicitParams, StandaloneDeriving, CPP #-}
 #ifdef __GLASGOW_HASKELL__
+#warning "GHC Haskell detected"
 #define GHC_import import
 #define GHC_module module
 #else
