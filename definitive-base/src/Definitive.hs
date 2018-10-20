@@ -1,18 +1,10 @@
 {-# LANGUAGE ImplicitParams, StandaloneDeriving, CPP #-}
-#define GHC_import import
-#define GHC_module module
-
-#ifdef __HASTE__
-#undef GHC_import
-#undef GHC_module
-#define GHC_import --
-#define GHC_module --
-#endif
-
 module Definitive (
   module Definitive.Base,
   module Data.Containers,
-  GHC_module Data.Containers.Sequence,
+#ifndef __HASTE__
+  module Data.Containers.Sequence,
+#endif
   trace,tracing,trace2,mtrace,debug,
 
   cli
@@ -21,7 +13,9 @@ module Definitive (
 import Definitive.Base 
 import System.Environment (getArgs)
 import Data.Containers
-GHC_import Data.Containers.Sequence
+#ifndef __HASTE__
+import Data.Containers.Sequence
+#endif
 
 trace :: String -> a -> a
 trace s x = (putStrLn s^.thunk)`seq`x
