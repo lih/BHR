@@ -36,7 +36,6 @@ library
   build-depends: base >=4.8 && <4.10,bytestring >=0.10 && <0.11,containers >=0.5 && <0.6,deepseq >=1.4 && <1.5
   if !impl(haste)
     build-depends: clock >=0.7 && <0.8,vector >=0.12 && <0.13
-  if !impl(haste)
     exposed-modules: Data.Containers.Sequence, IO.Time, Data.Queue
   hs-source-dirs:      src
   default-language:    Haskell2010
