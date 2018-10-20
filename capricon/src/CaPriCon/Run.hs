@@ -16,7 +16,7 @@ instance MonadSubIO io m => MonadSubIO io (ConcatT st b o s m) where
 takeLast n l = drop (length l-n) l
 
 showStackVal :: IsCapriconString str => (NodeDoc str -> str) -> NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> StackVal str (COCBuiltin io str) (COCValue io str) -> str
-showStackVal toRaw dir ctx _x = case _x of
+showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
   StackExtra (Opaque _x) -> case _x of
     COCExpr d e -> -- "<"+show d+">:"+
       toRaw $ showNode' dir (map (second snd) $ takeLast d (freshContext ctx)) e
@@ -25,6 +25,9 @@ showStackVal toRaw dir ctx _x = case _x of
     COCDir d -> fromString $ show d
   StackSymbol s -> fromString $ show s
   StackInt n -> fromString $ show n
+  StackList l -> "["+intercalate "," (map go l)+"]"
+  StackDict d -> "[<"+intercalate "," (map (\(k,v) -> k+": "+go v) (d^.ascList))+">]"
+  StackProg p -> "{ "+intercalate " " p+" }"
   _ -> fromString $ show _x
 data COCBuiltin io str = COCB_Print
                        | COCB_Open (ReadImpl io str str) | COCB_ExecModule (WriteImpl io str str)
@@ -306,7 +309,8 @@ runCOCBuiltin COCB_InsertNodeDir = do
       StackExtra (Opaque (COCDir (insert e (map fst (takeLast d ctx),x) dir))):t
     st -> st
 
-data UniverseConstraints = UniverseConstraints Int [Int]
+type MaxDelta = Int
+data UniverseConstraints = UniverseConstraints MaxDelta [MaxDelta]
 data COCValue io str = COCExpr Int (Node str)
                      | COCNull | COCError str
                      | COCDir (NodeDir str ([str],StackVal str (COCBuiltin io str) (COCValue io str)))
