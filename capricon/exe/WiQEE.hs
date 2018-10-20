@@ -94,6 +94,8 @@ hasteDict = cocDict ("0.8.1.2-js" :: String) getString getBytes setString setByt
 
 main :: IO ()
 main = JS.concurrent $ void $ do
+  JS.wait 200
+
   let runWordsState ws st = ($st) $ from (stateT.concatT) $^ do
         foldr (\w tl -> do
                   x <- runExtraState (getl endState)
