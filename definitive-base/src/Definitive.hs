@@ -1,4 +1,4 @@
-{-# LANGUAGE ImplicitParams, StandaloneDeriving #-}
+{-# LANGUAGE ImplicitParams, StandaloneDeriving, CPP #-}
 module Definitive (
   module Definitive.Base,
   module Data.Containers,

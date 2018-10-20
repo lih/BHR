@@ -310,7 +310,11 @@ runCOCBuiltin COCB_InsertNodeDir = do
     st -> st
 
 type MaxDelta = Int
-data UniverseConstraints = UniverseConstraints MaxDelta [MaxDelta]
+type UniverseConstraint = [Maybe MaxDelta]
+data UniverseConstraints = UniverseConstraints [UniverseConstraint]
+instance Semigroup UniverseConstraints where
+  UniverseConstraints x + UniverseConstraints y = UniverseConstraints $ zipWith (zipWith (\_x _y -> zipWith max _x _y + _x + _y)) x y
+instance Monoid UniverseConstraints where zero = UniverseConstraints (repeat (repeat Nothing))
 data COCValue io str = COCExpr Int (Node str)
                      | COCNull | COCError str
                      | COCDir (NodeDir str ([str],StackVal str (COCBuiltin io str) (COCValue io str)))

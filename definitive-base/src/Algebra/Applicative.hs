@@ -97,6 +97,13 @@ instance SemiApplicative (Zip []) where
           zip_ _ _ = []
 instance Applicative (Zip []) where
 
+instance Unit (Zip Maybe) where
+  pure a = Zip (Just a)
+instance SemiApplicative (Zip Maybe) where
+  Zip (Just zf) <*> Zip (Just zx) = Zip (Just (zf zx))
+  _ <*> _ = Zip Nothing
+instance Applicative (Zip Maybe)
+  
 instance Unit (Zip Tree) where
   pure a = Zip (Node a (deZip (pure (pure a))))
 instance SemiApplicative (Zip Tree) where

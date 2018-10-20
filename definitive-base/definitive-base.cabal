@@ -16,7 +16,7 @@ extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Definitive, Algebra.Monad, Algebra.Functor, Algebra.Foldable, Algebra.Lens, Algebra.Subtractive, Algebra.Core, Algebra.Classes, Algebra.Traversable, Algebra.Applicative, Algebra.Arrow, Algebra.Monad.Error, Algebra.Monad.Foldable, Algebra.Monad.RWS, Algebra.Monad.Free, Algebra.Monad.State, Algebra.Monad.Writer, Algebra.Monad.Logic, Algebra.Monad.Base, Algebra.Monad.Cont, Algebra.Monad.Reader, Definitive.Base, Data.Containers, Data.Queue, Data.IOVar, Data.Probability, Data.TimeVal, Data.SExpr, Data.Containers.Sequence, IO.Time
+  exposed-modules:     Definitive, Algebra.Monad, Algebra.Functor, Algebra.Foldable, Algebra.Lens, Algebra.Subtractive, Algebra.Core, Algebra.Classes, Algebra.Traversable, Algebra.Applicative, Algebra.Arrow, Algebra.Monad.Error, Algebra.Monad.Foldable, Algebra.Monad.RWS, Algebra.Monad.Free, Algebra.Monad.State, Algebra.Monad.Writer, Algebra.Monad.Logic, Algebra.Monad.Base, Algebra.Monad.Cont, Algebra.Monad.Reader, Definitive.Base, Data.Containers, Data.IOVar, Data.Probability, Data.TimeVal, Data.SExpr, Data.Containers.Sequence
   -- other-modules:
   default-extensions: TypeSynonymInstances,
                       NoMonomorphismRestriction,
@@ -33,6 +33,9 @@ library
                       AllowAmbiguousTypes,
                       RoleAnnotations
   other-extensions:    ImplicitParams, StandaloneDeriving, MultiParamTypeClasses, RankNTypes, DefaultSignatures, TupleSections, Rank2Types, FunctionalDependencies, ViewPatterns, LiberalTypeSynonyms, NoRebindableSyntax, EmptyDataDecls, CPP, ScopedTypeVariables, UndecidableInstances, DeriveGeneric, ExistentialQuantification, RecursiveDo, DeriveDataTypeable
-  build-depends: base >=4.9 && <4.10,bytestring >=0.10 && <0.11,clock >=0.7 && <0.8,containers >=0.5 && <0.6,deepseq >=1.4 && <1.5,vector >=0.12 && <0.13
+  build-depends: base >=4.8 && <4.10,bytestring >=0.10 && <0.11,containers >=0.5 && <0.6,deepseq >=1.4 && <1.5
+  if !impl(haste)
+    build-depends: clock >=0.7 && <0.8,vector >=0.12 && <0.13
+    exposed-modules: IO.Time, Data.Queue
   hs-source-dirs:      src
   default-language:    Haskell2010
