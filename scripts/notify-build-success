@@ -1,2 +1,6 @@
 #!/bin/bash
 notify-send "Stack: Compilation completed successfully"
+
+GIT_DIR=.autocommit/.git git commit -am "Successful build (on $date)"
+GIT_DIR=.autocommit/.git git push 
+notify-send "New commit pushed to the autocommit branch"

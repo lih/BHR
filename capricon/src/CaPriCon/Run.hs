@@ -306,7 +306,8 @@ runCOCBuiltin COCB_InsertNodeDir = do
       StackExtra (Opaque (COCDir (insert e (map fst (takeLast d ctx),x) dir))):t
     st -> st
 
-data UniverseConstraints = UniverseConstraints Int [Int]
+type MaxDelta = Int
+data UniverseConstraints = UniverseConstraints MaxDelta [MaxDelta]
 data COCValue io str = COCExpr Int (Node str)
                      | COCNull | COCError str
                      | COCDir (NodeDir str ([str],StackVal str (COCBuiltin io str) (COCValue io str)))
