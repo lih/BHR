@@ -1,14 +1,16 @@
 {-# LANGUAGE ImplicitParams, StandaloneDeriving, CPP #-}
+#ifdef __GLASGOW_HASKELL__
+#define GHC_import import
+#define GHC_module module
+#else
+#define GHC_import --
+#define GHC_module --
+#endif
+
 module Definitive (
   module Definitive.Base,
   module Data.Containers,
-#ifndef __GLASGOW_HASKELL__
-{-
-#endif
-  module Data.Containers.Sequence,
-#ifndef __GLASGOW_HASKELL__
--}
-#endif
+  GHC_module Data.Containers.Sequence,
   trace,tracing,trace2,mtrace,debug,
 
   cli
@@ -17,13 +19,7 @@ module Definitive (
 import Definitive.Base 
 import System.Environment (getArgs)
 import Data.Containers
-#ifndef __GLASGOW_HASKELL__
-{-
-#endif
-import Data.Containers.Sequence
-#ifndef __GLASGOW_HASKELL__
--}
-#endif
+GHC_import Data.Containers.Sequence
 
 trace :: String -> a -> a
 trace s x = (putStrLn s^.thunk)`seq`x
