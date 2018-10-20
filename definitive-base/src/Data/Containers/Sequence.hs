@@ -2,14 +2,16 @@
 module Data.Containers.Sequence (
   Sequence(..),Stream(..),i'elems,take,drop,dropping,
 
+  takeWhile,takeUntil,dropWhile,dropUntil,pry,
+  span,break,
+  (++),
+
+#ifndef __HASTE__
   -- * Strict and lazy slices (bytestrings on arbitrary Storable types)
   Slice,Slices,slice,slices,i'storables,_Slices,breadth,
 
-  V.unsafeWith,sliceElt,span,break,
-
-  takeWhile,takeUntil,dropWhile,dropUntil,pry,
-
-  (++)
+  V.unsafeWith,sliceElt
+#endif
   ) where
 
 import Definitive.Base
@@ -19,11 +21,13 @@ import qualified Data.ByteString.Lazy as Bytes
 import qualified Data.ByteString as Chunk
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Internal as BSI
+import qualified Prelude as P
+import Unsafe.Coerce (unsafeCoerce)
+#ifndef __HASTE__
 import qualified Data.Vector.Storable as V
 import Foreign.Storable (sizeOf)
-import qualified Prelude as P
 import Foreign.ForeignPtr (ForeignPtr,castForeignPtr)
-import Unsafe.Coerce (unsafeCoerce)
+#endif
 
 class Monoid t => Sequence t where
   splitAt :: Int -> t -> (t,t)
@@ -35,9 +39,6 @@ drop = map2 snd splitAt
 dropping :: Sequence t => Int -> Lens' t t
 dropping n = lens (drop n) (\x y -> take n x+y)
 
-instance V.Storable a => Semigroup (V.Vector a) where (+) = (V.++)
-instance V.Storable a => Monoid (V.Vector a) where zero = V.empty
-  
 instance Sequence [a] where
   splitAt n l = (h,t)
     where ~(h,t) = case (n,l) of
@@ -49,8 +50,6 @@ instance Sequence Bytes where
   splitAt = Bytes.splitAt . fromIntegral
 instance Sequence Chunk where
   splitAt = Chunk.splitAt . fromIntegral
-instance V.Storable a => Sequence (V.Vector a) where
-  splitAt = V.splitAt
 
 class Stream c s | s -> c where
   uncons :: s -> Maybe (c,s)
@@ -65,6 +64,47 @@ instance Stream Char Chunk where
 instance Stream Word8 Bytes where
   uncons = Bytes.uncons
   cons = Bytes.cons
+
+span :: Stream c s => (c -> Bool) -> s -> ([c],s)
+span p = fix $ \f s -> (case uncons s of
+                             Just (a,t) | p a -> let ~(l,t') = f t in (a:l,t')
+                             _ -> ([],s))
+break :: Stream c s => (c -> Bool) -> s -> ([c],s)
+break = span . map not
+
+takeWhile :: Stream c s => (c -> Bool) -> s -> [c]
+takeWhile p = fst . span p
+dropWhile :: Stream c s => (c -> Bool) -> s -> s
+dropWhile p = snd . span p
+takeUntil :: Stream c s => (c -> Bool) -> s -> [c]
+takeUntil = takeWhile . map not
+dropUntil :: Stream c s => (c -> Bool) -> s -> s
+dropUntil = dropWhile . map not
+
+pry :: Stream c s => Int -> s -> ([c],s)
+pry 0 s = ([],s)
+pry n s = case uncons s of
+  Just (a,s') -> let ~(t,l') = pry (n-1) s' in (a:t,l')
+  Nothing -> ([],s)
+
+(++) :: Stream c s => [c] -> s -> s
+(a:t) ++ c = cons a (t++c)
+[] ++ c = c
+
+i'elems :: (Monoid s',Stream c s,Stream c' s') => Iso [c] [c'] s s'
+i'elems = iso (takeUntil (const False)) (++zero)
+
+newtype StreamC a = StreamC (forall x. (a -> x -> x) -> x)
+
+instance Stream a (StreamC a) where
+  cons a (StreamC l) = StreamC (\c -> c a (l c))
+  uncons (StreamC l) = Just (l const,l (flip const))
+
+#ifndef __HASTE__
+instance V.Storable a => Semigroup (V.Vector a) where (+) = (V.++)
+instance V.Storable a => Monoid (V.Vector a) where zero = V.empty
+instance V.Storable a => Sequence (V.Vector a) where
+  splitAt = V.splitAt
 
 type Slice a = V.Vector a
 i'storables :: forall a b. (V.Storable a,V.Storable b) => Iso (Slice a) (Slice b) Chunk Chunk
@@ -113,37 +153,4 @@ sliceElt f = V.mapM (unsafeCoerce f) <&> runPMonad
 breadth :: V.Storable a => Slices a -> Int
 breadth s = s^.._Slices & foldMap V.length
 
-span :: Stream c s => (c -> Bool) -> s -> ([c],s)
-span p = fix $ \f s -> (case uncons s of
-                             Just (a,t) | p a -> let ~(l,t') = f t in (a:l,t')
-                             _ -> ([],s))
-break :: Stream c s => (c -> Bool) -> s -> ([c],s)
-break = span . map not
-
-takeWhile :: Stream c s => (c -> Bool) -> s -> [c]
-takeWhile p = fst . span p
-dropWhile :: Stream c s => (c -> Bool) -> s -> s
-dropWhile p = snd . span p
-takeUntil :: Stream c s => (c -> Bool) -> s -> [c]
-takeUntil = takeWhile . map not
-dropUntil :: Stream c s => (c -> Bool) -> s -> s
-dropUntil = dropWhile . map not
-
-pry :: Stream c s => Int -> s -> ([c],s)
-pry 0 s = ([],s)
-pry n s = case uncons s of
-  Just (a,s') -> let ~(t,l') = pry (n-1) s' in (a:t,l')
-  Nothing -> ([],s)
-
-(++) :: Stream c s => [c] -> s -> s
-(a:t) ++ c = cons a (t++c)
-[] ++ c = c
-
-i'elems :: (Monoid s',Stream c s,Stream c' s') => Iso [c] [c'] s s'
-i'elems = iso (takeUntil (const False)) (++zero)
-
-newtype StreamC a = StreamC (forall x. (a -> x -> x) -> x)
-
-instance Stream a (StreamC a) where
-  cons a (StreamC l) = StreamC (\c -> c a (l c))
-  uncons (StreamC l) = Just (l const,l (flip const))
+#endif -- __HASTE__

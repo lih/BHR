@@ -2,9 +2,7 @@
 module Definitive (
   module Definitive.Base,
   module Data.Containers,
-#ifndef __HASTE__
   module Data.Containers.Sequence,
-#endif
   trace,tracing,trace2,mtrace,debug,
 
   cli
@@ -13,9 +11,7 @@ module Definitive (
 import Definitive.Base 
 import System.Environment (getArgs)
 import Data.Containers
-#ifndef __HASTE__
 import Data.Containers.Sequence
-#endif
 
 trace :: String -> a -> a
 trace s x = (putStrLn s^.thunk)`seq`x
