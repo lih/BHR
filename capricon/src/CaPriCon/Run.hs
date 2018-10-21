@@ -23,6 +23,7 @@ showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
     COCNull -> "(null)"
     COCError e -> "<!"+e+"!>"
     COCDir d -> fromString $ show d
+    COCConvertible conv -> fromString $ show conv
   StackSymbol s -> fromString $ show s
   StackInt n -> fromString $ show n
   StackList l -> "["+intercalate "," (map go l)+"]"
@@ -35,7 +36,7 @@ data COCBuiltin io str = COCB_Print
                        | COCB_ToInt | COCB_Concat | COCB_Uni | COCB_Hyp
                        | COCB_Quit | COCB_Var
                        | COCB_Ap | COCB_Bind Bool BindType
-                       | COCB_TypeOf | COCB_Mu
+                       | COCB_TypeOf | COCB_Mu | COCB_Convertible
                        | COCB_HypBefore | COCB_Subst | COCB_Rename
                        | COCB_ContextVars
                        | COCB_GetShowDir | COCB_SetShowDir | COCB_InsertNodeDir
@@ -205,6 +206,10 @@ runCOCBuiltin COCB_TypeOf = do
       Just te -> COCExpr d te
       Nothing -> COCNull
     st -> st
+runCOCBuiltin COCB_Convertible = runStackState $ modify $ \case
+  StackExtra (Opaque (COCExpr d e)):StackExtra (Opaque (COCExpr d' e')):t ->
+    StackExtra (Opaque (COCConvertible (convertible (inc_depth (max (d-d') 0) e) (inc_depth (max (d'-d) 0) e')))):t
+  st -> st
 
 runCOCBuiltin (COCB_ExecModule (WriteImpl writeResource)) = do
   st <- runStackState get
@@ -317,6 +322,7 @@ instance Semigroup UniverseConstraints where
 instance Monoid UniverseConstraints where zero = UniverseConstraints (repeat (repeat Nothing))
 data COCValue io str = COCExpr Int (Node str)
                      | COCNull | COCError str
+                     | COCConvertible (Maybe (Int,Int))
                      | COCDir (NodeDir str ([str],StackVal str (COCBuiltin io str) (COCValue io str)))
                      deriving Generic
 instance (ListSerializable s,ListSerializable b,ListSerializable a) => ListSerializable (StackVal s b a)
@@ -390,6 +396,7 @@ cocDict version getResource getBResource writeResource writeBResource =
                ("term/lambda"              , Builtin_Extra (COCB_Bind False Lambda )),
                ("term/forall"              , Builtin_Extra (COCB_Bind False Prod   )  ),
                ("term/mu"                  , Builtin_Extra COCB_Mu                 ),
+               ("term/convertible"         , Builtin_Extra COCB_Convertible        ),
 
                ("context/intro"           , Builtin_Extra COCB_Hyp                ),
                ("context/intro-before"    , Builtin_Extra COCB_HypBefore          ),
