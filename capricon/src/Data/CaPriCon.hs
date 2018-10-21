@@ -408,7 +408,7 @@ convertible :: Node str -> Node str -> Maybe (Max Int,Max Int)
 convertible = \x y -> map fst (go False x y^..writerT)
   where go inv (Bind b _ tx e) (Bind b' _ tx' e') = guard (b==b') >> go (not inv) tx tx' >> go inv e e'
         go inv (Cons ax) (Cons ay) = go_a inv ax ay
-        go inv (Universe u) (Universe v) | u>v = tellInv inv (Max (u-v),zero)
+        go inv (Universe u) (Universe v) | u>v = tellInv inv (Max (u-v),Max 0)
                                          | otherwise = return ()
         go _ _ _ = lift Nothing
         
