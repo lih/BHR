@@ -404,8 +404,8 @@ mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
               return $ Bind Prod xn tIH (Universe (u+1))
             go_col' _ _ _ = zero
 
-convertible :: Node str -> Node str -> Maybe (Max Int,Max Int)
-convertible = \x y -> map fst ((tell (Max 0,Max 0) >> go False x y)^..writerT)
+convertible :: Node str -> Node str -> Maybe (Int,Int)
+convertible = \x y -> map ((getMax<#>getMax) . fst) ((tell (Max 0,Max 0) >> go False x y)^..writerT)
   where go inv (Bind b _ tx e) (Bind b' _ tx' e') = guard (b==b') >> go (not inv) tx tx' >> go inv e e'
         go inv (Cons ax) (Cons ay) = go_a inv ax ay
         go inv (Universe u) (Universe v) | u>v = tellInv inv (Max (u-v),zero)
