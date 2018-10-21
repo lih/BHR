@@ -4,8 +4,8 @@ module Data.CaPriCon(
   IsCapriconString(..),BindType(..),Node(..),ApHead(..),Application(..),
   -- ** Managing De Bruijin indices
   adjust_depth,adjust_telescope_depth,inc_depth,free_vars,is_free_in,
-  -- ** General term substitution and type inference
-  subst,substn,type_of,mu_type,
+  -- ** General term substitution, type inference and convertibility
+  subst,substn,type_of,mu_type,convertible,
   -- ** Expression directories
   StringPattern,NodeDir(..),AHDir(..),ApDir,
   findPattern,freshContext,
@@ -403,3 +403,20 @@ mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
                   ihRoot = Cons (Ap (Sym (nargs-d-1)) [Cons (Ap (Sym (j+nargs)) []) | j <- reverse [0..d'-1]])
               return $ Bind Prod xn tIH (Universe (u+1))
             go_col' _ _ _ = zero
+
+convertible :: Node str -> Node str -> Maybe (Int,Int)
+convertible = \x y -> map ((getMax<#>getMax) . fst) ((tell (Max 0,Max 0) >> go False x y)^..writerT)
+  where go inv (Bind b _ tx e) (Bind b' _ tx' e') = guard (b==b') >> go (not inv) tx tx' >> go inv e e'
+        go inv (Cons ax) (Cons ay) = go_a inv ax ay
+        go inv (Universe u) (Universe v) | u>v = tellInv inv (Max (u-v),zero)
+                                         | otherwise = return ()
+        go _ _ _ = lift Nothing
+        
+        go_a inv (Ap hi ai) (Ap hj aj) = go_ah inv hi hj >> sequence_ (zipWith (go inv) ai aj)
+  
+        go_ah _ (Sym i) (Sym j) | i==j = return ()
+        go_ah inv (Mu _ _ x) (Mu _ _ y) = go_a inv x y
+        go_ah _ _ _ = lift Nothing
+        
+        tellInv True (x,y) = tell (y,x)
+        tellInv False (x,y) = tell (x,y)

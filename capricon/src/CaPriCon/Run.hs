@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, NoMonomorphismRestriction, OverloadedStrings, ScopedTypeVariables, DeriveGeneric, ConstraintKinds, UndecidableInstances #-}
+{-# LANGUAGE CPP, NoMonomorphismRestriction, OverloadedStrings, ScopedTypeVariables, DeriveGeneric, ConstraintKinds, UndecidableInstances, PatternSynonyms #-}
 module CaPriCon.Run where
 
 import Definitive
@@ -13,16 +13,19 @@ instance MonadSubIO IO IO where liftSubIO = id
 instance MonadSubIO io m => MonadSubIO io (ConcatT st b o s m) where
   liftSubIO ma = lift $ liftSubIO ma
 
+pattern StackCOC v = StackExtra (Opaque v)
+
 takeLast n l = drop (length l-n) l
 
 showStackVal :: IsCapriconString str => (NodeDoc str -> str) -> NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> StackVal str (COCBuiltin io str) (COCValue io str) -> str
 showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
-  StackExtra (Opaque _x) -> case _x of
+  StackCOC _x -> case _x of
     COCExpr d e -> -- "<"+show d+">:"+
       toRaw $ showNode' dir (map (second snd) $ takeLast d (freshContext ctx)) e
     COCNull -> "(null)"
     COCError e -> "<!"+e+"!>"
     COCDir d -> fromString $ show d
+    COCConvertible conv -> fromString $ show conv
   StackSymbol s -> fromString $ show s
   StackInt n -> fromString $ show n
   StackList l -> "["+intercalate "," (map go l)+"]"
@@ -35,7 +38,7 @@ data COCBuiltin io str = COCB_Print
                        | COCB_ToInt | COCB_Concat | COCB_Uni | COCB_Hyp
                        | COCB_Quit | COCB_Var
                        | COCB_Ap | COCB_Bind Bool BindType
-                       | COCB_TypeOf | COCB_Mu
+                       | COCB_TypeOf | COCB_Mu | COCB_Convertible
                        | COCB_HypBefore | COCB_Subst | COCB_Rename
                        | COCB_ContextVars
                        | COCB_GetShowDir | COCB_SetShowDir | COCB_InsertNodeDir
@@ -109,7 +112,7 @@ outputText :: Lens' (COCState str) (str -> str)
 outputText = lens _outputText (\x y -> x { _outputText = y })
 
 pushError :: MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m => str -> m ()
-pushError s = runStackState $ modify $ (StackExtra (Opaque (COCError s)):)
+pushError s = runStackState $ modify $ (StackCOC (COCError s):)
 
 runCOCBuiltin :: (MonadSubIO io m,IsCapriconString str, MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m,IOListFormat io str,ListFormat str) => COCBuiltin io str -> m ()
 runCOCBuiltin COCB_Quit = runExtraState (endState =- True)
@@ -148,13 +151,13 @@ runCOCBuiltin COCB_Concat = runStackState $ modify $ \case
 runCOCBuiltin COCB_Uni = do
   ctx <- runExtraState (getl context)
   runStackState $ modify $ \case
-    StackInt n:t -> StackExtra (Opaque (COCExpr (length ctx) (Universe n))):t
+    StackInt n:t -> StackCOC (COCExpr (length ctx) (Universe n)):t
     st -> st
 runCOCBuiltin COCB_Var = do
   ctx <- runExtraState (getl context)
   runStackState $ modify $ \case
     StackSymbol name:t | Just i <- lookup name (zipWith (second . const) [0..] (freshContext ctx)) ->
-                         StackExtra (Opaque (COCExpr (length ctx) (Cons (Ap (Sym i) [])))):t
+                         StackCOC (COCExpr (length ctx) (Cons (Ap (Sym i) []))):t
     st -> st
 runCOCBuiltin COCB_Ap = do
   ctx <- runExtraState (getl context)
@@ -162,18 +165,18 @@ runCOCBuiltin COCB_Ap = do
       nctx = length ctx
       env = map snd ctx
   runStackState $ modify $ \case
-    (StackExtra (Opaque (COCExpr df f)):StackExtra (Opaque (COCExpr dx x)):t) ->
+    (StackCOC (COCExpr df f):StackCOC (COCExpr dx x):t) ->
       let x' = adj dx 1 x ; f' = adj df 0 f in
-        StackExtra (Opaque (COCExpr nctx (subst f' (Cons (Ap (Sym 0) [x'])) env))):t
+        StackCOC (COCExpr nctx (subst f' (Cons (Ap (Sym 0) [x'])) env)):t
     x -> x
 runCOCBuiltin (COCB_Bind close bt) = do
   ctx <- runExtraState (getl context) 
   let d = length ctx
-      setVal (StackExtra (Opaque (COCExpr d' e')))
+      setVal (StackCOC (COCExpr d' e'))
         | i <- d-d'
         , d==d' || not close
         , (_,(x,tx):_) <- splitAt i ctx
-        = StackExtra (Opaque (COCExpr (d'-1) (Bind bt x tx e')))
+        = StackCOC (COCExpr (d'-1) (Bind bt x tx e'))
       setVal (StackDict dict) = StackDict (map setVal dict)
       setVal (StackList l) = StackList (map setVal l)
       setVal x = x
@@ -187,24 +190,28 @@ runCOCBuiltin COCB_Mu = do
   ctx <- runExtraState (getl context)
   let locEnv d = map snd (takeLast d ctx)
   runStackState $ modify $ \case
-    StackExtra (Opaque (COCExpr d e)):t -> 
+    StackCOC (COCExpr d e):t -> 
       case type_of e (locEnv d) >>= \te -> mu_type te (locEnv d) of
         Just mte -> let args (Bind Prod _ tx e') = tx:args e'
                         args _ = []
                     in (:t) $ StackExtra $ Opaque $ COCExpr d $
                        subst e (Cons (Ap (Mu [] (args mte) (Ap (Sym 0) [])) [])) (locEnv d)
-        Nothing -> StackExtra (Opaque COCNull):t
+        Nothing -> StackCOC COCNull:t
     st -> st
 runCOCBuiltin COCB_TypeOf = do
   ctx <- runExtraState (getl context)
   runStackState $ modify $ \case
-    StackExtra (Opaque (COCExpr d (Cons (Ap (Sym i) [])))):t
+    StackCOC (COCExpr d (Cons (Ap (Sym i) []))):t
       | (_,ti):_ <- drop i ctx ->
-          StackExtra (Opaque (COCExpr (d-i-1) ti)):t
-    StackExtra (Opaque (COCExpr d e)):t -> (:t) $ StackExtra $ Opaque $ case type_of e (takeLast d (map snd ctx)) of
+          StackCOC (COCExpr (d-i-1) ti):t
+    StackCOC (COCExpr d e):t -> (:t) $ StackExtra $ Opaque $ case type_of e (takeLast d (map snd ctx)) of
       Just te -> COCExpr d te
       Nothing -> COCNull
     st -> st
+runCOCBuiltin COCB_Convertible = runStackState $ modify $ \case
+  StackCOC (COCExpr d e):StackCOC (COCExpr d' e'):t ->
+    StackCOC (COCConvertible (flip convertible (inc_depth (max (d-d') 0) e) (inc_depth (max (d'-d) 0) e'))):t
+  st -> st
 
 runCOCBuiltin (COCB_ExecModule (WriteImpl writeResource)) = do
   st <- runStackState get
@@ -236,7 +243,7 @@ runCOCBuiltin (COCB_Cache (ReadImpl getResource) (WriteImpl writeResource)) = do
 
 runCOCBuiltin COCB_Hyp = do
   ass <- runStackState $ id <~ \case
-    StackSymbol name:StackExtra (Opaque (COCExpr d typ)):t -> (t,Just (d,(name,typ)))
+    StackSymbol name:StackCOC (COCExpr d typ):t -> (t,Just (d,(name,typ)))
     st -> (st,Nothing)
   case ass of
     Just (d,x) -> runExtraState $ context =~ \ctx -> (second (inc_depth (length ctx-d)) x:ctx)
@@ -246,7 +253,7 @@ runCOCBuiltin COCB_HypBefore = do
   let csz = length ctx
       adj hi i j = if i+j>=hi then j+1 else j
   ctx' <- runStackState $ id <~ \case
-    StackSymbol h:StackSymbol h':StackExtra (Opaque (COCExpr d e)):t
+    StackSymbol h:StackSymbol h':StackCOC (COCExpr d e):t
       | (hi,_):_ <- select ((==h) . fst . snd) (zip [0..] ctx)
       , all (>hi+d-csz) (free_vars e) ->
         let ctx' = foldr (\x k i -> case compare hi i of
@@ -254,9 +261,9 @@ runCOCBuiltin COCB_HypBefore = do
                              EQ -> second (adjust_depth (adj hi i)) x:(h',inc_depth (csz-(d+hi+1)) e):k (i+1)
                              GT -> second (adjust_depth (adj hi i)) x:k (i+1))
                    (\_ -> []) ctx 0
-            adjE x@(StackExtra (Opaque (COCExpr d' e'))) =
+            adjE x@(StackCOC (COCExpr d' e')) =
               let i = csz-d'
-              in if i<=hi then StackExtra (Opaque (COCExpr (d+1) (adjust_depth (adj (hi+1) i) e')))
+              in if i<=hi then StackCOC (COCExpr (d+1) (adjust_depth (adj (hi+1) i) e'))
                  else x
             adjE x = x
         in (map adjE t,ctx')
@@ -266,16 +273,16 @@ runCOCBuiltin COCB_Subst = do
   ctx <- runExtraState (getl context)
   let csz = length ctx
   ctx' <- runStackState $ id <~ \case
-    StackSymbol h:StackExtra (Opaque (COCExpr d e)):t
+    StackSymbol h:StackCOC (COCExpr d e):t
       | (hi,_):_ <- select ((==h) . fst . snd) (zip [0..] ctx)
       , all (>hi+d-csz) (free_vars e) ->
         let ctx' = foldr (\x k i env -> case compare i hi of
                              LT -> second (\xv -> substn e (hi-i) xv env) x:k (i+1) (tail env)
                              EQ -> k (i+1) (tail env)
                              GT -> x:k (i+1) (tail env)) (\_ _ -> []) ctx 0 (map snd ctx)
-            adjE x@(StackExtra (Opaque (COCExpr d' e'))) =
+            adjE x@(StackCOC (COCExpr d' e')) =
               let i = csz - d'
-              in if i<=hi then StackExtra (Opaque (COCExpr (d-1) ((substn e (hi-i) e' (map snd (drop i ctx))))))
+              in if i<=hi then StackCOC (COCExpr (d-1) ((substn e (hi-i) e' (map snd (drop i ctx)))))
                  else x
             adjE x = x
         in (map adjE t,ctx')
@@ -293,10 +300,10 @@ runCOCBuiltin COCB_ContextVars = do
 
 runCOCBuiltin COCB_GetShowDir = do
   dir <- runExtraState (getl showDir)
-  runStackState $ modify $ (StackExtra (Opaque (COCDir (map (\(c,l) -> (c,StackSymbol (intercalate " " $ map (id <|> head . flip drop c) l))) dir))):)
+  runStackState $ modify $ (StackCOC (COCDir (map (\(c,l) -> (c,StackSymbol (intercalate " " $ map (id <|> head . flip drop c) l))) dir)):)
 runCOCBuiltin COCB_SetShowDir = do
   mod' <- runStackState $ id <~ \case
-    StackExtra (Opaque (COCDir d)):t -> (t,showDir =- map (\(c,StackSymbol ws) -> (c,[case select ((==w) . fst) (zip c [0..]) of
+    StackCOC (COCDir d):t -> (t,showDir =- map (\(c,StackSymbol ws) -> (c,[case select ((==w) . fst) (zip c [0..]) of
                                                                                         (_,i):_ -> Right i
                                                                                         _ -> Left w
                                                                                      | w <- map fromString $ words (toString ws)])) d)
@@ -305,8 +312,8 @@ runCOCBuiltin COCB_SetShowDir = do
 runCOCBuiltin COCB_InsertNodeDir = do
   ctx <- runExtraState (getl context)
   runStackState $ modify $ \case
-    x:StackExtra (Opaque (COCExpr d e)):StackExtra (Opaque (COCDir dir)):t ->
-      StackExtra (Opaque (COCDir (insert e (map fst (takeLast d ctx),x) dir))):t
+    x:StackCOC (COCExpr d e):StackCOC (COCDir dir):t ->
+      StackCOC (COCDir (insert e (map fst (takeLast d ctx),x) dir)):t
     st -> st
 
 type MaxDelta = Int
@@ -317,6 +324,7 @@ instance Semigroup UniverseConstraints where
 instance Monoid UniverseConstraints where zero = UniverseConstraints (repeat (repeat Nothing))
 data COCValue io str = COCExpr Int (Node str)
                      | COCNull | COCError str
+                     | COCConvertible (Maybe (Int,Int))
                      | COCDir (NodeDir str ([str],StackVal str (COCBuiltin io str) (COCValue io str)))
                      deriving Generic
 instance (ListSerializable s,ListSerializable b,ListSerializable a) => ListSerializable (StackVal s b a)
@@ -390,6 +398,7 @@ cocDict version getResource getBResource writeResource writeBResource =
                ("term/lambda"              , Builtin_Extra (COCB_Bind False Lambda )),
                ("term/forall"              , Builtin_Extra (COCB_Bind False Prod   )  ),
                ("term/mu"                  , Builtin_Extra COCB_Mu                 ),
+               ("term/convertible"         , Builtin_Extra COCB_Convertible        ),
 
                ("context/intro"           , Builtin_Extra COCB_Hyp                ),
                ("context/intro-before"    , Builtin_Extra COCB_HypBefore          ),

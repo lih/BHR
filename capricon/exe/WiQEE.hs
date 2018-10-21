@@ -90,7 +90,7 @@ setBytes :: String -> [Word8] -> JS.CIO ()
 setBytes f v = setString f (map (toEnum . fromIntegral) v)
 
 hasteDict :: COCDict JS.CIO String
-hasteDict = cocDict ("0.8.1.2-js" :: String) getString getBytes setString setBytes
+hasteDict = cocDict ("0.8.1.3-js" :: String) getString getBytes setString setBytes
 
 main :: IO ()
 main = JS.concurrent $ void $ do
