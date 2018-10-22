@@ -98,7 +98,6 @@ hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
   _ -> zero
     
 data ContextNode str = ContextNode Int (Node str)
-rawNode (ContextNode _ x) = x
 inContext :: MonadReader (Env str) m => ContextNode str -> m (ContextNode str)
 inContext (ContextNode d e) = ask <&> \(length -> nctx) -> ContextNode nctx (inc_depth (nctx-d) e)
 restrictEnv :: Int -> Env str -> Env str
@@ -110,12 +109,11 @@ instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression
   mkBind t e = do
     ContextNode de e' <- inContext e
     ContextNode (de-1) <$> mkBind t e'
-  mkApply cf cx = do
-    ContextNode dr f <- inContext cf
-    x <- rawNode <$> inContext cx
-    ContextNode dr <$> mkApply f x
+  mkApply (ContextNode df f) (ContextNode dx x) = do
+    let dm = max df dx
+    ContextNode dm <$> mkApply (inc_depth (dm-df) f) (inc_depth (dm-dx) x)
   checkType (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (checkType e)
-  mkMu (ContextNode d e) = ContextNode d <$> local  (restrictEnv d) (mkMu e)
+  mkMu (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (mkMu e)
   substHyp h (ContextNode dx x) (ContextNode de e) = let dm = max dx de in
     ContextNode dm <$> local (restrictEnv dm) (substHyp h (inc_depth (dm-dx) x) (inc_depth (dm-de) e))
 
