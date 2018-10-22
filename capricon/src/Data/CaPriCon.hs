@@ -55,7 +55,7 @@ data ApHead str = Sym Int | Mu [(str,Node str,Node str)] [Node str] (Application
             deriving (Show,Generic)
 data Application str = Ap (ApHead str) [Node str]
                  deriving (Show,Generic) 
-type Env str = [Node str]
+type Env str = [(str,Node str)]
 
 type ListSerializable a = (Serializable Word8 ListBuilder ListStream a)
 type ListFormat a = (Format Word8 ListBuilder ListStream a)
@@ -73,7 +73,7 @@ class Monad m => COCExpression str m e | e -> str where
   mkVariable :: Int -> m e
   mkBind :: BindType -> str -> e -> e -> m e
   mkApply :: e -> e -> m e
-instance (IsCapriconString str,Monad m) => COCExpression str m (Node str) where
+instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression str m (Node str) where
   mkUniverse = pure . Universe
   mkVariable = pure . Cons . \i -> Ap (Sym i) []
   mkBind b x tx e = pure $ Bind b x tx e
@@ -81,10 +81,10 @@ instance (IsCapriconString str,Monad m) => COCExpression str m (Node str) where
 
 data ContextNode str = ContextNode Int (Node str)
 rawNode (ContextNode _ x) = x
-inContext :: MonadReader [(str,Node str)] m => ContextNode str -> m (ContextNode str)
+inContext :: MonadReader (Env str) m => ContextNode str -> m (ContextNode str)
 inContext (ContextNode d e) = ask <&> \(length -> nctx) -> ContextNode nctx (inc_depth (nctx-d) e)
 
-instance (IsCapriconString str,MonadReader [(str,Node str)] m,Monad m) => COCExpression str m (ContextNode str) where
+instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression str m (ContextNode str) where
   mkUniverse u = ask >>= \ctx -> ContextNode (length ctx)<$>mkUniverse u
   mkVariable i = ask >>= \ctx -> ContextNode (length ctx)<$>mkVariable i
   mkBind t x tx e = do
@@ -364,10 +364,10 @@ showNode' dir = go 0
 
 type_of :: (IsCapriconString str,MonadReader (Env str) m) => Node str -> m (Maybe (Node str))
 type_of = yb maybeT . go
-  where go (Bind Lambda x tx e) = Bind Prod x tx <$> local (tx:) (go e)
-        go (Bind Prod _ tx e) = do
+  where go (Bind Lambda x tx e) = Bind Prod x tx <$> local ((x,tx):) (go e)
+        go (Bind Prod x tx e) = do
           a <- go tx
-          b <- local (tx:) $ go e
+          b <- local ((x,tx):) $ go e
           case (a,b) of
             (Universe ua,Universe ub) -> return (Universe (max ua ub))
             _ -> zero
@@ -376,10 +376,10 @@ type_of = yb maybeT . go
           where go' (Ap (Sym i) subs) = do
                   e <- ask
                   case drop i e of
-                    ti:_ -> rec_subst subs (inc_depth (i+1) ti)
+                    (_,ti):_ -> rec_subst subs (inc_depth (i+1) ti)
                     _ -> zero
                 go' (Ap (Mu env _ a') subs) = do
-                  ta <- local (map (by l'2) env +) (go' a')
+                  ta <- local (map (\(x,tx,_) -> (x,tx)) env +) (go' a')
                   preret <- maybeT $^ mu_type $ foldl' (\e (x,tx,_) -> Bind Prod x tx e) ta env
                   rec_subst subs (subst (Cons a') preret)
                       
@@ -399,7 +399,7 @@ mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
 
     go d (Bind Prod x tx e) = do
       tx' <- go_col d x tx
-      e' <- local (tx:) (go (d+1) e)
+      e' <- local ((x,tx):) (go (d+1) e)
       return (Bind Prod x tx' e')
     go _ (Cons (Ap (Sym i) args)) = return $ Cons (Ap (Sym i) $ args + [Cons (Ap (Sym nargs) [])])
     go _ _ = zero
@@ -410,10 +410,10 @@ mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
                   let tx' = bind Prod (adjust_telescope_depth second (+(d+d')) root_args)
                             (adjust_depth (\i' -> if constr_ind d d' i' then (i'-d')+(nargs-d) else i'+nargs) tx)
                       tIx = Cons $ Ap (Sym (i+1)) $ map (inc_depth 1) subs + [Cons (Ap (Sym 0) [])]
-                  e' <- local ((tx:) . (undefined:)) (go_col' (d'+2) (touch (1 :: Int) (map (+2) recs))
-                                                      (adjust_depth (\j -> if j==0 then j else j+1) e))
+                  e' <- local (((x,tx):) . (undefined:)) (go_col' (d'+2) (touch (1 :: Int) (map (+2) recs))
+                                                          (adjust_depth (\j -> if j==0 then j else j+1) e))
                   return $ Bind Prod x tx' (Bind Prod x tIx e')
-            go_col' d' recs (Bind Prod x tx e) = Bind Prod x tx <$> local (tx:) (go_col' (d'+1) (map (+1) recs) e)
+            go_col' d' recs (Bind Prod x tx e) = Bind Prod x tx <$> local ((x,tx):) (go_col' (d'+1) (map (+1) recs) e)
             go_col' d' recs (Cons (Ap (Sym i) xs))
               | constr_ind d d' i = do
                   let args = reverse $ select (not . (`isKeyIn`recs)) [0..d'-1]
