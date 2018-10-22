@@ -73,6 +73,11 @@ class Monad m => COCExpression str m e | e -> str where
   mkVariable :: Int -> m e
   mkBind :: BindType -> str -> e -> e -> m e
   mkApply :: e -> e -> m e
+instance (Show str,Monad m) => COCExpression str m (Node str) where
+  mkUniverse = pure . Universe
+  mkVariable = pure . Cons . \i -> Ap (Sym i) []
+  mkBind b x tx e = pure $ Bind b x tx e
+  mkApply f x = return (subst f (Cons (Ap (Sym 0) [inc_depth 1 x])))
 
 data NodeDir str a = NodeDir
   (Map BindType (NodeDir str (NodeDir str a)))
@@ -210,9 +215,9 @@ is_free_in = map2 not go
         go_a v (Ap (Sym v') subs) = v/=v' && all (go v) subs
         go_a v (Ap (Mu env _ a) subs) = go_a (v+length env) a && all (go v) subs
 
-subst :: IsCapriconString str => Node str -> Node str -> Node str
+subst :: Show str => Node str -> Node str -> Node str
 subst = flip substn 0
-substn :: IsCapriconString str => Node str -> Int -> Node str -> Node str
+substn :: Show str => Node str -> Int -> Node str -> Node str
 substn val n | n>=0 = getId . go n
              | otherwise = error "'subst' should not be called with a negative index"
   where go d (Bind t x tx e) = do
@@ -249,12 +254,12 @@ substn val n | n>=0 = getId . go n
                                | x <- xs])
               return $ foldl' (\e (x,_,tx) -> Bind Lambda x tx e) a' env
         go_mu _ e t (Cons a) = return $ Cons (Ap (Mu e t a) [])
-        go_mu _ _ _ x' = error $ fromString "Cannot produce an induction principle for a term : "+fromString (show x')
+        go_mu _ _ _ x' = error $ "Cannot produce an induction principle for a term : "+show x'
 
         rec_subst (y:t) (Bind Lambda _ _ e) = rec_subst t (subst y e)
         rec_subst xs (Cons (Ap h hxs)) = return (Cons (Ap h (hxs+xs)))
         rec_subst [] x = return x
-        rec_subst _ x = error $ fromString "Invalid substitution of non-lambda expression : "+fromString (show x)
+        rec_subst _ x = error $ "Invalid substitution of non-lambda expression : "+show x
 
 fresh env v = head $ select (not . (`elem` env)) (v:[v+fromString (show i) | i <- [0..]])
 freshContext = go []
