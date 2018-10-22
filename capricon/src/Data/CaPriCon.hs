@@ -1,7 +1,7 @@
 {-# LANGUAGE UndecidableInstances, OverloadedStrings, NoMonomorphismRestriction, DeriveGeneric, ConstraintKinds #-}
 module Data.CaPriCon(
   -- * Expression nodes
-  IsCapriconString(..),BindType(..),Node(..),ApHead(..),Application(..),
+  IsCapriconString(..),BindType(..),Node(..),ApHead(..),Application(..),COCExpression(..),
   -- ** Managing De Bruijin indices
   adjust_depth,adjust_telescope_depth,inc_depth,free_vars,is_free_in,
   -- ** General term substitution, type inference and convertibility
@@ -67,6 +67,12 @@ instance ListSerializable str => ListSerializable (ApHead str)
 instance ListFormat str => ListFormat (ApHead str)
 instance ListSerializable str => ListSerializable (Application str)
 instance ListFormat str => ListFormat (Application str)
+
+class Monad m => COCExpression str m e | e -> str where
+  mkUniverse :: Int -> m e
+  mkVariable :: Int -> m e
+  mkBind :: BindType -> str -> e -> e -> m e
+  mkApply :: e -> e -> m e
 
 data NodeDir str a = NodeDir
   (Map BindType (NodeDir str (NodeDir str a)))
@@ -204,14 +210,14 @@ is_free_in = map2 not go
         go_a v (Ap (Sym v') subs) = v/=v' && all (go v) subs
         go_a v (Ap (Mu env _ a) subs) = go_a (v+length env) a && all (go v) subs
 
-subst :: (IsCapriconString str, MonadReader (Env str) m) => Node str -> Node str -> m (Node str)
+subst :: IsCapriconString str => Node str -> Node str -> Node str
 subst = flip substn 0
-substn :: (IsCapriconString str, MonadReader (Env str) m) => Node str -> Int -> Node str -> m (Node str)
-substn val n | n>=0 = go n
+substn :: IsCapriconString str => Node str -> Int -> Node str -> Node str
+substn val n | n>=0 = getId . go n
              | otherwise = error "'subst' should not be called with a negative index"
   where go d (Bind t x tx e) = do
           tx' <- go d tx
-          Bind t x tx' <$> local (tx':) (go (d+1) e)
+          Bind t x tx' <$> go (d+1) e
         go _ (Universe u) = pure (Universe u)
         go d (Cons a) = go_a d a
 
@@ -238,14 +244,14 @@ substn val n | n>=0 = go n
               a' <- Cons . Ap (Sym i) <$>
                 sequence (fold [if nonempty (free_vars x - fromKList [0..envS-1])
                                 then [ return $ inc_depth envS $ foldl' (\e (x',tx,_) -> Bind Lambda x' tx e) x env
-                                     , subst x (Cons (Ap (Mu [] muEnv (Ap (Sym 0) [])) [Cons (Ap (Sym j) []) | j <- reverse [1..envS]]))]
+                                     , return $ subst x (Cons (Ap (Mu [] muEnv (Ap (Sym 0) [])) [Cons (Ap (Sym j) []) | j <- reverse [1..envS]]))]
                                 else [return x]
                                | x <- xs])
               return $ foldl' (\e (x,_,tx) -> Bind Lambda x tx e) a' env
         go_mu _ e t (Cons a) = return $ Cons (Ap (Mu e t a) [])
         go_mu _ _ _ x' = error $ fromString "Cannot produce an induction principle for a term : "+fromString (show x')
 
-        rec_subst (y:t) (Bind Lambda _ _ e) = rec_subst t =<< subst y e
+        rec_subst (y:t) (Bind Lambda _ _ e) = rec_subst t (subst y e)
         rec_subst xs (Cons (Ap h hxs)) = return (Cons (Ap h (hxs+xs)))
         rec_subst [] x = return x
         rec_subst _ x = error $ fromString "Invalid substitution of non-lambda expression : "+fromString (show x)
@@ -353,9 +359,9 @@ type_of = yb maybeT . go
                 go' (Ap (Mu env _ a') subs) = do
                   ta <- local (map (by l'2) env +) (go' a')
                   preret <- maybeT $^ mu_type $ foldl' (\e (x,tx,_) -> Bind Prod x tx e) ta env
-                  rec_subst subs =<< subst (Cons a') preret
+                  rec_subst subs (subst (Cons a') preret)
                       
-                rec_subst (y:t) (Bind Prod _ _ e) = rec_subst t =<< subst y e
+                rec_subst (y:t) (Bind Prod _ _ e) = rec_subst t (subst y e)
                 rec_subst [] x = return x
                 rec_subst _ _ = zero
 
