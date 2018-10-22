@@ -71,14 +71,16 @@ instance ListFormat str => ListFormat (Application str)
 class Monad m => COCExpression str m e | e -> str where
   mkUniverse :: Int -> m e
   mkVariable :: Int -> m e
-  mkBind :: BindType -> str -> e -> e -> m e
+  mkBind :: BindType -> e -> m (Maybe e)
   mkApply :: e -> e -> m e
   mkMu :: e -> m (Maybe e)
   checkType :: e -> m (Maybe e)
 instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression str m (Node str) where
   mkUniverse = pure . Universe
   mkVariable = pure . Cons . \i -> Ap (Sym i) []
-  mkBind b x tx e = pure $ Bind b x tx e
+  mkBind b e = ask <&> \case
+    (x,tx):_ -> pure $ Bind b x tx e
+    _ -> Nothing
   mkApply f x = return (subst f (Cons (Ap (Sym 0) [inc_depth 1 x])))
   checkType = type_of
   mkMu e = from maybeT $^ do
@@ -96,10 +98,9 @@ inContext (ContextNode d e) = ask <&> \(length -> nctx) -> ContextNode nctx (inc
 instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression str m (ContextNode str) where
   mkUniverse u = ask >>= \ctx -> ContextNode (length ctx)<$>mkUniverse u
   mkVariable i = ask >>= \ctx -> ContextNode (length ctx)<$>mkVariable i
-  mkBind t x tx e = do
-    ContextNode dr tx' <- inContext tx
-    e' <- rawNode <$> local ((x,tx'):) (inContext e)
-    ContextNode dr <$> mkBind t x tx' e'
+  mkBind t e = do
+    ContextNode de e' <- inContext e
+    map (ContextNode (de-1)) <$> mkBind t e'
   mkApply cf cx = do
     ContextNode dr f <- inContext cf
     x <- rawNode <$> inContext cx
