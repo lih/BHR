@@ -209,8 +209,8 @@ runCOCBuiltin COCB_TypeOf = do
       Nothing -> COCNull
     st -> st
 runCOCBuiltin COCB_Convertible = runStackState $ modify $ \case
-  (StackCOC (COCExpr d e)):(StackCOC (COCExpr d' e')):t ->
-    (StackCOC (COCConvertible (flip convertible (inc_depth (max (d-d') 0) e) (inc_depth (max (d'-d) 0) e')))):t
+  StackCOC (COCExpr d e):StackCOC (COCExpr d' e'):t ->
+    StackCOC (COCConvertible (flip convertible (inc_depth (max (d-d') 0) e) (inc_depth (max (d'-d) 0) e'))):t
   st -> st
 
 runCOCBuiltin (COCB_ExecModule (WriteImpl writeResource)) = do
