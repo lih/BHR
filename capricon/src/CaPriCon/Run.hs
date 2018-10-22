@@ -187,7 +187,7 @@ runCOCBuiltin (COCB_Bind close bt) = do
   runExtraState (context =- ctx')
 runCOCBuiltin COCB_Mu = do
   ctx <- runExtraState (getl context)
-  let locEnv d = map snd (takeLast d ctx)
+  let locEnv d = takeLast d ctx
   runStackState $ modify $ \case
     StackCOC (COCExpr d e):t -> 
       case type_of e (locEnv d) >>= \te -> mu_type te (locEnv d) of
@@ -203,7 +203,7 @@ runCOCBuiltin COCB_TypeOf = do
     StackCOC (COCExpr d (Cons (Ap (Sym i) []))):t
       | (_,ti):_ <- drop i ctx ->
           StackCOC (COCExpr (d-i-1) ti):t
-    StackCOC (COCExpr d e):t -> (:t) $ StackExtra $ Opaque $ case type_of e (takeLast d (map snd ctx)) of
+    StackCOC (COCExpr d e):t -> (:t) $ StackExtra $ Opaque $ case type_of e (takeLast d ctx) of
       Just te -> COCExpr d te
       Nothing -> COCNull
     st -> st
