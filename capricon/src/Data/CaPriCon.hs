@@ -76,6 +76,7 @@ class Monad m => COCExpression str m e | e -> str where
   mkMu :: e -> m e
   checkType :: e -> m e
   substHyp :: str -> e -> e -> m e
+  pullTerm :: e -> m e
 instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression str (MaybeT m) (Node str) where
   mkUniverse = pure . Universe
   mkVariable v = hypIndex v <&> \i -> Cons (Ap (Sym i) [])
@@ -91,6 +92,7 @@ instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression
         args _ = []
     return (subst e (Cons (Ap (Mu [] (args mte) (Ap (Sym 0) [])) [])))
   substHyp h x e = hypIndex h <&> \i -> substn x i e
+  pullTerm = return      
 
 hypIndex :: (IsCapriconString str,MonadReader (Env str) m) => str -> MaybeT m Int
 hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
@@ -113,6 +115,7 @@ instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression
   mkMu (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (mkMu e)
   substHyp h (ContextNode dx x) (ContextNode de e) = let dm = max dx de in
     ContextNode dm <$> local (restrictEnv dm) (substHyp h (inc_depth (dm-dx) x) (inc_depth (dm-de) e))
+  pullTerm (ContextNode d e) = ask <&> \l -> ContextNode (length l) (inc_depth (length l-d) e)
 
 data NodeDir str a = NodeDir
   (Map BindType (NodeDir str (NodeDir str a)))
