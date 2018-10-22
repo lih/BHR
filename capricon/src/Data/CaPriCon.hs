@@ -73,11 +73,20 @@ class Monad m => COCExpression str m e | e -> str where
   mkVariable :: Int -> m e
   mkBind :: BindType -> str -> e -> e -> m e
   mkApply :: e -> e -> m e
+  mkMu :: e -> m (Maybe e)
+  checkType :: e -> m (Maybe e)
 instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression str m (Node str) where
   mkUniverse = pure . Universe
   mkVariable = pure . Cons . \i -> Ap (Sym i) []
   mkBind b x tx e = pure $ Bind b x tx e
   mkApply f x = return (subst f (Cons (Ap (Sym 0) [inc_depth 1 x])))
+  checkType = type_of
+  mkMu e = from maybeT $^ do
+    te <- checkType e^.maybeT
+    mte <- mu_type te^.maybeT
+    let args (Bind Prod _ tx e') = tx:args e'
+        args _ = []
+    return (subst e (Cons (Ap (Mu [] (args mte) (Ap (Sym 0) [])) [])))
 
 data ContextNode str = ContextNode Int (Node str)
 rawNode (ContextNode _ x) = x
@@ -95,6 +104,8 @@ instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression
     ContextNode dr f <- inContext cf
     x <- rawNode <$> inContext cx
     ContextNode dr <$> mkApply f x
+  checkType (ContextNode d e) = map (ContextNode d) <$> local (\l -> drop (length l-d) l) (checkType e)
+  mkMu (ContextNode d e) = map (ContextNode d) <$> local  (\l -> drop (length l-d) l) (mkMu e)
 
 data NodeDir str a = NodeDir
   (Map BindType (NodeDir str (NodeDir str a)))
