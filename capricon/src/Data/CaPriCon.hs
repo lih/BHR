@@ -98,17 +98,14 @@ hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
   _ -> zero
     
 data ContextNode str = ContextNode Int (Node str)
-inContext :: MonadReader (Env str) m => ContextNode str -> m (ContextNode str)
-inContext (ContextNode d e) = ask <&> \(length -> nctx) -> ContextNode nctx (inc_depth (nctx-d) e)
 restrictEnv :: Int -> Env str -> Env str
 restrictEnv n e = drop (length e-n) e
 
 instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression str (MaybeT m) (ContextNode str) where
   mkUniverse u = ask >>= \ctx -> ContextNode (length ctx)<$>mkUniverse u
   mkVariable i = ask >>= \ctx -> ContextNode (length ctx)<$>mkVariable i
-  mkBind t e = do
-    ContextNode de e' <- inContext e
-    ContextNode (de-1) <$> mkBind t e'
+  mkBind t ce@(ContextNode de e) | de>0 = ContextNode (de-1) <$> local (restrictEnv de) (mkBind t e)
+                                 | otherwise = return ce
   mkApply (ContextNode df f) (ContextNode dx x) = do
     let dm = max df dx
     ContextNode dm <$> mkApply (inc_depth (dm-df) f) (inc_depth (dm-dx) x)
