@@ -73,11 +73,28 @@ class Monad m => COCExpression str m e | e -> str where
   mkVariable :: Int -> m e
   mkBind :: BindType -> str -> e -> e -> m e
   mkApply :: e -> e -> m e
-instance (Show str,Monad m) => COCExpression str m (Node str) where
+instance (IsCapriconString str,Monad m) => COCExpression str m (Node str) where
   mkUniverse = pure . Universe
   mkVariable = pure . Cons . \i -> Ap (Sym i) []
   mkBind b x tx e = pure $ Bind b x tx e
   mkApply f x = return (subst f (Cons (Ap (Sym 0) [inc_depth 1 x])))
+
+data ContextNode str = ContextNode Int (Node str)
+rawNode (ContextNode _ x) = x
+inContext :: MonadReader [(str,Node str)] m => ContextNode str -> m (ContextNode str)
+inContext (ContextNode d e) = ask <&> \(length -> nctx) -> ContextNode nctx (inc_depth (nctx-d) e)
+
+instance (IsCapriconString str,MonadReader [(str,Node str)] m,Monad m) => COCExpression str m (ContextNode str) where
+  mkUniverse u = ask >>= \ctx -> ContextNode (length ctx)<$>mkUniverse u
+  mkVariable i = ask >>= \ctx -> ContextNode (length ctx)<$>mkVariable i
+  mkBind t x tx e = do
+    ContextNode dr tx' <- inContext tx
+    e' <- rawNode <$> local ((x,tx'):) (inContext e)
+    ContextNode dr <$> mkBind t x tx' e'
+  mkApply cf cx = do
+    ContextNode dr f <- inContext cf
+    x <- rawNode <$> inContext cx
+    ContextNode dr <$> mkApply f x
 
 data NodeDir str a = NodeDir
   (Map BindType (NodeDir str (NodeDir str a)))
