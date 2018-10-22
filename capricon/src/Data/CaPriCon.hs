@@ -70,43 +70,54 @@ instance ListFormat str => ListFormat (Application str)
 
 class Monad m => COCExpression str m e | e -> str where
   mkUniverse :: Int -> m e
-  mkVariable :: Int -> m e
-  mkBind :: BindType -> e -> m (Maybe e)
+  mkVariable :: str -> m e
+  mkBind :: BindType -> e -> m e
   mkApply :: e -> e -> m e
-  mkMu :: e -> m (Maybe e)
-  checkType :: e -> m (Maybe e)
-instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression str m (Node str) where
+  mkMu :: e -> m e
+  checkType :: e -> m e
+  substHyp :: str -> e -> e -> m e
+instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression str (MaybeT m) (Node str) where
   mkUniverse = pure . Universe
-  mkVariable = pure . Cons . \i -> Ap (Sym i) []
-  mkBind b e = ask <&> \case
+  mkVariable v = hypIndex v <&> \i -> Cons (Ap (Sym i) [])
+  mkBind b e = ask >>= \case
     (x,tx):_ -> pure $ Bind b x tx e
-    _ -> Nothing
+    _ -> zero
   mkApply f x = return (subst f (Cons (Ap (Sym 0) [inc_depth 1 x])))
-  checkType = type_of
-  mkMu e = from maybeT $^ do
-    te <- checkType e^.maybeT
+  checkType e = type_of e^.maybeT
+  mkMu e = do
+    te <- checkType e
     mte <- mu_type te^.maybeT
     let args (Bind Prod _ tx e') = tx:args e'
         args _ = []
     return (subst e (Cons (Ap (Mu [] (args mte) (Ap (Sym 0) [])) [])))
+  substHyp h x e = hypIndex h <&> \i -> substn x i e
 
+hypIndex :: (IsCapriconString str,MonadReader (Env str) m) => str -> MaybeT m Int
+hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
+  i:_ -> return i
+  _ -> zero
+    
 data ContextNode str = ContextNode Int (Node str)
 rawNode (ContextNode _ x) = x
 inContext :: MonadReader (Env str) m => ContextNode str -> m (ContextNode str)
 inContext (ContextNode d e) = ask <&> \(length -> nctx) -> ContextNode nctx (inc_depth (nctx-d) e)
+restrictEnv :: Int -> Env str -> Env str
+restrictEnv n e = drop (length e-n) e
 
-instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression str m (ContextNode str) where
+instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression str (MaybeT m) (ContextNode str) where
   mkUniverse u = ask >>= \ctx -> ContextNode (length ctx)<$>mkUniverse u
   mkVariable i = ask >>= \ctx -> ContextNode (length ctx)<$>mkVariable i
   mkBind t e = do
     ContextNode de e' <- inContext e
-    map (ContextNode (de-1)) <$> mkBind t e'
+    ContextNode (de-1) <$> mkBind t e'
   mkApply cf cx = do
     ContextNode dr f <- inContext cf
     x <- rawNode <$> inContext cx
     ContextNode dr <$> mkApply f x
-  checkType (ContextNode d e) = map (ContextNode d) <$> local (\l -> drop (length l-d) l) (checkType e)
-  mkMu (ContextNode d e) = map (ContextNode d) <$> local  (\l -> drop (length l-d) l) (mkMu e)
+  checkType (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (checkType e)
+  mkMu (ContextNode d e) = ContextNode d <$> local  (restrictEnv d) (mkMu e)
+  substHyp h (ContextNode dx x) (ContextNode de e) = let dm = max dx de in
+    ContextNode dm <$> local (restrictEnv dm) (substHyp h (inc_depth (dm-dx) x) (inc_depth (dm-de) e))
 
 data NodeDir str a = NodeDir
   (Map BindType (NodeDir str (NodeDir str a)))
