@@ -163,11 +163,10 @@ runCOCBuiltin COCB_Ap = do
   ctx <- runExtraState (getl context)
   let adj d dd x = inc_depth (dd+nctx-d) x
       nctx = length ctx
-      env = map snd ctx
   runStackState $ modify $ \case
     (StackCOC (COCExpr df f):StackCOC (COCExpr dx x):t) ->
       let x' = adj dx 1 x ; f' = adj df 0 f in
-        StackCOC (COCExpr nctx (subst f' (Cons (Ap (Sym 0) [x'])) env)):t
+        StackCOC (COCExpr nctx (subst f' (Cons (Ap (Sym 0) [x'])))):t
     x -> x
 runCOCBuiltin (COCB_Bind close bt) = do
   ctx <- runExtraState (getl context) 
@@ -195,7 +194,7 @@ runCOCBuiltin COCB_Mu = do
         Just mte -> let args (Bind Prod _ tx e') = tx:args e'
                         args _ = []
                     in (:t) $ StackExtra $ Opaque $ COCExpr d $
-                       subst e (Cons (Ap (Mu [] (args mte) (Ap (Sym 0) [])) [])) (locEnv d)
+                       subst e (Cons (Ap (Mu [] (args mte) (Ap (Sym 0) [])) []))
         Nothing -> StackCOC COCNull:t
     st -> st
 runCOCBuiltin COCB_TypeOf = do
@@ -277,12 +276,12 @@ runCOCBuiltin COCB_Subst = do
       | (hi,_):_ <- select ((==h) . fst . snd) (zip [0..] ctx)
       , all (>hi+d-csz) (free_vars e) ->
         let ctx' = foldr (\x k i env -> case compare i hi of
-                             LT -> second (\xv -> substn e (hi-i) xv env) x:k (i+1) (tail env)
+                             LT -> second (substn e (hi-i)) x:k (i+1) (tail env)
                              EQ -> k (i+1) (tail env)
                              GT -> x:k (i+1) (tail env)) (\_ _ -> []) ctx 0 (map snd ctx)
             adjE x@(StackCOC (COCExpr d' e')) =
               let i = csz - d'
-              in if i<=hi then StackCOC (COCExpr (d-1) ((substn e (hi-i) e' (map snd (drop i ctx)))))
+              in if i<=hi then StackCOC (COCExpr (d-1) (substn e (hi-i) e'))
                  else x
             adjE x = x
         in (map adjE t,ctx')
