@@ -103,7 +103,7 @@ restrictEnv n e = drop (length e-n) e
 
 instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression str (MaybeT m) (ContextNode str) where
   mkUniverse u = ask >>= \ctx -> ContextNode (length ctx)<$>mkUniverse u
-  mkVariable i = ask >>= \ctx -> ContextNode (length ctx)<$>mkVariable i
+  mkVariable i = local (dropWhile ((/=i) . fst)) (ask >>= \ctx -> ContextNode (length ctx)<$>mkVariable i)
   mkBind t ce@(ContextNode de e) | de>0 = ContextNode (de-1) <$> local (restrictEnv de) (mkBind t e)
                                  | otherwise = return ce
   mkApply (ContextNode df f) (ContextNode dx x) = do
