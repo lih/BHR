@@ -1,11 +1,9 @@
 {-# LANGUAGE UndecidableInstances, OverloadedStrings, NoMonomorphismRestriction, DeriveGeneric, ConstraintKinds #-}
 module Data.CaPriCon(
   -- * Expression nodes
-  IsCapriconString(..),BindType(..),Node(..),ApHead(..),Application(..),COCExpression(..),
+  IsCapriconString(..),BindType(..),Node(..),ApHead(..),Application(..),ContextNode(..),Env,COCExpression(..),
   -- ** Managing De Bruijin indices
   adjust_depth,adjust_telescope_depth,inc_depth,free_vars,is_free_in,
-  -- ** General term substitution, type inference and convertibility
-  subst,substn,type_of,mu_type,convertible,
   -- ** Expression directories
   StringPattern,NodeDir(..),AHDir(..),ApDir,
   findPattern,freshContext,
@@ -75,9 +73,11 @@ class Monad m => COCExpression str m e | e -> str where
   mkApply :: e -> e -> m e
   mkMu :: e -> m e
   checkType :: e -> m e
-  substHyp :: str -> e -> e -> m e
-  pullTerm :: e -> m e
   conversionDelta :: e -> e -> m (Int,Int)
+
+  substHyp :: str -> e -> m (e -> e,Env str)
+  pullTerm :: e -> m e
+  insertHypBefore :: Maybe str -> str -> e -> m (e -> e,Env str)
 instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression str (MaybeT m) (Node str) where
   mkUniverse = pure . Universe
   mkVariable v = hypIndex v <&> \i -> Cons (Ap (Sym i) [])
@@ -92,9 +92,29 @@ instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression
         args _ = []
     return (subst e (Cons (Ap (Mu [] (args mte) (Ap (Sym 0) [])) [])))
   checkType e = type_of e^.maybeT
-  substHyp h x e = hypIndex h <&> \i -> substn x i e
-  pullTerm = return
   conversionDelta a b = return (convertible a b)^.maybeT
+
+  substHyp h x = do
+    i <- hypIndex h
+    lift $ do
+      ctx <- ask
+      return (substn x i,let (ch,ct) = splitAt i ctx in adjust_telescope_depth second (+1) ch+ct)
+  pullTerm = return
+  insertHypBefore Nothing h th = lift $ do
+    ctx <- ask
+    return (inc_depth 1,(h,th):ctx)
+  insertHypBefore (Just h) h' th' = do
+    hi <- hypIndex h
+    lift $ do
+      ctx <- ask
+      let adj i j = if i+j>=hi then j+1 else j
+      return (
+        adjust_depth (adj (-1)),
+        foldr (\x k i -> case compare hi i of
+                           LT -> x:k (i+1)
+                           EQ -> second (adjust_depth (adj i)) x:(h',inc_depth (negate (hi+1)) th'):k (i+1)
+                           GT -> second (adjust_depth (adj i)) x:k (i+1))
+          (\_ -> []) ctx 0)
 
 hypIndex :: (IsCapriconString str,MonadReader (Env str) m) => str -> MaybeT m Int
 hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
@@ -102,6 +122,9 @@ hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
   _ -> zero
     
 data ContextNode str = ContextNode Int (Node str)
+                     deriving (Show,Generic)
+instance ListSerializable str => ListSerializable (ContextNode str)
+instance ListFormat str => ListFormat (ContextNode str)
 restrictEnv :: Int -> Env str -> Env str
 restrictEnv n e = drop (length e-n) e
 
@@ -114,13 +137,23 @@ instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression
     let dm = max df dx
     ContextNode dm <$> mkApply (inc_depth (dm-df) f) (inc_depth (dm-dx) x)
   mkMu (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (mkMu e)
-
   checkType (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (checkType e)
-  substHyp h (ContextNode dx x) (ContextNode de e) = let dm = max dx de in
-    ContextNode dm <$> local (restrictEnv dm) (substHyp h (inc_depth (dm-dx) x) (inc_depth (dm-de) e))
-  pullTerm (ContextNode d e) = ask <&> \l -> ContextNode (length l) (inc_depth (length l-d) e)
   conversionDelta (ContextNode da a) (ContextNode db b) =
     let dm = max da db in conversionDelta (inc_depth (dm-da) a) (inc_depth (dm-db) b)
+  
+  pullTerm (ContextNode d e) = ask <&> \l -> ContextNode (length l) (inc_depth (length l-d) e)
+  substHyp h vh = do
+    hi <- hypIndex h
+    ContextNode dm vh' <- pullTerm vh
+    first (\f cv@(ContextNode d v) ->
+             if d+hi < dm then cv
+             else ContextNode (d-1) (inc_depth (d-dm) $ f $ inc_depth (dm-d) v)) <$>
+      substHyp h vh'
+  insertHypBefore h h' cth' = do
+    ContextNode dh th' <- pullTerm cth'
+    first (\f (ContextNode d x) ->
+             ContextNode d (inc_depth (d-dh) $ f $ inc_depth (dh-d) x))
+            <$> insertHypBefore h h' th'
 
 data NodeDir str a = NodeDir
   (Map BindType (NodeDir str (NodeDir str a)))
