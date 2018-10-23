@@ -109,7 +109,7 @@ instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression
       ctx <- ask
       let adj i j = if i+j>=hi then j+1 else j
       return (
-        adjust_depth (adj (-1)),
+        adjust_depth (adj 0),
         foldr (\x k i -> case compare hi i of
                            LT -> x:k (i+1)
                            EQ -> second (adjust_depth (adj i)) x:(h',inc_depth (negate (hi+1)) th'):k (i+1)
