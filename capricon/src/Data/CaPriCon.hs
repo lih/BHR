@@ -153,8 +153,8 @@ instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression
     ContextNode dh th' <- pullTerm cth'
     hi <- maybe (return (-1)) hypIndex h
     first (\f cx@(ContextNode d x) ->
-             if d+hi < dh then cx
-             else ContextNode d (inc_depth (d-dh) $ f $ inc_depth (dh-d) x))
+             if d+hi <= dh then cx
+             else ContextNode (d+1) (inc_depth (d-dh) $ f $ inc_depth (dh-d) x))
             <$> insertHypBefore h h' th'
 
 data NodeDir str a = NodeDir
