@@ -146,7 +146,7 @@ instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression
     hi <- hypIndex h
     ContextNode dm vh' <- pullTerm vh
     first (\f cv@(ContextNode d v) ->
-             if d+hi < dm then cv
+             if d+hi <= dm then cv
              else ContextNode (d-1) (inc_depth (d-dm) $ f $ inc_depth (dm-d) v)) <$>
       substHyp h vh'
   insertHypBefore h h' cth' = do
