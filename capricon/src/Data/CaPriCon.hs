@@ -98,7 +98,7 @@ instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression
     i <- hypIndex h
     lift $ do
       ctx <- ask
-      return (substn x i,let (ch,ct) = splitAt i ctx in adjust_telescope_depth second (+1) ch+ct)
+      return (substn x i,let (ch,ct) = splitAt i ctx in adjust_telescope_depth second (+1) ch+drop 1 ct)
   pullTerm = return
   insertHypBefore Nothing h th = lift $ do
     ctx <- ask
