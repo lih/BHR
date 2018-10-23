@@ -109,7 +109,7 @@ instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression
       ctx <- ask
       let adj i j = if i+j>=hi then j+1 else j
       return (
-        adjust_depth (adj 0),
+        adjust_depth (adj (-1)),
         foldr (\x k i -> case compare hi i of
                            LT -> x:k (i+1)
                            EQ -> second (adjust_depth (adj i)) x:(h',inc_depth (negate (hi+1)) th'):k (i+1)
@@ -152,7 +152,7 @@ instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression
   insertHypBefore h h' cth' = do
     ContextNode dh th' <- pullTerm cth'
     first (\f (ContextNode d x) ->
-             ContextNode d (inc_depth (d-dh) $ f $ inc_depth (dh-d) x))
+             ContextNode d (inc_depth (d-(dh+1)) $ f $ inc_depth (dh-d) x))
             <$> insertHypBefore h h' th'
 
 data NodeDir str a = NodeDir
