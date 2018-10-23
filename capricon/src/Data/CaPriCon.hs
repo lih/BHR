@@ -139,7 +139,9 @@ instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression
   mkMu (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (mkMu e)
   checkType (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (checkType e)
   conversionDelta (ContextNode da a) (ContextNode db b) =
-    let dm = max da db in conversionDelta (inc_depth (dm-da) a) (inc_depth (dm-db) b)
+    let dm = max da db in
+      local (restrictEnv dm)
+      $ conversionDelta (inc_depth (dm-da) a) (inc_depth (dm-db) b)
   
   pullTerm (ContextNode d e) = ask <&> \l -> ContextNode (length l) (inc_depth (length l-d) e)
   substHyp h vh = do
