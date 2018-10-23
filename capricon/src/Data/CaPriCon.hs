@@ -77,6 +77,7 @@ class Monad m => COCExpression str m e | e -> str where
   checkType :: e -> m e
   substHyp :: str -> e -> e -> m e
   pullTerm :: e -> m e
+  conversionDelta :: e -> e -> m (Int,Int)
 instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression str (MaybeT m) (Node str) where
   mkUniverse = pure . Universe
   mkVariable v = hypIndex v <&> \i -> Cons (Ap (Sym i) [])
@@ -84,15 +85,16 @@ instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression
     (x,tx):_ -> pure $ Bind b x tx e
     _ -> zero
   mkApply f x = return (subst f (Cons (Ap (Sym 0) [inc_depth 1 x])))
-  checkType e = type_of e^.maybeT
   mkMu e = do
     te <- checkType e
     mte <- mu_type te^.maybeT
     let args (Bind Prod _ tx e') = tx:args e'
         args _ = []
     return (subst e (Cons (Ap (Mu [] (args mte) (Ap (Sym 0) [])) [])))
+  checkType e = type_of e^.maybeT
   substHyp h x e = hypIndex h <&> \i -> substn x i e
-  pullTerm = return      
+  pullTerm = return
+  conversionDelta a b = return (convertible a b)^.maybeT
 
 hypIndex :: (IsCapriconString str,MonadReader (Env str) m) => str -> MaybeT m Int
 hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
@@ -111,11 +113,14 @@ instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression
   mkApply (ContextNode df f) (ContextNode dx x) = do
     let dm = max df dx
     ContextNode dm <$> mkApply (inc_depth (dm-df) f) (inc_depth (dm-dx) x)
-  checkType (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (checkType e)
   mkMu (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (mkMu e)
+
+  checkType (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (checkType e)
   substHyp h (ContextNode dx x) (ContextNode de e) = let dm = max dx de in
     ContextNode dm <$> local (restrictEnv dm) (substHyp h (inc_depth (dm-dx) x) (inc_depth (dm-de) e))
   pullTerm (ContextNode d e) = ask <&> \l -> ContextNode (length l) (inc_depth (length l-d) e)
+  conversionDelta (ContextNode da a) (ContextNode db b) =
+    let dm = max da db in conversionDelta (inc_depth (dm-da) a) (inc_depth (dm-db) b)
 
 data NodeDir str a = NodeDir
   (Map BindType (NodeDir str (NodeDir str a)))
