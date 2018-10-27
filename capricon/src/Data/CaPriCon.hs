@@ -43,17 +43,20 @@ instance SerialStream Word8 ListBuilder ListStream where
   toSerialStream k = k []
 
 -- | Inductive types
+type UniverseSize = Int
+type SymbolRef = Int
 data BindType = Lambda | Prod
               deriving (Show,Eq,Ord,Generic)
-data Node str = Bind BindType str (Node str) (Node str)
+data Node str = Bind BindType str (NodeType str) (Node str)
               | Cons (Application str)
-              | Universe Int
+              | Universe UniverseSize
           deriving (Show,Generic)
-data ApHead str = Sym Int | Mu [(str,Node str,Node str)] [Node str] (Application str)
+type NodeType str = Node str
+data ApHead str = Sym SymbolRef | Mu [(str,Node str,Node str)] [Node str] (Application str)
             deriving (Show,Generic)
 data Application str = Ap (ApHead str) [Node str]
                  deriving (Show,Generic) 
-type Env str = [(str,Node str)]
+type Env str = [(str,NodeType str)]
 
 type ListSerializable a = (Serializable Word8 ListBuilder ListStream a)
 type ListFormat a = (Format Word8 ListBuilder ListStream a)
@@ -67,13 +70,13 @@ instance ListSerializable str => ListSerializable (Application str)
 instance ListFormat str => ListFormat (Application str)
 
 class Monad m => COCExpression str m e | e -> str where
-  mkUniverse :: Int -> m e
+  mkUniverse :: UniverseSize -> m e
   mkVariable :: str -> m e
   mkBind :: BindType -> e -> m e
   mkApply :: e -> e -> m e
   mkMu :: e -> m e
   checkType :: e -> m e
-  conversionDelta :: e -> e -> m (Int,Int)
+  conversionDelta :: e -> e -> m (UniverseSize,UniverseSize)
 
   substHyp :: str -> e -> m (e -> e,Env str)
   pullTerm :: e -> m e
@@ -98,7 +101,7 @@ instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression
     i <- hypIndex h
     lift $ do
       ctx <- ask
-      return (substn x i,let (ch,ct) = splitAt i ctx in adjust_telescope_depth second (+1) ch+drop 1 ct)
+      return (substn x i,let (ch,ct) = splitAt i ctx in zipWith (\j -> second $ substn (inc_depth (negate (1+j)) x) (i-j-1)) [0..] ch+drop 1 ct)
   pullTerm = return
   insertHypBefore Nothing h th = lift $ do
     ctx <- ask
@@ -121,11 +124,11 @@ hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
   i:_ -> return i
   _ -> zero
     
-data ContextNode str = ContextNode Int (Node str)
+data ContextNode str = ContextNode SymbolRef (Node str)
                      deriving (Show,Generic)
 instance ListSerializable str => ListSerializable (ContextNode str)
 instance ListFormat str => ListFormat (ContextNode str)
-restrictEnv :: Int -> Env str -> Env str
+restrictEnv :: SymbolRef -> Env str -> Env str
 restrictEnv n e = drop (length e-n) e
 
 instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression str (MaybeT m) (ContextNode str) where
