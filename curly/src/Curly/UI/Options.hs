@@ -216,17 +216,17 @@ readServer s = matches Just (
   (option' 25465 (single ':' >> number))
   (single '/' >> remaining)) s
 
-visible :: (MonadParser s m p, ParseStream c s,Monad m ,TokenPayload c ~ Char) => [Char] -> p String
+visible :: (MonadParser s m p, ParseStream s,Monad m ,StreamChar s ~ Char) => [Char] -> p String
 visible lim = many1' ((single '\\' >> token) <+? satisfy (not . \c -> c==' ' || c=='\t' || c=='\n' || c`elem`lim))
 
-symPath :: (MonadParser s m p, ParseStream c s,Monad m, TokenPayload c ~ Char) => String -> p [String]
+symPath :: (MonadParser s m p, ParseStream s,Monad m, StreamChar s ~ Char) => String -> p [String]
 symPath lim = sepBy' (visible ('.':lim)) (single '.')
 showSymPath :: [String] -> String
 showSymPath p = intercalate "." (map (foldMap quote) p)
   where quote '.' = "\\."
         quote c = [c]
 
-packageSearch :: (ParseStream c s, Monad m, TokenPayload c ~ Char, MonadParser s m p) => p ((String,Maybe String,Maybe String),Template)
+packageSearch :: (ParseStream s, Monad m, StreamChar s ~ Char, MonadParser s m p) => p ((String,Maybe String,Maybe String),Template)
 packageSearch = do
   keyname <- optionMaybe' (visible ":" <* single ':')
   branch <- optionMaybe' (visible ":" <* single ':')

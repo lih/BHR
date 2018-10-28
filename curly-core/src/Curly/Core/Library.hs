@@ -42,15 +42,15 @@ curlyLibVersion = 11
 binaryEOI :: (MonadParser s m p, Monoid s, Eq s) => p ()
 binaryEOI = guard . (==zero) =<< remaining
 newtype Chunked a = Chunked { getChunked :: a }
-instance Serializable Word8 Builder Bytes a => Serializable Word8 Builder Bytes (Chunked a) where
+instance Serializable Bytes a => Serializable Bytes (Chunked a) where
   encode p (Chunked a) = encode p (serialize a :: Bytes)
-instance Format Word8 Builder Bytes a => Format Word8 Builder Bytes (Chunked a) where
+instance Format Bytes a => Format Bytes (Chunked a) where
   datum = datum <&> \x -> maybe (error "No parse for chunked data") Chunked (matches Just (datum <* binaryEOI) (x :: Bytes))
 
 data FutureExtensionTail = FutureExtensionTail
-instance Serializable Word8 Builder Bytes FutureExtensionTail where
+instance Serializable Bytes FutureExtensionTail where
   encode = zero
-instance Format Word8 Builder Bytes FutureExtensionTail where
+instance Format Bytes FutureExtensionTail where
   datum = runStreamState (put zero) >> return FutureExtensionTail
 type FutureExtension = Extension FutureExtensionTail
 
@@ -65,8 +65,8 @@ instance ExtensionDefault a => ExtensionDefault (Extension a) where
 
 newtype Extension a = Extension (Chunked a)
 
-deriving instance Serializable Word8 Builder Bytes a => Serializable Word8 Builder Bytes (Extension a)
-instance (ExtensionDefault a,Format Word8 Builder Bytes a) => Format Word8 Builder Bytes (Extension a) where
+deriving instance Serializable Bytes a => Serializable Bytes (Extension a)
+instance (ExtensionDefault a,Format Bytes a) => Format Bytes (Extension a) where
   datum = datum <&> \x -> maybe (error "No parse for extension") (Extension . Chunked) (matches Just (datum <+? fill extensionDefault binaryEOI) (x :: Bytes))
 
 newtype ModDir s a = ModDir [(s,a)]
@@ -83,9 +83,9 @@ instance Documented a => Documented (Module a) where
                                       ,docTag' "ul"  (map (docTag "li" [("class","modVal")] . pure . doc') l')]
   document (Pure s) = document s
 
-instance (Serializable Word8 Builder Bytes s,Serializable Word8 Builder Bytes a) => Serializable Word8 Builder Bytes (ModDir s a) where
+instance (Serializable Bytes s,Serializable Bytes a) => Serializable Bytes (ModDir s a) where
   encode = coerceEncode (ModDir . getChunked)
-instance (Format Word8 Builder Bytes s,Format Word8 Builder Bytes a) => Format Word8 Builder Bytes (ModDir s a) where
+instance (Format Bytes s,Format Bytes a) => Format Bytes (ModDir s a) where
   datum = coerceDatum (ModDir . getChunked)
 instance Functor (ModDir s) where map f (ModDir l) = ModDir (l <&> l'2 %~ f)
 instance Ord s => SemiApplicative (Zip (ModDir s)) where
@@ -139,9 +139,9 @@ instance Functor (ModLeaf s) where
   map = warp leafVal 
 instance Foldable (ModLeaf s) where fold l = l^.leafVal
 instance Traversable (ModLeaf s) where sequence l = leafVal id l
-instance (Identifier s,Serializable Word8 Builder Bytes s,Serializable Word8 Builder Bytes a) => Serializable Word8 Builder Bytes (ModLeaf s a) where
+instance (Identifier s,Serializable Bytes s,Serializable Bytes a) => Serializable Bytes (ModLeaf s a) where
   encode p (ModLeaf a b c d e f g) = encode p (Chunked a,b,Chunked c,d,e,f,Chunked g)
-instance (Identifier s,Format Word8 Builder Bytes s,Format Word8 Builder Bytes a) => Format Word8 Builder Bytes (ModLeaf s a) where
+instance (Identifier s,Format Bytes s,Format Bytes a) => Format Bytes (ModLeaf s a) where
   datum = (\(Chunked a) b (Chunked c) d e f (Chunked g) -> ModLeaf a b c d e f g)
           <$>datum<*>datum<*>datum<*>datum<*>datum<*>datum<*>datum
 instance (Identifier s,Identifier s') => HasIdents s s' (ModLeaf s a) (ModLeaf s' a) where
@@ -155,10 +155,10 @@ instance Semigroup SourceRange where
   NoRange + a = a
   a + NoRange = a
 instance Monoid SourceRange where zero = NoRange
-instance Serializable Word8 Builder Bytes SourceRange where
+instance Serializable Bytes SourceRange where
   encode p (SourceRange _ b c) = encodeAlt p 0 (b,c)
   encode p NoRange = encodeAlt p 1 ()
-instance Format Word8 Builder Bytes SourceRange where
+instance Format Bytes SourceRange where
   datum = datumOf [FormatAlt (uncurry $ SourceRange Nothing),FormatAlt (uncurry0 NoRange)]
   
 leafDoc :: Lens' (ModLeaf s a) Documentation
@@ -210,12 +210,12 @@ instance Monoid Library where
 cylMagic :: String
 cylMagic = "#!/lib/cyl!# "
 newtype ParEncode t = ParEncode t
-instance (Ord k,Serializable Word8 Builder Bytes k, Serializable Word8 Builder Bytes a) => Serializable Word8 Builder Bytes (ParEncode (Map k a)) where
+instance (Ord k,Serializable Bytes k, Serializable Bytes a) => Serializable Bytes (ParEncode (Map k a)) where
   encode p (ParEncode m) = let l = foldr (\x y -> yb chunkBuilder x`par`x:y) [] [encode p x | x <- m^.ascList]
                          in encode p (length l) + fold l
-instance (Ord k,Format Word8 Builder Bytes k,Format Word8 Builder Bytes a) => Format Word8 Builder Bytes (ParEncode (Map k a)) where
+instance (Ord k,Format Bytes k,Format Bytes a) => Format Bytes (ParEncode (Map k a)) where
   datum = ParEncode . yb ascList<$>datum
-instance Serializable Word8 Builder Bytes Library where
+instance Serializable Bytes Library where
   encode p l = foldMap (encode p) cylMagic
                + let (m,(a,b,c,d,e,f,g,h)) = l^.scoped.withStrMap
                      syn = fromMaybe "" (a^?at "synopsis".t'Just.t'Pure)
@@ -227,7 +227,7 @@ instance Serializable Word8 Builder Bytes Library where
                                                             d,
                                                             Chunked e,
                                                             f,g,h))
-instance Format Word8 Builder Bytes Library where
+instance Format Bytes Library where
   datum = do
     traverse_ (\c -> datum >>= guard . (c==)) cylMagic
     syn <- many' (datum <*= guard . (/='\n')) <* (datum >>= guard . (=='\n'))

@@ -43,8 +43,8 @@ data ClientPacket = BannerRequest Bool
                   | PubkeyResponse (Maybe KeyInfo)
                   | KeyListResponse [(String,KeyFingerprint,Bool)]
                   deriving Generic
-instance Serializable Word8 Builder Bytes ClientPacket where
-instance Format Word8 Builder Bytes ClientPacket where
+instance Serializable Bytes ClientPacket where
+instance Format Bytes ClientPacket where
 data ServerPacket = LineRequest
                   | CompleteResponse [String]
                   | CommandOutput Bytes
@@ -56,8 +56,8 @@ data ServerPacket = LineRequest
                   | ServerHasQuit
                   | CommandLog LogMessage
                   deriving Generic
-instance Serializable Word8 Builder Bytes ServerPacket where
-instance Format Word8 Builder Bytes ServerPacket where
+instance Serializable Bytes ServerPacket where
+instance Format Bytes ServerPacket where
 
 data Connection = Connection {
   connClient :: Chan ClientPacket,
@@ -373,7 +373,7 @@ fileClient f conn = do
 forkMVar :: IO () -> IO (MVar ())
 forkMVar m = newEmptyMVar <*= \v -> forkIO $ trylog unit m >> putMVar v ()
 
-connectChans :: forall i o m. (Serializable Word8 Builder Bytes i,Format Word8 Builder Bytes o,MonadIO m, ?write :: Bytes -> IO ()) => Maybe SharedSecret -> Chan i -> Chan o -> ParserT Bytes m (MVar (),MVar ())
+connectChans :: forall i o m. (Serializable Bytes i,Format Bytes o,MonadIO m, ?write :: Bytes -> IO ()) => Maybe SharedSecret -> Chan i -> Chan o -> ParserT Bytes m (MVar (),MVar ())
 connectChans sec i o = do
   let
     rcvX :: ParserT Bytes IO o

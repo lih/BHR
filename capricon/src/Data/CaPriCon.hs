@@ -8,7 +8,7 @@ module Data.CaPriCon(
   StringPattern,NodeDir(..),AHDir(..),ApDir,
   findPattern,freshContext,
   -- * Showing nodes
-  NodeDoc(..),doc2raw,doc2latex,showNode,showNode'
+  ListBuilder(..),NodeDoc(..),doc2raw,doc2latex,showNode,showNode'
   ) where
 
 import Definitive
@@ -37,10 +37,14 @@ instance IsCapriconString String where
   toString = id
 
 type ListStream = [Word8]
-type ListBuilder = ListStream -> ListStream
-instance SerialStream Word8 ListBuilder ListStream where
-  encodeByte _ b = (b:)
-  toSerialStream k = k []
+newtype ListBuilder = ListBuilder (ListStream -> ListStream)
+instance Semigroup ListBuilder where ListBuilder a + ListBuilder b = ListBuilder (a . b)
+instance Monoid ListBuilder where zero = ListBuilder id
+instance SerialStreamType ListStream where
+  type StreamBuilder ListStream = ListBuilder
+instance SerialStream ListStream where
+  encodeByte _ b = ListBuilder (b:)
+  toSerialStream (ListBuilder k) = k []
 
 -- | Inductive types
 type UniverseSize = Int
@@ -58,8 +62,8 @@ data Application str = Ap (ApHead str) [Node str]
                  deriving (Show,Generic) 
 type Env str = [(str,NodeType str)]
 
-type ListSerializable a = (Serializable Word8 ListBuilder ListStream a)
-type ListFormat a = (Format Word8 ListBuilder ListStream a)
+type ListSerializable a = (Serializable ListStream a)
+type ListFormat a = (Format ListStream a)
 instance ListSerializable BindType
 instance ListFormat BindType
 instance ListSerializable str => ListSerializable (Node str)

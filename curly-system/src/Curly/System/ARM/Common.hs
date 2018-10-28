@@ -49,7 +49,7 @@ en :: (Enum n,Num m) => n -> m
 en = fromIntegral . fromEnum
 
 instance BCSerializable Instruction where bcEncode = binaryCode (Just 4,4)
-instance Serializable Word8 Builder Bytes Instruction where
+instance Serializable Bytes Instruction where
   encode p (Conditional c op) = encode p $ case op of
     MOVL r w -> mkInstr [(0,fromIntegral w .&. 0xfff),
                          (12,en r),
