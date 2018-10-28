@@ -223,6 +223,7 @@ modifyKeyStore m = seq identities $ liftIO $ while $ trylog (threadDelay 1000 >>
     sz <- between (hSeek h SeekFromEnd 0) (hSeek h AbsoluteSeek 0) (hTell h)
     logLine Debug $ "Key file size : "+show sz
     oldFile <- readHNBytes h (fromIntegral sz)
+    logLine Debug $ "Old file read : "+show oldFile
     let ks = fromMaybe zero (matches Just datum oldFile)
         ks' = m ks
         newFile = serialize ks'
