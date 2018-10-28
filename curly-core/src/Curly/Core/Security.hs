@@ -228,7 +228,7 @@ modifyKeyStore m = seq identities $ liftIO $ while $ trylog (threadDelay 1000 >>
         ks' = m ks
         newFile = serialize ks'
     runKeyState (put ks')
-    logLine Debug $ "New store : "+show (map (\(f,pub,_,m,ac) -> (f,pub,m,ac)) ks')
+    logLine Debug $ "New store : "+show (map (\(f,pub,_,m,ac) -> (f,pub,m,ac)) ks')+" {{"+show newFile+"}}"
     newFile `deepseq` return ()
     logLine Debug "New key store ready for write"
     hSeek h AbsoluteSeek 0
