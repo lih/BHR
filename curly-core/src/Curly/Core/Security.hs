@@ -32,7 +32,7 @@ newtype PublicKey = PublicKey (Integer,Integer)
                   deriving (Show,Eq)
 data Signature = Signature Integer Integer
                deriving (Eq,Ord,Generic,Show)
-instance Serializable Word8 Builder Bytes Signature ; instance Format Word8 Builder Bytes Signature
+instance Serializable Bytes Signature ; instance Format Bytes Signature
 
 newtype KeyFingerprint = KeyFingerprint Chunk
                        deriving (Eq,Ord)
@@ -50,8 +50,8 @@ instance Read Access where
                                          ,("admin",Admin),("almighty",Almighty)]]
 instance Semigroup Access where (+) = max
 instance Monoid Access where zero = minBound
-instance Serializable Word8 Builder Bytes Access where encode p a = encode p (fromEnum a)
-instance Format Word8 Builder Bytes Access where datum = toEnum <$> datum
+instance Serializable Bytes Access where encode p a = encode p (fromEnum a)
+instance Format Bytes Access where datum = toEnum <$> datum
 
 -- | This function is useless, but it makes textual representations of data look more
 -- "random".
@@ -77,9 +77,9 @@ zest bs = pack $ zipWith xor (unpack bs) zestBytes
           ]
 
 newtype Zesty a = Zesty a
-instance Serializable Word8 Builder Bytes a => Show (Zesty a) where
+instance Serializable Bytes a => Show (Zesty a) where
   show (Zesty a) = show (B64Chunk (zest (serialize a)^.chunk))
-instance Format Word8 Builder Bytes a => Read (Zesty a) where
+instance Format Bytes a => Read (Zesty a) where
   readsPrec _ = readsParser ((readable <&> \(B64Chunk c) -> zest (c^..chunk)) >*> (Zesty<$>datum))
 
 fpSize :: Int
@@ -90,12 +90,12 @@ instance Bounded KeyFingerprint where
   minBound = KeyFingerprint (pack [0 :: Word8 | _ <- [1..fpSize]])
   maxBound = KeyFingerprint (pack [0xff :: Word8 | _ <- [1..fpSize]])
 
-instance Serializable Word8 Builder Bytes PrivateKey where encode = coerceEncode PrivateKey
-instance Format Word8 Builder Bytes PrivateKey where datum = coerceDatum PrivateKey
-instance Serializable Word8 Builder Bytes PublicKey where encode = coerceEncode PublicKey
-instance Format Word8 Builder Bytes PublicKey where datum = coerceDatum PublicKey
-instance Serializable Word8 Builder Bytes KeyFingerprint where encode _ (KeyFingerprint f) = f^.chunkBuilder
-instance Format Word8 Builder Bytes KeyFingerprint where datum = KeyFingerprint<$>getChunk fpSize
+instance Serializable Bytes PrivateKey where encode = coerceEncode PrivateKey
+instance Format Bytes PrivateKey where datum = coerceDatum PrivateKey
+instance Serializable Bytes PublicKey where encode = coerceEncode PublicKey
+instance Format Bytes PublicKey where datum = coerceDatum PublicKey
+instance Serializable Bytes KeyFingerprint where encode _ (KeyFingerprint f) = f^.chunkBuilder
+instance Format Bytes KeyFingerprint where datum = KeyFingerprint<$>getChunk fpSize
 
 chunkToInteger :: Chunk -> Integer
 chunkToInteger c = fromMaybe 0 $ matches Just datum
@@ -137,18 +137,18 @@ bezout a b = (v',u'-(k*v'),g)
 
 data Signed a = Signed a Signature
               deriving (Eq,Ord,Show,Generic)
-instance Serializable Word8 Builder Bytes a => Serializable Word8 Builder Bytes (Signed a)
-instance Format Word8 Builder Bytes a => Format Word8 Builder Bytes (Signed a)
+instance Serializable Bytes a => Serializable Bytes (Signed a)
+instance Format Bytes a => Format Bytes (Signed a)
 
 unsafeExtractSigned :: Signed a -> a
 unsafeExtractSigned (Signed a _) = a
-extractSignedBy :: Serializable Word8 Builder Bytes a => PublicKey -> Signed a -> Maybe a
+extractSignedBy :: Serializable Bytes a => PublicKey -> Signed a -> Maybe a
 extractSignedBy pub (Signed a s) | isValidSignatureFrom pub s (serialize a) = Just a
                                  | otherwise = Nothing
-signValue :: (MonadIO m,Serializable Word8 Builder Bytes a) => PrivateKey -> a -> m (Signed a)
+signValue :: (MonadIO m,Serializable Bytes a) => PrivateKey -> a -> m (Signed a)
 signValue priv a = Signed a <$> signBytes priv (serialize a)
 
-signedDatum :: Format Word8 Builder Bytes a => PublicKey -> Parser Bytes (Signed a)
+signedDatum :: Format Bytes a => PublicKey -> Parser Bytes (Signed a)
 signedDatum pub = datum >>= maybe zero return . extractSignedBy pub
 
 timingRef :: IORef Seconds
@@ -189,11 +189,11 @@ sharedSecret isClient (PrivateKey priv) (PublicKey pub) = liftIO $ do
   logLine Debug $ format "Shared secret : %s" (show (B64Chunk kh))
   SharedSecret <$> mkCtx isClient AES.Decrypt <*> mkCtx (not isClient) AES.Encrypt
 
-decrypt :: (MonadIO m,Format Word8 Builder Bytes a, ?secret :: SharedSecret) => ParserT Bytes m a
+decrypt :: (MonadIO m,Format Bytes a, ?secret :: SharedSecret) => ParserT Bytes m a
 decrypt = receive >*> do
   remaining >>= liftIO . AES.crypt (readCxt ?secret) . by chunk >>= runStreamState . put . yb chunk
   receive
-encrypt :: (MonadIO m,Serializable Word8 Builder Bytes a,?secret :: SharedSecret) => a -> m Bytes
+encrypt :: (MonadIO m,Serializable Bytes a,?secret :: SharedSecret) => a -> m Bytes
 encrypt a = liftIO $ yb chunk <$> AES.crypt (writeCxt ?secret) (serialize a ^. chunk)
 
 type KeyStore = Map String (KeyFingerprint,PublicKey,Maybe PrivateKey,Metadata,Map String Access)
@@ -202,6 +202,7 @@ identities :: IORef KeyStore
 identities = thunk $^ do
   modifyPermissions curlyKeysFile (set groupPerms zero . set otherPerms zero)
   ids <- trylog (return zero) (readFormat curlyKeysFile)
+  logLine Debug $ "Key store: "+show (map (\(f,pub,_,m,ac) -> (f,pub,m,ac)) ids)
   newIORef ids <* watchFile curlyKeysFile reloadKeyStore
   
 reloadKeyStore :: IO ()
@@ -215,17 +216,22 @@ runKeyState = liftIO . runAtomic identities
 getKeyStore :: MonadIO m => m KeyStore
 getKeyStore = runKeyState get
 modifyKeyStore :: MonadIO m => (KeyStore -> KeyStore) -> m ()
-modifyKeyStore m = liftIO $ while $ trylog (threadDelay 1000 >> return True) $ False<$ do
+modifyKeyStore m = seq identities $ liftIO $ while $ trylog (threadDelay 1000 >> return True) $ False<$ do
   withFile curlyKeysFile ReadWriteMode $ \h -> do
     -- This little trick keeps GHC from prematurely closing the handle
     -- when the parser reaches the end of the byte stream
     sz <- between (hSeek h SeekFromEnd 0) (hSeek h AbsoluteSeek 0) (hTell h)
+    logLine Debug $ "Key file size : "+show sz
     oldFile <- readHNBytes h (fromIntegral sz)
+    logLine Debug $ "Old file read : "+show oldFile
     let ks = fromMaybe zero (matches Just datum oldFile)
         ks' = m ks
         newFile = serialize ks'
     runKeyState (put ks')
+    logLine Debug $ "New store : "+show (map (\(f,pub,_,m,ac) -> (f,pub,m,ac)) ks')+" {{"+show newFile+"}}"
     newFile `deepseq` return ()
+    logLine Debug "New key store ready for write"
     hSeek h AbsoluteSeek 0
     hSetFileSize h 0
+    logLine Debug "Writing new key store"
     writeHBytes h newFile

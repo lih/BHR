@@ -55,8 +55,8 @@ instance Show (Symbol s) where
   show (Builtin _ b) = "#"+show b
 instance Documented (Symbol s) where
   document s = Pure (show s)
-instance (Serializable Word8 Builder Bytes s,Identifier s) => Serializable Word8 Builder Bytes (Symbol s)
-instance (Format Word8 Builder Bytes s,Identifier s) => Format Word8 Builder Bytes (Symbol s)
+instance (Serializable Bytes s,Identifier s) => Serializable Bytes (Symbol s)
+instance (Format Bytes s,Identifier s) => Format Bytes (Symbol s)
 instance NFData (Symbol s) where
   rnf (Argument n) = rnf n
   rnf (Builtin _ b) = rnf b
@@ -80,8 +80,8 @@ instance HasIdents s s' (StrictnessHead s) (StrictnessHead s') where
                                        (ff'idents k sts)
   ff'idents _ StH_Void = pure StH_Void
   ff'idents _ (StH_Val n) = pure (StH_Val n)
-instance Serializable Word8 Builder Bytes s => Serializable Word8 Builder Bytes (StrictnessHead s)
-instance Format Word8 Builder Bytes s => Format Word8 Builder Bytes (StrictnessHead s)
+instance Serializable Bytes s => Serializable Bytes (StrictnessHead s)
+instance Format Bytes s => Format Bytes (StrictnessHead s)
 instance NFData s => NFData (StrictnessHead s)
 
 noStrictness :: Strictness s
@@ -90,8 +90,8 @@ noStrictness = HNF StH_Void []
 data Strictness s = Delayed s (ExprStrictness s)
                   | HNF (StrictnessHead s) [ExprStrictness s]
                 deriving (Eq,Ord,Generic)
-instance Serializable Word8 Builder Bytes s => Serializable Word8 Builder Bytes (Strictness s)
-instance Format Word8 Builder Bytes s => Format Word8 Builder Bytes (Strictness s)
+instance Serializable Bytes s => Serializable Bytes (Strictness s)
+instance Format Bytes s => Format Bytes (Strictness s)
 instance NFData s => NFData (Strictness s)
 instance HasIdents s s' (Strictness s) (Strictness s') where
   ff'idents k (Delayed s es) = liftA2 Delayed (k s) ((l'1.each.ff'idents .+ l'2.ff'idents) k es)

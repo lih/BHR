@@ -71,12 +71,12 @@ data WriteImpl io str bytes = WriteImpl (str -> bytes -> io ())
 instance Show (ReadImpl io str bytes) where show _ = "#<open>"
 instance Show (WriteImpl io str bytes) where show _ = "#<write>"
 
-type ListSerializable a = (Serializable Word8 ([Word8] -> [Word8]) [Word8] a)
-type ListFormat a = (Format Word8 ([Word8] -> [Word8]) [Word8] a)
+type ListSerializable a = (Serializable [Word8] a)
+type ListFormat a = (Format [Word8] a)
 type IOListFormat io str = (ListFormat (ReadImpl io str str), ListFormat (WriteImpl io str str),
                             ListFormat (ReadImpl io str [Word8]), ListFormat (WriteImpl io str [Word8]))
-instance Serializable Word8 ([Word8] -> [Word8]) [Word8] (ReadImpl io str bytes) where encode _ _ = id
-instance Serializable Word8 ([Word8] -> [Word8]) [Word8] (WriteImpl io str bytes) where encode _ _ = id
+instance Serializable [Word8] (ReadImpl io str bytes) where encode _ _ = zero
+instance Serializable [Word8] (WriteImpl io str bytes) where encode _ _ = zero
 instance ListSerializable str => ListSerializable (COCBuiltin io str)
 instance (ListFormat str,IOListFormat io str) => ListFormat (COCBuiltin io str)
 

@@ -45,12 +45,12 @@ instance Monad JS.CIO where join = (P.>>=id)
 instance MonadIO JS.CIO where liftIO = JS.liftIO
 instance MonadSubIO JS.CIO JS.CIO where liftSubIO = id
 
-instance Serializable Word8 ([Word8] -> [Word8]) [Word8] Char where encode _ c = (fromIntegral (fromEnum c):)
-instance Format Word8 ([Word8] -> [Word8]) [Word8] Char where datum = datum <&> \x -> toEnum (fromEnum (x::Word8))
-instance Format Word8 ([Word8] -> [Word8]) [Word8] (ReadImpl  JS.CIO String String) where datum = return (ReadImpl getString)
-instance Format Word8 ([Word8] -> [Word8]) [Word8] (ReadImpl  JS.CIO String [Word8]) where datum = return (ReadImpl getBytes)
-instance Format Word8 ([Word8] -> [Word8]) [Word8] (WriteImpl JS.CIO String String) where datum = return (WriteImpl setString)
-instance Format Word8 ([Word8] -> [Word8]) [Word8] (WriteImpl JS.CIO String [Word8]) where datum = return (WriteImpl setBytes)
+instance Serializable [Word8] Char where encode _ c = ListBuilder (fromIntegral (fromEnum c):)
+instance Format [Word8] Char where datum = datum <&> \x -> toEnum (fromEnum (x::Word8))
+instance Format [Word8] (ReadImpl  JS.CIO String String) where datum = return (ReadImpl getString)
+instance Format [Word8] (ReadImpl  JS.CIO String [Word8]) where datum = return (ReadImpl getBytes)
+instance Format [Word8] (WriteImpl JS.CIO String String) where datum = return (WriteImpl setString)
+instance Format [Word8] (WriteImpl JS.CIO String [Word8]) where datum = return (WriteImpl setBytes)
 
 runComment c = unit
 toWordList :: JS.JSString -> [Word8]

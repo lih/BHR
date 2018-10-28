@@ -34,7 +34,7 @@ pattern CUD n = CSI n 'B'
 pattern CUF n = CSI n 'C'
 pattern CUB n = CSI n 'D'
 
-cseq :: (ParseStream c s, MonadParser s m p, TokenPayload c ~ Char) => p ControlSequence
+cseq :: (ParseStream s, MonadParser s m p, StreamChar s ~ Char) => p ControlSequence
 cseq = esc <+? map RawChar token
   where esc = do
           single '\ESC'

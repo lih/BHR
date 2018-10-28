@@ -44,8 +44,8 @@ instance HasIdents s s' (TypeClass s) (TypeClass s') where
   ff'idents k (NamedType n s) = NamedType n<$>k s
   ff'idents k (ClassType n is s) = ClassType n is<$>k s
 instance NFData s => NFData (TypeClass s)
-instance Serializable Word8 Builder Bytes s => Serializable Word8 Builder Bytes (TypeClass s)
-instance Format Word8 Builder Bytes s => Format Word8 Builder Bytes (TypeClass s)
+instance Serializable Bytes s => Serializable Bytes (TypeClass s)
+instance Format Bytes s => Format Bytes (TypeClass s)
 
 typeClassNArgs :: TypeClass s -> Int
 typeClassNArgs Function = 2
@@ -60,8 +60,8 @@ instance Show NativeType where
   show NT_Unit = "#unit" ; show NT_File = "#file"
   show NT_Syntax = "#syn" ; show NT_Expr = "#expr"
   show NT_Array = "#array"
-instance Serializable Word8 Builder Bytes NativeType
-instance Format Word8 Builder Bytes NativeType
+instance Serializable Bytes NativeType
+instance Format Bytes NativeType
 instance NFData NativeType
 
 -- | An index into a type
@@ -71,8 +71,8 @@ instance Identifier s => Show (TypeIndex s) where
   show (TypeIndex c n) = show c+":"+show n
 instance HasIdents s s' (TypeIndex s) (TypeIndex s') where
   ff'idents k (TypeIndex c i) = forl ff'idents c k <&> \c' -> TypeIndex c' i
-instance Serializable Word8 Builder Bytes s => Serializable Word8 Builder Bytes (TypeIndex s)
-instance Format Word8 Builder Bytes s => Format Word8 Builder Bytes (TypeIndex s)
+instance Serializable Bytes s => Serializable Bytes (TypeIndex s)
+instance Format Bytes s => Format Bytes (TypeIndex s)
 instance NFData s => NFData (TypeIndex s)
 pattern In :: TypeIndex t
 pattern In = TypeIndex Function 0
@@ -92,8 +92,8 @@ t'ImplicitRoot _ x = pure x
 t'ContextRoot :: Traversal' PathRoot Int
 t'ContextRoot k (ContextRoot n) = ContextRoot<$>k n
 t'ContextRoot _ x = pure x
-instance Serializable Word8 Builder Bytes PathRoot
-instance Format Word8 Builder Bytes PathRoot
+instance Serializable Bytes PathRoot
+instance Format Bytes PathRoot
 instance NFData PathRoot
 type TypePath s = (PathRoot,[TypeIndex s])
 pathIdents :: FixFold s s' (TypePath s) (TypePath s')
@@ -122,7 +122,7 @@ instance Ord s' => HasIdents s s' (TypeShape s) (TypeShape s') where
   ff'idents _ PolyType = pure PolyType
   ff'idents _ (SkolemType x) = pure (SkolemType x)
   ff'idents _ HiddenTypeError = pure HiddenTypeError
-instance Serializable Word8 Builder Bytes s => Serializable Word8 Builder Bytes (TypeShape s) where
+instance Serializable Bytes s => Serializable Bytes (TypeShape s) where
   encode p (TypeCons Function) = encodeAlt p 0 ()
   encode p (TypeCons (NamedType n s)) = encodeAlt p 1 (n,s)
   encode p (TypeCons (ClassType n is s)) = encodeAlt p 2 (n,is,s)
@@ -131,7 +131,7 @@ instance Serializable Word8 Builder Bytes s => Serializable Word8 Builder Bytes 
   encode p (SkolemType x) = encodeAlt p 5 x
   encode p (TypeMismatch t t') = encodeAlt p 6 (t,t')
   encode p HiddenTypeError = encodeAlt p 7 ()
-instance (Format Word8 Builder Bytes s,Ord s) => Format Word8 Builder Bytes (TypeShape s) where
+instance (Format Bytes s,Ord s) => Format Bytes (TypeShape s) where
   datum = datumOf [FormatAlt (uncurry0 $ TypeCons Function)
                   ,FormatAlt (\(n,s) -> TypeCons (NamedType n s))
                   ,FormatAlt (\(n,is,s) -> TypeCons (ClassType n is s))
@@ -156,8 +156,8 @@ unifying constraints on the appropriate types.
 -}
 newtype Type s = Type (Equiv (TypeShape s) (TypePath s))
                deriving Generic
-instance (Ord s,Serializable Word8 Builder Bytes s) => Serializable Word8 Builder Bytes (Type s)
-instance (Ord s,Format Word8 Builder Bytes s) => Format Word8 Builder Bytes (Type s)
+instance (Ord s,Serializable Bytes s) => Serializable Bytes (Type s)
+instance (Ord s,Format Bytes s) => Format Bytes (Type s)
 instance NFData s => NFData (Type s)
 type TypeRel s = Equiv (TypeShape s) (TypePath s)
 i'typeRel :: Iso (TypeRel s) (TypeRel s') (Type s) (Type s')
@@ -557,8 +557,8 @@ i'InstanceMap = iso InstanceMap (\(InstanceMap m) -> m)
 instance Functor (InstanceMap s) where map f (InstanceMap m) = InstanceMap (map2 f m)
 instance Foldable (InstanceMap s) where fold (InstanceMap m) = fold (map fold m)
 instance Identifier s => Traversable (InstanceMap s) where sequence (InstanceMap m) = InstanceMap <$> traverse sequence m
-instance (Identifier s,Serializable Word8 Builder Bytes s,Serializable Word8 Builder Bytes a) => Serializable Word8 Builder Bytes (InstanceMap s a)
-instance (Identifier s,Format Word8 Builder Bytes s,Format Word8 Builder Bytes a) => Format Word8 Builder Bytes (InstanceMap s a)
+instance (Identifier s,Serializable Bytes s,Serializable Bytes a) => Serializable Bytes (InstanceMap s a)
+instance (Identifier s,Format Bytes s,Format Bytes a) => Format Bytes (InstanceMap s a)
 instance (Identifier s,Identifier s') => HasIdents s s' (InstanceMap s a) (InstanceMap s' a) where
   ff'idents = from i'InstanceMap.i'ascList.each.
               (l'1 .+ l'2.i'ascList.each.l'1.ff'idents)
