@@ -36,6 +36,25 @@ import Definitive hiding (take)
 
 import Data.Char
 
+class PStream s where
+  type StreamToken s :: *
+  type StreamChar s :: *
+  type StreamChar s = StreamToken s
+
+instance PStream [a] where
+  type StreamToken [a] = a
+
+class (PStream s, Stream (StreamToken s) s) => PPStream s where
+  __acceptToken :: StreamChar s -> s -> s
+
+class ParseToken c where
+  type TokenPayload c :: *
+  type TokenPayload c = c
+  completeBefore :: c -> Bool
+  completeBefore _ = False
+  tokenPayload :: c -> TokenPayload c
+instance ParseToken Char where tokenPayload c = c
+
 class (ParseToken c,Stream c s) => ParseStream c s | s -> c where
   acceptToken :: TokenPayload c -> s -> s
   acceptToken _ s = s
@@ -66,13 +85,6 @@ instance (MonadParser s m p,Monoid (p ((),Void,Void))) => MonadParser s (ReaderT
   noParse = lift noParse
   (<+?) = by (readerT<.>readerT<.>readerT) (\a b s -> a s <+? b s)
   (<+>) = by (readerT<.>readerT<.>readerT) (\a b s -> a s <+> b s)
-class ParseToken c where
-  type TokenPayload c :: *
-  type TokenPayload c = c
-  completeBefore :: c -> Bool
-  completeBefore _ = False
-  tokenPayload :: c -> TokenPayload c
-instance ParseToken Char where tokenPayload c = c
 
 newtype ParserT s m a = ParserT (StateT s (LogicT m) a)
                       deriving (Unit,Functor,Semigroup,Monoid,SemiApplicative,Applicative,
