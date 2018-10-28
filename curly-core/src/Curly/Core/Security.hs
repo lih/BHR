@@ -211,7 +211,7 @@ reloadKeyStore = do
   runKeyState $ put ks
 
 runKeyState :: MonadIO m => State KeyStore a -> m a
-runKeyState = liftIO . runAtomic identities
+runKeyState = identities `seq` (liftIO . runAtomic identities)
 getKeyStore :: MonadIO m => m KeyStore
 getKeyStore = runKeyState get
 modifyKeyStore :: MonadIO m => (KeyStore -> KeyStore) -> m ()
