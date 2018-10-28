@@ -212,11 +212,11 @@ reloadKeyStore = do
   runKeyState $ put ks
 
 runKeyState :: MonadIO m => State KeyStore a -> m a
-runKeyState = identities `seq` (liftIO . runAtomic identities)
+runKeyState = liftIO . runAtomic identities
 getKeyStore :: MonadIO m => m KeyStore
 getKeyStore = runKeyState get
 modifyKeyStore :: MonadIO m => (KeyStore -> KeyStore) -> m ()
-modifyKeyStore m = liftIO $ while $ trylog (threadDelay 1000 >> return True) $ False<$ do
+modifyKeyStore m = seq identities $ liftIO $ while $ trylog (threadDelay 1000 >> return True) $ False<$ do
   withFile curlyKeysFile ReadWriteMode $ \h -> do
     -- This little trick keeps GHC from prematurely closing the handle
     -- when the parser reaches the end of the byte stream
