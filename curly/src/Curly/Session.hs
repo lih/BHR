@@ -330,6 +330,7 @@ commonServerRequest clt (PubkeyRequest name) = writeChan clt . PubkeyResponse =<
 commonServerRequest _ (CommandOutput out) = liftIOLog (serialWriteHBytes stdout out)
 commonServerRequest _ (CommandLog msg) = logMessage msg
 commonServerRequest _ (KeyGenRequest True str) = do
+  logLine Debug $ "Generating key '"+str+"'"
   priv <- genPrivateKey
   let pub = publicKey priv
   modifyKeyStore $ insert str (fingerprint pub,pub,Just priv,zero,zero)
