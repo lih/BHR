@@ -12,18 +12,18 @@ import Network.Kademlia (JoinResult(..))
 
 newtype K a = K { getK :: a }
             deriving (Eq,Ord)
-instance K.Serialize a => Serializable Word8 Builder Bytes (K a) where
+instance K.Serialize a => Serializable Bytes (K a) where
   encode p (K a) = encode p (K.toBS a^..chunk)
-instance K.Serialize a => Format Word8 Builder Bytes (K a) where
+instance K.Serialize a => Format Bytes (K a) where
   datum = datum >>= (const zero <|> return) . map (K . fst) . K.fromBS . by chunk
-instance Format Word8 Builder Bytes a => K.Serialize (K a) where
+instance Format Bytes a => K.Serialize (K a) where
   fromBS b = case (datum^..parser) (b^..chunk) of
     (s,a):_ -> Right (K a,s^.chunk)
     [] -> Left "Parse error"
   toBS (K a) = serialize a^.chunk
 
-class (Ord a,Format Word8 Builder Bytes a) => DHTIndex a
-class (Eq a,Format Word8 Builder Bytes a) => DHTValue a
+class (Ord a,Format Bytes a) => DHTIndex a
+class (Eq a,Format Bytes a) => DHTValue a
 newtype DHTInstance i a = DHTInstance { _getDHTInstance :: K.KademliaInstance (K i) (K a) }
 newtype DHTNode i = DHTNodeImpl { _getDHTNode :: K.Node (K i) }
 pattern DHTNode h p i = DHTNodeImpl (K.Node (K.Peer h p) (K i))
