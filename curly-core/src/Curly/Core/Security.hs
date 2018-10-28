@@ -202,6 +202,7 @@ identities :: IORef KeyStore
 identities = thunk $^ do
   modifyPermissions curlyKeysFile (set groupPerms zero . set otherPerms zero)
   ids <- trylog (return zero) (readFormat curlyKeysFile)
+  logLine Verbose $ "Key store: "+show (map (\(f,pub,_,m,ac) -> (f,pub,m,ac)) ids)
   newIORef ids <* watchFile curlyKeysFile reloadKeyStore
   
 reloadKeyStore :: IO ()
