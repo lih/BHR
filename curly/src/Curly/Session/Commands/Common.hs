@@ -109,9 +109,9 @@ getSession :: (?sessionState :: IORef SessionState,MonadIO m) => Lens' SessionSt
 getSession l = liftIO (readIORef ?sessionState <&> by l)
 
 data KeyInfo = KeyInfo PublicKey Metadata (Maybe PrivateKey)
-instance Serializable Word8 Builder Bytes KeyInfo where
+instance Serializable Bytes KeyInfo where
   encode p (KeyInfo x y z) = encode p (x,z,y)
-instance Format Word8 Builder Bytes KeyInfo where
+instance Format Bytes KeyInfo where
   datum = (\x y z -> KeyInfo x z y) <$> datum <*> datum <*> (datum <+? fill (Metadata zero) (remaining >>= guard . (==0) . bytesSize))
 
 data KeyOps = KeyOps {
@@ -143,9 +143,9 @@ type Command = (Documentation,OpParser IO Bool)
 
 withDoc d m = (mkDoc "cmdDoc" d,m)
 
-dirArg :: (MonadParser s m p, ParseStream c s, TokenPayload c ~ Char, Monad m) => p String
+dirArg :: (MonadParser s m p, ParseStream s, StreamChar s ~ Char, Monad m) => p String
 dirArg = many1' $ noneOf " \t\n(){}"
-absPath :: (?sessionState :: IORef SessionState, MonadParser s m p, ParseStream c s, TokenPayload c ~ Char, Monad m, MonadIO p)
+absPath :: (?sessionState :: IORef SessionState, MonadParser s m p, ParseStream s, StreamChar s ~ Char, Monad m, MonadIO p)
            => String -> p [String]
 absPath lim = (single '.' >> symPath lim)
               <+? (liftA2 subPath (getSession wd) (symPath lim))

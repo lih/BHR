@@ -6,8 +6,8 @@ import Language.Format
 
 data Patch k a = Patch [k] [(k,a)]
                deriving (Generic,Eq,Ord,Show)
-instance (Serializable Word8 Builder Bytes k,Serializable Word8 Builder Bytes a) => Serializable Word8 Builder Bytes (Patch k a)
-instance (Format Word8 Builder Bytes a,Format Word8 Builder Bytes k) => Format Word8 Builder Bytes (Patch k a)
+instance (Serializable Bytes k,Serializable Bytes a) => Serializable Bytes (Patch k a)
+instance (Format Bytes a,Format Bytes k) => Format Bytes (Patch k a)
 
 diff :: Ord k => Map k a -> Map k a -> Patch k a
 diff m' m = Patch (keys deleted) (inserted^.ascList)
