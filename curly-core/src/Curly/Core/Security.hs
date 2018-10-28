@@ -230,4 +230,5 @@ modifyKeyStore m = liftIO $ while $ trylog (threadDelay 1000 >> return True) $ F
     newFile `deepseq` return ()
     hSeek h AbsoluteSeek 0
     hSetFileSize h 0
+    logLine Debug "Writing new key store"
     writeHBytes h newFile
