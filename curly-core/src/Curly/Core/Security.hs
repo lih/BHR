@@ -202,7 +202,7 @@ identities :: IORef KeyStore
 identities = thunk $^ do
   modifyPermissions curlyKeysFile (set groupPerms zero . set otherPerms zero)
   ids <- trylog (return zero) (readFormat curlyKeysFile)
-  logLine Verbose $ "Key store: "+show (map (\(f,pub,_,m,ac) -> (f,pub,m,ac)) ids)
+  logLine Debug $ "Key store: "+show (map (\(f,pub,_,m,ac) -> (f,pub,m,ac)) ids)
   newIORef ids <* watchFile curlyKeysFile reloadKeyStore
   
 reloadKeyStore :: IO ()
@@ -221,6 +221,7 @@ modifyKeyStore m = liftIO $ while $ trylog (threadDelay 1000 >> return True) $ F
     -- This little trick keeps GHC from prematurely closing the handle
     -- when the parser reaches the end of the byte stream
     sz <- between (hSeek h SeekFromEnd 0) (hSeek h AbsoluteSeek 0) (hTell h)
+    logLine Debug $ "Key file size : "+show sz
     oldFile <- readHNBytes h (fromIntegral sz)
     let ks = fromMaybe zero (matches Just datum oldFile)
         ks' = m ks
