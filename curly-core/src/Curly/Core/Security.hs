@@ -228,6 +228,7 @@ modifyKeyStore m = seq identities $ liftIO $ while $ trylog (threadDelay 1000 >>
         newFile = serialize ks'
     runKeyState (put ks')
     newFile `deepseq` return ()
+    logLine Debug "New key store ready for write"
     hSeek h AbsoluteSeek 0
     hSetFileSize h 0
     logLine Debug "Writing new key store"
