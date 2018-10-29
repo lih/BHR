@@ -20,7 +20,7 @@ data-files: prelude
 library
   exposed-modules: Algebra.Monad.Concatenative Data.CaPriCon CaPriCon.Run
   default-extensions: RebindableSyntax, ViewPatterns, TupleSections, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, LambdaCase, TypeOperators, RankNTypes, GeneralizedNewtypeDeriving, TypeFamilies
-  build-depends: base >=4.8 && <4.10,definitive-base >=2.6 && <2.7,definitive-parser >=3.0 && <3.1
+  build-depends: base >=4.8 && <4.10,definitive-base >=2.6 && <2.7,definitive-parser >=3.1 && <3.2
   if !impl(haste)
     ghc-options: -Wincomplete-patterns -Wname-shadowing -W -Werror
   hs-source-dirs: src
@@ -35,7 +35,7 @@ executable capricon
   default-extensions: RebindableSyntax, ViewPatterns, TupleSections, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, LambdaCase, TypeOperators, RankNTypes, GeneralizedNewtypeDeriving, TypeFamilies
   -- other-modules:       
   -- other-extensions:    
-  build-depends: base >=4.8 && <4.10,capricon >=0.8 && <0.9,definitive-base >=2.6 && <2.7,definitive-parser >=3.0 && <3.1
+  build-depends: base >=4.8 && <4.10,capricon >=0.8 && <0.9,definitive-base >=2.6 && <2.7,definitive-parser >=3.1 && <3.2
   ghc-options: -Wincomplete-patterns -Wname-shadowing -W -Werror
   hs-source-dirs:      exe
   default-language:    Haskell2010
