@@ -177,7 +177,10 @@ instance Foldable (NodeDir str) where
   fold (NodeDir a b c) = (fold.map fold.map2 fold) a + (fold.map fold.map2 fold) b + fold c
 instance Traversable (NodeDir str) where
   sequence (NodeDir a b c) = NodeDir<$>sequence3 a<*>sequence3 b<*>sequence c
+
+instance (Serializable ListStream str,Serializable ListStream a) => Serializable ListStream (Cofree (NodeDir str) a) where encode = encodeCofree
 instance (ListSerializable str, ListSerializable a) => ListSerializable (NodeDir str a)
+instance (Format ListStream str,Format ListStream a) => Format ListStream (Cofree (NodeDir str) a) where datum = datumCofree
 instance (ListFormat str, ListFormat a) => ListFormat (NodeDir str a)
 
 i'NodeDir :: Iso (NodeDir str a) (NodeDir str' a')

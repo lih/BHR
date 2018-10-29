@@ -60,7 +60,9 @@ instance Traversable (ExprNode s) where
   sequence (Lambda s a) = Lambda s<$>a
   sequence (Apply ff fx) = Apply<$>ff<*>fx
 instance (Serializable Bytes a,Serializable Bytes s) => Serializable Bytes (ExprNode s a)
+instance (Serializable Bytes a,Serializable Bytes s) => Serializable Bytes (Free (ExprNode s) a) where encode = encodeFree
 instance (Format Bytes a,Format Bytes s) => Format Bytes (ExprNode s a)
+instance (Format Bytes a,Format Bytes s) => Format Bytes (Free (ExprNode s) a) where datum = datumFree
 
 c'Expression :: Constraint (Expression a b)
 c'Expression = c'_

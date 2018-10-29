@@ -85,8 +85,10 @@ instance Documented a => Documented (Module a) where
 
 instance (Serializable Bytes s,Serializable Bytes a) => Serializable Bytes (ModDir s a) where
   encode = coerceEncode (ModDir . getChunked)
+instance (Serializable Bytes s,Serializable Bytes a) => Serializable Bytes (Free (ModDir s) a) where encode = encodeFree
 instance (Format Bytes s,Format Bytes a) => Format Bytes (ModDir s a) where
   datum = coerceDatum (ModDir . getChunked)
+instance (Format Bytes s,Format Bytes a) => Format Bytes (Free (ModDir s) a) where datum = datumFree
 instance Functor (ModDir s) where map f (ModDir l) = ModDir (l <&> l'2 %~ f)
 instance Ord s => SemiApplicative (Zip (ModDir s)) where
   Zip (ModDir fs) <*> Zip (ModDir xs) = Zip (ModDir (fs >>= \(s,f) -> fold (xm^.at s) <&> (s,) . f))
