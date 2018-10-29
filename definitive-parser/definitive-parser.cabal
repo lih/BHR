@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                definitive-parser
-version:             3.0
+version:             3.1
 synopsis:            General LogicT-based parser combinator library compatible with the definitive-base Prelude
 -- description:         
 license:             GPL-3

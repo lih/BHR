@@ -29,6 +29,6 @@ executable curly-gateway
                        GeneralizedNewtypeDeriving
                        RankNTypes
   other-extensions:    DeriveGeneric, TypeFamilies, ScopedTypeVariables, PatternSynonyms, ViewPatterns
-  build-depends: base >=4.9 && <4.10,curly-core >=0.7 && <0.8,curly-kademlia >=1.1 && <1.2,definitive-base >=2.6 && <2.7,definitive-network >=1.4 && <1.5,definitive-parser >=3.0 && <3.1
+  build-depends: base >=4.9 && <4.10,curly-core >=0.7 && <0.8,curly-kademlia >=1.1 && <1.2,definitive-base >=2.6 && <2.7,definitive-network >=1.4 && <1.5,definitive-parser >=3.1 && <3.2
   hs-source-dirs:      src
   default-language:    Haskell2010
