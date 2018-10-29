@@ -27,7 +27,9 @@ import System.Environment (lookupEnv)
 data DocNode a = DocTag String [(String,String)] [a]
                deriving (Eq,Ord,Show,Generic)
 instance Serializable Bytes a => Serializable Bytes (DocNode a)
+instance Serializable Bytes a => Serializable Bytes (Free DocNode a) where encode = encodeFree
 instance Format Bytes a => Format Bytes (DocNode a)
+instance Format Bytes a => Format Bytes (Free DocNode a) where datum = datumFree
 instance Functor DocNode where map f (DocTag t a xs) = DocTag t a (map f xs)
 instance Foldable DocNode where fold (DocTag _ _ l) = fold l
 instance Traversable DocNode where sequence (DocTag t as l) = DocTag t as<$>sequence l

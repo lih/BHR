@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, TypeFamilies, ExistentialQuantification, ImplicitParams, DefaultSignatures, UndecidableInstances #-}
+{-# LANGUAGE ScopedTypeVariables, TypeFamilies, ExistentialQuantification, ImplicitParams, DefaultSignatures #-}
 module Language.Format (
   -- * You'll need this
   module Language.Parser,
@@ -7,7 +7,7 @@ module Language.Format (
   -- * Serialization
   SerialStreamType(..),SerialStream(..),Serializable(..),Format(..),Builder,bytesBuilder,chunkBuilder,serialize,serial,stringBytes,
   -- ** Convenience functions
-  defaultEncode,defaultDatum,
+  defaultEncode,defaultDatum,encodeFree,encodeCofree,datumFree,datumCofree,
   word8,Word8,Word16,Word32,Word64,LittleEndian(..),encodeAlt,FormatAlt(..),datumOf,getChunk,
   writeSerial,readFormat,writeHSerial,readHFormat,
   -- ** Bidirectional serialization
@@ -333,15 +333,30 @@ instance Serializable stream a => Serializable stream [a] where
   encode p l = encode p (length l) + foldMap (\x -> encode p x) l
 instance Format stream a => Format stream [a] where
   datum = datum >>= \n -> doTimes n datum
-instance (Serializable stream (Forest f a),Serializable stream a) => Serializable stream (Free f a) where
-  encode p (Pure s) = encodeAlt p 0 s
-  encode p (Join f) = encodeAlt p 1 f
-instance (Format stream (Forest f a),Format stream a) => Format stream (Free f a) where
-  datum = datumOf [FormatAlt Pure,FormatAlt Join]
-instance (Serializable stream (Coforest f a),Serializable stream a) => Serializable stream (Cofree f a) where
-  encode p (Step a fc) = encode p (a,fc)
-instance (Format stream (Coforest f a),Format stream a) => Format stream (Cofree f a) where
-  datum = uncurry Step<$>datum
+encodeFree ::  (Serializable stream (Forest f a),Serializable stream a) => Proxy stream -> Free f a -> StreamBuilder stream
+encodeFree p (Pure s) = encodeAlt p 0 s
+encodeFree p (Join f) = encodeAlt p 1 f
+instance Serializable stream a => Serializable stream (Free Maybe a) where encode = encodeFree
+instance Serializable stream a => Serializable stream (Free [] a) where encode = encodeFree
+instance (Serializable stream k,Serializable stream a) => Serializable stream (Free (Map k) a) where encode = encodeFree
+instance Serializable stream a => Serializable stream (Cofree Maybe a) where encode = encodeCofree
+instance Serializable stream a => Serializable stream (Cofree [] a) where encode = encodeCofree
+instance (Serializable stream k,Serializable stream a) => Serializable stream (Cofree (Map k) a) where encode = encodeCofree
+
+datumFree ::  (Format stream (Forest f a),Format stream a) => Parser stream (Free f a)
+datumFree = datumOf [FormatAlt Pure,FormatAlt Join]
+instance Format stream a => Format stream (Free Maybe a) where datum = datumFree
+instance Format stream a => Format stream (Free [] a) where datum = datumFree
+instance (Ord k,Format stream k,Format stream a) => Format stream (Free (Map k) a) where datum = datumFree
+instance Format stream a => Format stream (Cofree Maybe a) where datum = datumCofree
+instance Format stream a => Format stream (Cofree [] a) where datum = datumCofree
+instance (Ord k,Format stream k,Format stream a) => Format stream (Cofree (Map k) a) where datum = datumCofree
+
+encodeCofree ::  (Serializable stream (Coforest f a),Serializable stream a) => Proxy stream -> Cofree f a -> StreamBuilder stream
+encodeCofree p (Step a fc) = encode p (a,fc)
+datumCofree ::  (Format stream (Coforest f a),Format stream a) => Parser stream (Cofree f a)
+datumCofree = uncurry Step<$>datum
+
 instance Serializable stream (f (g a)) => Serializable stream ((f:.:g) a) where
   encode = coerceEncode Compose
 instance Format stream (f (g a)) => Format stream ((f:.:g) a) where
