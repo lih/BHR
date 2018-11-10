@@ -19,18 +19,24 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
 
-dict = fromAList [("wait",StackBuiltin $ Builtin_Extra $ Wait 100),
-                  ("quit", StackBuiltin $ Builtin_Extra $ Quit)]
-
-data LogosBuiltin = Wait Int | Quit
+data LogosBuiltin = Wait | Quit
 data LogosState = LogosState {
   _running :: Bool
   }
+
+dict = fromAList [("wait",StackBuiltin $ Builtin_Extra $ Wait),
+                  ("quit", StackBuiltin $ Builtin_Extra $ Quit)]
+
 running :: Lens' LogosState Bool
 running = lens _running (\x y -> x { _running = y })
 
-runLogos (Wait n) = do
-  liftIO $ threadDelay n
+runLogos Wait = do
+  st <- runStackState get
+  case st of
+    StackInt n:st' -> do
+      liftIO $ threadDelay n
+      runStackState $ put st'
+    _ -> unit
 runLogos Quit = runExtraState $ do running =- False
 
 main = do
