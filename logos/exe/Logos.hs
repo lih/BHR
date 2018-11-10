@@ -34,13 +34,12 @@ runLogos (Wait n) = do
 runLogos Quit = runExtraState $ do running =- False
 
 main = do
+  putStrLn "Hello from Logos !"
   text <- readHString stdin
   let go (w:ws) = do
-        liftIO $ putStrLn $ "Running : "+w
         execSymbol runLogos (\_ -> unit) w
         r <- runExtraState $ getl running
         if r then go ws else unit
       go [] = unit
   (go (stringWords text)^..stateT.concatT) (defaultState dict (LogosState True))
         
-  putStrLn "Hello from Logos !"
