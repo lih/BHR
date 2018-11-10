@@ -36,6 +36,7 @@ runLogos Quit = runExtraState $ do running =- False
 main = do
   text <- readHString stdin
   let go (w:ws) = do
+        liftIO $ putStrLn $ "Running : "+w
         execSymbol runLogos (\_ -> unit) w
         r <- runExtraState $ getl running
         if r then go ws else unit
