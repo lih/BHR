@@ -19,8 +19,8 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
 
-dict = fromAList [("wait",StackExtra $ Opaque (Wait 100)),
-                  ("quit",StackExtra $ Opaque Quit)]
+dict = fromAList [("wait",StackBuiltin $ Builtin_Extra $ Wait 100),
+                  ("quit", StackBuiltin $ Builtin_Extra $ Quit)]
 
 data LogosBuiltin = Wait Int | Quit
 data LogosState = LogosState {
