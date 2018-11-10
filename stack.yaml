@@ -36,18 +36,20 @@ resolver: lts-9.10
 # non-dependency (i.e. a user package), and its test suites and benchmarks
 # will not be run. This is useful for tweaking upstream packages.
 packages:
+- ./curly
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-- ./curly
 extra-deps:
 - ./capricon
 - ./curly-gateway
 - AES-0.2.9
 - kademlia-1.1.0.0
+- GLFW-0.5.2.5
 - ./definitive-base
 - ./definitive-parser
 - ./definitive-network
 - ./definitive-filesystem
+- ./logos
 - ./hreadline
 - ./curly-kademlia
 - ./curly-core
