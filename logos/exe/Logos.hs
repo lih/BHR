@@ -23,12 +23,49 @@ data LogosBuiltin = Wait | Quit
 data LogosState = LogosState {
   _running :: Bool
   }
-
-dict = fromAList [("wait",StackBuiltin $ Builtin_Extra $ Wait),
-                  ("quit", StackBuiltin $ Builtin_Extra $ Quit)]
-
 running :: Lens' LogosState Bool
 running = lens _running (\x y -> x { _running = y })
+
+dict = fromAList $ map (second StackBuiltin) $
+  [("wait"       , Builtin_Extra Wait  ),
+   ("quit"       , Builtin_Extra Quit  ),
+                   
+   ("def"        , Builtin_Def         ),
+   ("$"          , Builtin_DeRef       ),
+   ("lookup"     , Builtin_Lookup      ),
+   ("exec"       , Builtin_Exec        ),
+   ("quote"      , Builtin_Quote       ),
+   
+   ("stack"      , Builtin_Stack       ),
+   ("clear"      , Builtin_Clear       ),
+   ("shift"      , Builtin_Shift       ),
+   ("shaft"      , Builtin_Shaft       ),
+   ("pop"        , Builtin_Pop         ),
+   ("popn"       , Builtin_PopN        ),
+   ("dup"        , Builtin_Dup         ),
+   ("dupn"       , Builtin_DupN        ),
+   ("swap"       , Builtin_Swap        ),
+   ("swapn"      , Builtin_SwapN       ),
+   ("pick"       , Builtin_Pick        ),
+   
+   ("["          , Builtin_ListBegin   ),
+   ("]"          , Builtin_ListEnd     ),
+   
+   ("+"          , Builtin_Add         ),
+   ("-"          , Builtin_Sub         ),
+   ("*"          , Builtin_Mul         ),
+   ("div"        , Builtin_Div         ),
+   ("mod"        , Builtin_Mod         ),
+   ("sign"       , Builtin_Sign        ),
+   
+   ("each"       , Builtin_Each        ),
+   ("range"      , Builtin_Range       ),
+   
+   ("vocabulary" , Builtin_CurrentDict ),
+   ("empty"      , Builtin_Empty       ),
+   ("insert"     , Builtin_Insert      ),
+   ("delete"     , Builtin_Delete      ),
+   ("keys"       , Builtin_Keys        )]
 
 runLogos Wait = do
   st <- runStackState get
