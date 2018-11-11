@@ -239,7 +239,7 @@ runLogos Draw = do
                                (_,_,h):t -> Just (h,t)
                                [] -> Nothing) (debug $ vertices [x | StackExtra (Opaque x) <- l])
         V.unsafeWith vs $ \p -> do
-          GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length vs * sizeOf (vs V.! 0)),p,GL.StaticDraw)
+          GL.bufferData GL.ArrayBuffer $= (fromIntegral (debug $ V.length vs * sizeOf (vs V.! 0)),p,GL.StaticDraw)
 
         GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
 
