@@ -204,7 +204,7 @@ runLogos Texture = do
             GL.activeTexture $= GL.TextureUnit texi
             GL.textureBinding GL.Texture2D $= Just tex
             V.unsafeWith imgd $ \imgp -> do
-              GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.BGR GL.UnsignedByte imgp)
+              GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.RGB GL.UnsignedByte imgp)
             GL.textureFilter GL.Texture2D $= ((GL.Linear',Nothing),GL.Linear')
             GL.generateMipmap' GL.Texture2D
             
