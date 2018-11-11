@@ -107,6 +107,7 @@ runLogos OpenWindow = do
     _ -> unit
 
 main = do
+  GLFW.initialize
   putStrLn "Hello from Logos !"
   text <- readHString stdin
   let go (w:ws) = do
