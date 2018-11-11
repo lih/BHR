@@ -187,7 +187,6 @@ runLogos BindTexture = do
   case st of
     StackExtra (Opaque (TI tex)):st' -> do
       liftIO $ do
-        putStrLn $ "Binding texture "+show tex
         GL.textureBinding GL.Texture2D $= Just tex
       runStackState $ put st'
     _ -> unit
@@ -229,16 +228,14 @@ runLogos Draw = do
               "triangles" -> GL.Triangles
               "points" -> GL.Points
               _ -> GL.Points
-
-            vertices = go zacc
+            extras = [x | StackExtra (Opaque x) <- l]
+            fullVertices = go zacc extras
               where zacc = (GL.Color4 0 0 0 0,GL.TexCoord2 0 0)
                     go (c,tx) (P v:t) = (c,tx,v):go zacc t
                     go (_,tx) (C c:t) = go (c,tx) t
                     go (c,_)  (T tx:t) = go (c,tx) t
                     go acc      (h:t) = go acc t
                     go _ [] = []
-
-        let fullVertices = vertices [x | StackExtra (Opaque x) <- l]
             newVec f = GL.genObjectName <*= \vb -> do
               let vs = V.unfoldr (\case
                                      h:t -> Just (f h,t)
@@ -261,6 +258,8 @@ runLogos Draw = do
           GL.vertexAttribPointer (GL.AttribLocation 1) $= (GL.ToFloat, GL.VertexArrayDescriptor 4 GL.Float 0 nullPtr)
           GL.bindBuffer GL.ArrayBuffer $= Just tb
           GL.vertexAttribPointer (GL.AttribLocation 2) $= (GL.ToFloat, GL.VertexArrayDescriptor 2 GL.Float 0 nullPtr)
+          for_ [i | TI i <- extras] $ \(GL.TextureObject i) -> do
+            GL.uniform (GL.UniformLocation 0) $= GL.TextureUnit i
           GL.drawArrays mode 0 (fromIntegral $ length fullVertices)
         GLFW.swapBuffers
     _ -> unit
