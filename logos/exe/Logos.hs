@@ -183,6 +183,7 @@ main = do
   putStrLn "Initializing graphical environment..."
   between (void GLFW.initialize) GLFW.terminate $ do
     GL.texture GL.Texture2D SV.$= GL.Enabled
+
     args <- getArgs
     prelude <- fold <$> for args readString
     putStrLn "Hello from Logos !"
