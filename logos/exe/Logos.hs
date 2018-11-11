@@ -237,24 +237,20 @@ runLogos Draw = do
                     go (c,_)  (T tx:t) = go (c,tx) t
                     go acc      (h:t) = go acc t
                     go _ [] = []
-                    
-        vb <- GL.genObjectName
-        cb <- GL.genObjectName
+
         let fullVertices = vertices [x | StackExtra (Opaque x) <- l]
-            vs = V.unfoldr (\case
-                               (_,_,h):t -> Just (h,t)
-                               [] -> Nothing) fullVertices
-            cs = V.unfoldr (\case
-                               (h,_,_):t -> Just (h,t)
-                               [] -> Nothing) fullVertices
-
-        GL.bindBuffer GL.ArrayBuffer $= Just vb
-        V.unsafeWith vs $ \p -> do
-          GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length vs * sizeOf (vs V.! 0)),p,GL.StaticDraw)
-
-        GL.bindBuffer GL.ArrayBuffer $= Just cb
-        V.unsafeWith cs $ \p -> do
-          GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length cs * sizeOf (cs V.! 0)),p,GL.StaticDraw)
+            newVec f = GL.genObjectName <*= \vb -> do
+              let vs = V.unfoldr f fullVertices
+              GL.bindBuffer GL.ArrayBuffer $= Just vb
+              V.unsafeWith vs $ \p -> do
+                GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length vs * sizeOf (vs V.! 0)),p,GL.StaticDraw)
+        
+        vb <- newVec (\case
+                         (_,_,h):t -> Just (h,t)
+                         [] -> Nothing)
+        cb <- newVec (\case
+                         (h,_,_):t -> Just (h,t)
+                         [] -> Nothing)
 
         GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
 
@@ -264,7 +260,7 @@ runLogos Draw = do
           GL.vertexAttribPointer (GL.AttribLocation 0) $= (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Float 0 nullPtr)
           GL.bindBuffer GL.ArrayBuffer $= Just cb
           GL.vertexAttribPointer (GL.AttribLocation 1) $= (GL.ToFloat, GL.VertexArrayDescriptor 4 GL.Float 0 nullPtr)
-          GL.drawArrays mode 0 (fromIntegral $ V.length vs)
+          GL.drawArrays mode 0 (fromIntegral $ length fullVertices)
         GLFW.swapBuffers
     _ -> unit
 
