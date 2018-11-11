@@ -206,6 +206,9 @@ main = do
   between (void GLFW.initialize) GLFW.terminate $ do
     args <- getArgs
   
+    GLFW.openWindowHint GLFW.OpenGLVersionMajor 3
+    GLFW.openWindowHint GLFW.OpenGLVersionMinor 3
+
     GL.depthFunc            SV.$= Just GL.Lequal
     GL.blend                SV.$= GL.Enabled
     GL.blendFunc            SV.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
