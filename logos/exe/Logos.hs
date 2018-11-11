@@ -193,7 +193,7 @@ main = do
     GL.texture GL.Texture2D SV.$= GL.Enabled
     GL.textureFunction      SV.$= GL.Blend
     GL.combineRGB           SV.$= GL.Interpolate
-    GL.combineAlpha           SV.$= GL.Interpolate
+    GL.combineAlpha         SV.$= GL.Interpolate
 
     args <- getArgs
     prelude <- fold <$> for args readString
