@@ -3,6 +3,7 @@ module Main where
 import Definitive
 import Algebra.Monad.Concatenative
 import Control.Concurrent (threadDelay)
+import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Data.StateVar as SV
 
@@ -21,7 +22,7 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
 
-data LogosBuiltin = Wait | Quit | Format | Print
+data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow
                   deriving Show
 data LogosState = LogosState {
   _running :: Bool
@@ -34,6 +35,7 @@ dict = fromAList $ map (second StackBuiltin) $
    ("quit"       , Builtin_Extra Quit  ),
    ("format"     , Builtin_Extra Format),
    ("print"      , Builtin_Extra Print ),
+   ("window"     , Builtin_Extra OpenWindow),
                    
    ("def"        , Builtin_Def         ),
    ("$"          , Builtin_DeRef       ),
@@ -94,6 +96,14 @@ runLogos Print = do
   st <- runStackState get
   case st of
     StackSymbol str:st' -> liftIO (putStr str) >> runStackState (put st')
+    _ -> unit
+runLogos OpenWindow = do
+  st <- runStackState get
+  case st of
+    StackInt h:StackInt w:st' -> do
+      runStackState $ put st'
+      liftIO $ do
+        void $ GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8] GLFW.Window
     _ -> unit
 
 main = do
