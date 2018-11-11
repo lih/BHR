@@ -288,7 +288,6 @@ initGL = do
   GL.texture GL.Texture2D $= GL.Enabled
   GL.textureFunction      $= GL.Blend
 
-
 main = do
   putStrLn "Initializing graphical environment..."
   between (void GLFW.initialize) GLFW.terminate $ do
