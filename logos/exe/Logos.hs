@@ -100,6 +100,7 @@ runLogos Format = do
           format (x:xs) l = second (x:) $ format xs l
           format _ st' = (st',"")
           showV (StackExtra (Opaque x)) = show x
+          showV (StackList l) = "["+intercalate "," (map showV l)+"]"
           showV x = show x
           (st'',msg) = format str st'
       runStackState $ put (StackSymbol msg:st'')
