@@ -242,12 +242,7 @@ runLogos Draw = do
 
         GL.vertexAttribArray (GL.AttribLocation 0) $= GL.Enabled
         GL.vertexAttribPointer (GL.AttribLocation 0) $= (GL.ToFloat, GL.VertexArrayDescriptor (fromIntegral $ V.length vs) GL.Double 0 nullPtr)
-        
-        GL.renderPrimitive mode $ for_ l $ \case
-          StackExtra (Opaque (P v)) -> GL.vertex v
-          StackExtra (Opaque (C c)) -> GL.color c
-          StackExtra (Opaque (T t)) -> GL.texCoord t
-          _ -> unit
+        GL.drawArrays mode 0 (fromIntegral $ V.length vs)
         GLFW.swapBuffers
     _ -> unit
 
