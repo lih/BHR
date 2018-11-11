@@ -193,6 +193,7 @@ main = do
   between (void GLFW.initialize) GLFW.terminate $ do
     args <- getArgs
 
+    GL.depthFunc            SV.$= Just GL.Lequal
     GL.blend                SV.$= GL.Enabled
     GL.blendFunc            SV.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
     GL.texture GL.Texture2D SV.$= GL.Enabled
