@@ -7,6 +7,8 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Data.StateVar as SV
 import System.Environment (getArgs)
+import Codec.Picture
+import qualified Data.Vector.Storable as V
 
 stringWords :: String -> [String]
 stringWords = map fromString . fromBlank
@@ -163,8 +165,16 @@ main = do
     textureLoaded <- do
       tex <- GL.genObjectName
       GL.textureBinding GL.Texture2D SV.$= Just tex
-      succ <- GLFW.loadTexture2D "tile.tga" []
-      return $ if succ then Just tex else Nothing
+      imgbytes <- readChunk "tile.png"
+      let img = convertRGBA8 <$> decodeImage imgbytes
+      case img of
+        Right (Image w h imgd) -> do
+          V.unsafeWith imgd $ \imgp -> do
+            GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA' (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.RGBA GL.UnsignedByte imgp)
+          return $ Just tex
+        Left err -> do
+          putStrLn err
+          return Nothing
     putStrLn $ if has t'Just textureLoaded then "Texture loaded successfully." else "Failed loading texture"
     args <- getArgs
     prelude <- fold <$> for args readString
