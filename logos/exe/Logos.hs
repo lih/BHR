@@ -259,7 +259,7 @@ runLogos Draw = do
           GL.bindBuffer GL.ArrayBuffer $= Just tb
           GL.vertexAttribPointer (GL.AttribLocation 2) $= (GL.ToFloat, GL.VertexArrayDescriptor 2 GL.Float 0 nullPtr)
           for_ [i | TI i <- extras] $ \(GL.TextureObject i) -> do
-            GL.uniform (GL.UniformLocation 0) $= GL.TextureUnit i
+            GL.uniform (GL.UniformLocation 0) $= GL.TextureUnit (debug i)
           GL.drawArrays mode 0 (fromIntegral $ length fullVertices)
         GLFW.swapBuffers
     _ -> unit
