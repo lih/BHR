@@ -206,7 +206,7 @@ main = do
   between (void GLFW.initialize) GLFW.terminate $ do
     args <- getArgs
   
-    print =<< GLFW.getParam GLFW.OpenGLProfile
+    GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
     
     GL.depthFunc            SV.$= Just GL.Lequal
     GL.blend                SV.$= GL.Enabled
