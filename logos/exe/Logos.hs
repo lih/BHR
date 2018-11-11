@@ -292,7 +292,6 @@ main = do
   putStrLn "Initializing graphical environment..."
   between (void GLFW.initialize) GLFW.terminate $ do
     args <- getArgs
-
     prelude <- fold <$> for args readString
     text <- readHString stdin
     let go (w:ws) = do
