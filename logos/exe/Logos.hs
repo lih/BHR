@@ -188,8 +188,11 @@ runLogos Draw = do
 main = do
   putStrLn "Initializing graphical environment..."
   between (void GLFW.initialize) GLFW.terminate $ do
+    GL.blend                SV.$= GL.Enabled
+    GL.blendFunc            SV.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
     GL.texture GL.Texture2D SV.$= GL.Enabled
-    GL.textureFunction SV.$= GL.Blend
+    GL.textureFunction      SV.$= GL.Blend
+
 
     args <- getArgs
     prelude <- fold <$> for args readString
