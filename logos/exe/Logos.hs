@@ -150,15 +150,15 @@ runLogos Texture = do
     StackSymbol file:st' -> do
       runStackState (put st')
       textureLoaded <- liftIO $ do
-        tex <- GL.genObjectName
-        GL.textureBinding GL.Texture2D SV.$= Just tex
         imgbytes <- readChunk file
         let img = convertRGB8 <$> decodeImage imgbytes
+        tex <- GL.genObjectName
         case img of
           Right (Image w h imgd) -> do
+            GL.textureBinding GL.Texture2D SV.$= Just tex
             V.unsafeWith imgd $ \imgp -> do
               GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.BGR GL.UnsignedByte imgp)
-            GL.textureFilter GL.Texture2D SV.$= ((GL.Nearest,Nothing),GL.Nearest)
+            GL.textureFilter GL.Texture2D SV.$= ((GL.Linear',Nothing),GL.Linear')
             GL.generateMipmap' GL.Texture2D
             GL.textureBinding GL.Texture2D SV.$= Nothing
             return $ Just tex
