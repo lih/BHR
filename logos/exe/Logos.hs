@@ -266,8 +266,11 @@ initShaders = GL.createProgram >>= \prog -> do
   compileShader GL.FragmentShader "fragment.shader"
   
   GL.linkProgram prog
-  GL.currentProgram $= Just prog
-  putStrLn =<< SV.get (GL.programInfoLog prog)
+  success <- SV.get (GL.linkStatus prog)
+  if success then 
+    GL.currentProgram $= Just prog
+    else
+    throw . SomeException . GLSLProgramLinkError =<< SV.get (GL.programInfoLog prog)
 
 
 main = do
