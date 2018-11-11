@@ -234,7 +234,7 @@ runLogos Draw = do
         GL.bindBuffer GL.ArrayBuffer $= Just vb
         let vs = V.unfoldr (\case
                                (_,_,h):t -> Just (h,t)
-                               [] -> Nothing) (vertices [x | StackExtra (Opaque x) <- l])
+                               [] -> Nothing) (debug $ vertices [x | StackExtra (Opaque x) <- l])
         V.unsafeWith vs $ \p -> do
           GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length vs),p,GL.StaticDraw)
 
