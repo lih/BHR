@@ -124,7 +124,13 @@ runLogos Color = do
       runStackState $ put st'
       liftIO $ GL.color (GL.Color3 r g (b :: GL.GLdouble))
     _ -> unit
-
+runLogos Texture = do
+  st <- runStackState get
+  case st of
+    StackSymbol (read -> y):StackSymbol (read -> x):st' -> do
+      runStackState $ put st'
+      liftIO $ GL.texCoord (GL.TexCoord2 x (y::GL.GLdouble))
+    _ -> unit
 
 main = between (void GLFW.initialize) GLFW.terminate $ do
   GLFW.loadTexture2D "tile.tga" [GLFW.NoRescale] 
