@@ -44,6 +44,7 @@ extra-deps:
 - ./curly-gateway
 - AES-0.2.9
 - kademlia-1.1.0.0
+- GLFW-0.5.2.5
 - ./definitive-base
 - ./definitive-parser
 - ./definitive-network

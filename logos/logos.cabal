@@ -12,7 +12,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 executable logos
-  build-depends: base >=4.8 && <4.10, definitive-base >=2.6 && <2.7, capricon
+  build-depends: base >=4.8 && <4.10, definitive-base >=2.6 && <2.7, capricon, OpenGL, GLFW
   default-extensions: TypeSynonymInstances, NoMonomorphismRestriction, StandaloneDeriving, GeneralizedNewtypeDeriving, TypeOperators, RebindableSyntax, FlexibleInstances, FlexibleContexts, FunctionalDependencies, TupleSections, MultiParamTypeClasses, Rank2Types, AllowAmbiguousTypes, RoleAnnotations 
   hs-source-dirs:      exe
   main-is: Logos.hs
