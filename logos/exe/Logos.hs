@@ -22,7 +22,7 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
 
-data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow
+data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color | Texture | Draw
                   deriving Show
 data LogosState = LogosState {
   _running :: Bool
@@ -36,6 +36,10 @@ dict = fromAList $ map (second StackBuiltin) $
    ("format"     , Builtin_Extra Format),
    ("print"      , Builtin_Extra Print ),
    ("window"     , Builtin_Extra OpenWindow),
+   ("point"      , Builtin_Extra Point),
+   ("color"      , Builtin_Extra Color),
+   ("texture"    , Builtin_Extra Texture),
+   ("draw"       , Builtin_Extra Draw),
                    
    ("def"        , Builtin_Def         ),
    ("$"          , Builtin_DeRef       ),
@@ -104,9 +108,26 @@ runLogos OpenWindow = do
       runStackState $ put st'
       liftIO $ do
         void $ GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8] GLFW.Window
+        
+    _ -> unit
+runLogos Point = do
+  st <- runStackState get
+  case st of
+    StackSymbol (read -> z):StackSymbol (read -> y):StackSymbol (read -> x):st' -> do
+      runStackState $ put st'
+      liftIO $ GL.vertex (GL.Vertex3 x y (z :: GL.GLdouble))
+    _ -> unit
+runLogos Color = do
+  st <- runStackState get
+  case st of
+    StackSymbol (read -> b):StackSymbol (read -> g):StackSymbol (read -> r):st' -> do
+      runStackState $ put st'
+      liftIO $ GL.color (GL.Color3 r g (b :: GL.GLdouble))
     _ -> unit
 
+
 main = between (void GLFW.initialize) GLFW.terminate $ do
+  GLFW.loadTexture2D "tile.tga" [GLFW.NoRescale] 
   putStrLn "Hello from Logos !"
   text <- readHString stdin
   let go (w:ws) = do
