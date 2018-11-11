@@ -154,7 +154,7 @@ runLogos Texture = do
         case img of
           Right (Image w h imgd) -> do
             V.unsafeWith imgd $ \imgp -> do
-              GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA' (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.RGBA GL.UnsignedByte imgp)
+              GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.RGBA GL.UnsignedByte imgp)
             return $ Just tex
           Left err -> do
             putStrLn err
