@@ -177,6 +177,7 @@ runLogos Draw = do
     StackSymbol s:StackList l:st' -> do
       runStackState $ put st'
       liftIO $ do
+        GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
         let mode = case s of
               "lines" -> GL.Lines
               "triangles" -> GL.Triangles
