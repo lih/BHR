@@ -162,6 +162,8 @@ runLogos Draw = do
 main = do
   putStrLn "Initializing graphical environment..."
   between (void GLFW.initialize) GLFW.terminate $ do
+    GL.texture GL.Texture2D SV.$= GL.Enabled
+    
     textureLoaded <- do
       tex <- GL.genObjectName
       GL.textureBinding GL.Texture2D SV.$= Just tex
