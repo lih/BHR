@@ -192,6 +192,8 @@ main = do
     GL.blendFunc            SV.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
     GL.texture GL.Texture2D SV.$= GL.Enabled
     GL.textureFunction      SV.$= GL.Blend
+    GL.combineRGB           SV.$= GL.Interpolate
+    GL.combineAlpha           SV.$= GL.Interpolate
     x <- SV.get GL.combineAlpha
     y <- SV.get GL.combineRGB
     print (x,y)
