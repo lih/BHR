@@ -209,6 +209,8 @@ main = do
     GLFW.openWindowHint GLFW.OpenGLVersionMajor 3
     GLFW.openWindowHint GLFW.OpenGLVersionMinor 3
     GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
+    vao <- GL.genObjectName
+    GL.bindVertexArrayObject SV.$= Just vao
 
     GL.depthFunc            SV.$= Just GL.Lequal
     GL.blend                SV.$= GL.Enabled
