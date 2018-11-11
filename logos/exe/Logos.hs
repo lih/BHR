@@ -25,7 +25,7 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
 
-data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw
+data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
 data LogosData = P (GL.Vertex3 GL.GLdouble) | C (GL.Color4 GL.GLdouble) | T (GL.TexCoord2 GL.GLdouble) | TI GL.TextureObject
                deriving Show
@@ -45,6 +45,7 @@ dict = fromAList $ map (second StackBuiltin) $
    ("rgb"        , Builtin_Extra (Color False)),
    ("rgba"       , Builtin_Extra (Color True)),
    ("texture"    , Builtin_Extra Texture),
+   ("texbind"    , Builtin_Extra BindTexture),
    ("texpoint"   , Builtin_Extra TextureCoord),
    ("draw"       , Builtin_Extra Draw),
                    
@@ -144,6 +145,13 @@ runLogos TextureCoord = do
     (fromStack -> y):(fromStack -> x):st' -> do
       runStackState $ put $ StackExtra (Opaque (T (GL.TexCoord2 x y))):st'
     _ -> unit
+runLogos BindTexture = do
+  st <- runStackState get
+  case st of
+    StackExtra (Opaque (TI tex)):st' -> do
+      liftIO $ do GL.textureBinding GL.Texture2D SV.$= Just tex
+      runStackState $ put st'
+    _ -> unit
 runLogos Texture = do
   st <- runStackState get
   case st of
@@ -187,7 +195,6 @@ runLogos Draw = do
           StackExtra (Opaque (P v)) -> GL.vertex v
           StackExtra (Opaque (C c)) -> GL.color c
           StackExtra (Opaque (T t)) -> GL.texCoord t
-          StackExtra (Opaque (TI t)) -> GL.textureBinding GL.Texture2D SV.$= Just t
           _ -> unit
         GLFW.swapBuffers
     _ -> unit
