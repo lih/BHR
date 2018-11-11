@@ -154,6 +154,7 @@ runLogos Draw = do
           StackExtra (Opaque (C c)) -> GL.color c
           StackExtra (Opaque (T t)) -> GL.texCoord t
           _ -> unit
+        GLFW.swapBuffers
     _ -> unit
 
 main = between (void GLFW.initialize) GLFW.terminate $ do
