@@ -6,6 +6,7 @@ import Control.Concurrent (threadDelay)
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Data.StateVar as SV
+import System.Environment (getArgs)
 
 stringWords :: String -> [String]
 stringWords = map fromString . fromBlank
@@ -156,6 +157,8 @@ runLogos Draw = do
     _ -> unit
 
 main = between (void GLFW.initialize) GLFW.terminate $ do
+  args <- getArgs
+  prelude <- fold <$> for args readString
   GLFW.loadTexture2D "tile.tga" [GLFW.NoRescale] 
   putStrLn "Hello from Logos !"
   text <- readHString stdin
@@ -164,5 +167,5 @@ main = between (void GLFW.initialize) GLFW.terminate $ do
         r <- runExtraState $ getl running
         if r then go ws else unit
       go [] = unit
-  (go (stringWords text)^..stateT.concatT) (defaultState dict (LogosState True))
+  (go (stringWords (prelude + " " + text))^..stateT.concatT) (defaultState dict (LogosState True))
         
