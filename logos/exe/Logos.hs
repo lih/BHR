@@ -3,6 +3,8 @@ module Main where
 import Definitive
 import Algebra.Monad.Concatenative
 import Control.Concurrent (threadDelay)
+import qualified Graphics.UI.GLFW as GLFW
+import qualified Data.StateVar as SV
 
 stringWords :: String -> [String]
 stringWords = map fromString . fromBlank
