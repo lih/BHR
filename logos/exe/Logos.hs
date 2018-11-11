@@ -25,9 +25,9 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
 
-data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color | Texture | TextureCoord | Draw
+data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw
                   deriving Show
-data LogosData = P (GL.Vertex3 GL.GLdouble) | C (GL.Color3 GL.GLdouble) | T (GL.TexCoord2 GL.GLdouble) | TI GL.TextureObject
+data LogosData = P (GL.Vertex3 GL.GLdouble) | C (GL.Color4 GL.GLdouble) | T (GL.TexCoord2 GL.GLdouble) | TI GL.TextureObject
                deriving Show
 data LogosState = LogosState {
   _running :: Bool
@@ -42,7 +42,8 @@ dict = fromAList $ map (second StackBuiltin) $
    ("print"      , Builtin_Extra Print ),
    ("window"     , Builtin_Extra OpenWindow),
    ("point"      , Builtin_Extra Point),
-   ("color"      , Builtin_Extra Color),
+   ("rgb"        , Builtin_Extra (Color False)),
+   ("rgba"       , Builtin_Extra (Color True)),
    ("texture"    , Builtin_Extra Texture),
    ("texpoint"   , Builtin_Extra TextureCoord),
    ("draw"       , Builtin_Extra Draw),
@@ -129,11 +130,13 @@ runLogos Point = do
     (fromStack -> z):(fromStack -> y):(fromStack -> x):st' -> do
       runStackState $ put $ StackExtra (Opaque (P (GL.Vertex3 x y z))):st'
     _ -> unit
-runLogos Color = do
+runLogos (Color isRGBA) = do
   st <- runStackState get
   case st of
-    (fromStack -> b):(fromStack -> g):(fromStack -> r):st' -> do
-      runStackState $ put $ StackExtra (Opaque (C (GL.Color3 r g b))):st'
+    (fromStack -> a):(fromStack -> b):(fromStack -> g):(fromStack -> r):st' | isRGBA -> do
+      runStackState $ put $ StackExtra (Opaque (C (GL.Color4 r g b a))):st'
+    (fromStack -> b):(fromStack -> g):(fromStack -> r):st' | not isRGBA -> do
+      runStackState $ put $ StackExtra (Opaque (C (GL.Color4 r g b 1.0))):st'
     _ -> unit
 runLogos TextureCoord = do
   st <- runStackState get
