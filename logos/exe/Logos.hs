@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 module Main where
 
 import Definitive
@@ -12,6 +13,8 @@ import qualified Data.Vector.Storable as V
 import Data.StateVar (($=))
 import Foreign.Storable
 import Foreign.Ptr
+import Control.Exception (SomeException(..),Exception)
+import GHC.Generics
 
 instance (Storable a,Storable b) => Storable (a,b) where
   sizeOf x = sizeOf (fst x) + sizeOf (snd x)
@@ -246,18 +249,22 @@ runLogos Draw = do
         GLFW.swapBuffers
     _ -> unit
 
-initShaders = GL.createProgram >>= \prog -> do
-  GL.createShader GL.VertexShader <*= \vs -> do
-    body <- readChunk "vertex.shader"
-    GL.shaderSourceBS vs $= body
-    GL.compileShader vs
-    GL.attachShader prog vs
-  GL.createShader GL.FragmentShader <*= \fs -> do
-    body <- readChunk "fragment.shader"
-    GL.shaderSourceBS fs $= body
-    GL.compileShader fs
-    GL.attachShader prog fs
+data GLSLCompileException = GLSLShaderCompileError String | GLSLProgramLinkError String
+  deriving (Show,Generic)
+instance Exception GLSLCompileException
 
+initShaders = GL.createProgram >>= \prog -> do
+  let compileShader shType shFile = GL.createShader shType <*= \vs -> do
+        body <- readChunk shFile
+        GL.shaderSourceBS vs $= body
+        GL.compileShader vs
+        success <- SV.get (GL.compileStatus vs)
+        if success then
+          GL.attachShader prog vs
+          else throw . SomeException . GLSLShaderCompileError =<< SV.get (GL.shaderInfoLog vs)
+  compileShader GL.VertexShader "vertex.shader"
+  compileShader GL.FragmentShader "fragment.shader"
+  
   GL.linkProgram prog
   GL.currentProgram $= Just prog
   putStrLn =<< SV.get (GL.programInfoLog prog)
