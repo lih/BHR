@@ -150,7 +150,7 @@ runLogos BindTexture = do
   case st of
     StackExtra (Opaque (TI tex)):st' -> do
       liftIO $ do
-        putStrLn $ "Bindind texture "+show tex
+        putStrLn $ "Binding texture "+show tex
         GL.textureBinding GL.Texture2D SV.$= Just tex
       runStackState $ put st'
     _ -> unit
