@@ -154,8 +154,13 @@ runLogos OpenWindow = do
     StackInt h:StackInt w:st' -> do
       runStackState $ put st'
       liftIO $ do
+        GLFW.openWindowHint GLFW.FSAASamples 4
+        GLFW.openWindowHint GLFW.OpenGLVersionMajor 3
+        GLFW.openWindowHint GLFW.OpenGLVersionMinor 3
+        GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
+ 
         success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 8] GLFW.Window
-        if not success then putStrLn "Failed to open OpenGL window" else void initShaders
+        if not success then putStrLn "Failed to open OpenGL window" else (initGL >> initShaders)
     _ -> unit
 runLogos Point = do
   st <- runStackState get
@@ -273,25 +278,21 @@ initShaders = GL.createProgram >>= \prog -> do
     else
     throw . SomeException . GLSLProgramLinkError =<< SV.get (GL.programInfoLog prog)
 
+initGL = do
+  vao <- GL.genObjectName
+  GL.bindVertexArrayObject $= Just vao
+  
+  GL.depthFunc            $= Just GL.Lequal
+  GL.blend                $= GL.Enabled
+  GL.blendFunc            $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
+  GL.texture GL.Texture2D $= GL.Enabled
+  GL.textureFunction      $= GL.Blend
+
 
 main = do
   putStrLn "Initializing graphical environment..."
   between (void GLFW.initialize) GLFW.terminate $ do
     args <- getArgs
-
-    GLFW.openWindowHint GLFW.FSAASamples 4
-    GLFW.openWindowHint GLFW.OpenGLVersionMajor 3
-    GLFW.openWindowHint GLFW.OpenGLVersionMinor 3
-    GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
-    vao <- GL.genObjectName
-    GL.bindVertexArrayObject $= Just vao
-    
-
-    GL.depthFunc            $= Just GL.Lequal
-    GL.blend                $= GL.Enabled
-    GL.blendFunc            $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
-    GL.texture GL.Texture2D $= GL.Enabled
-    GL.textureFunction      $= GL.Blend
 
     prelude <- fold <$> for args readString
     putStrLn "Hello from Logos !"
