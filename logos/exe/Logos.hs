@@ -25,6 +25,7 @@ stringWords = map fromString . fromBlank
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color | Texture | Draw
                   deriving Show
 data LogosData = P (GL.Vertex3 GL.GLdouble) | C (GL.Color3 GL.GLdouble) | T (GL.TexCoord2 GL.GLdouble)
+               deriving Show
 data LogosState = LogosState {
   _running :: Bool
   }
@@ -95,9 +96,11 @@ runLogos Format = do
   st <- runStackState get
   case st of
     StackSymbol str:st' -> do
-      let format ('%':'s':xs) (h:t) = second (show h+) $ format xs t
+      let format ('%':'s':xs) (h:t) = second (showV h+) $ format xs t
           format (x:xs) l = second (x:) $ format xs l
           format _ st' = (st',"")
+          showV (StackExtra (Opaque x)) = show x
+          showV x = show x
           (st'',msg) = format str st'
       runStackState $ put (StackSymbol msg:st'')
     _ -> unit
