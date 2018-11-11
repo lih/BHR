@@ -79,6 +79,10 @@ dict = fromAList $ map (second StackBuiltin) $
    ("delete"     , Builtin_Delete      ),
    ("keys"       , Builtin_Keys        )]
 
+fromStack (StackSymbol x) = read x :: GL.GLdouble
+fromStack (StackInt n) = fromIntegral n
+fromStack _ = undefined
+
 runLogos Wait = do
   st <- runStackState get
   case st of
@@ -114,19 +118,19 @@ runLogos OpenWindow = do
 runLogos Point = do
   st <- runStackState get
   case st of
-    StackSymbol (read -> z):StackSymbol (read -> y):StackSymbol (read -> x):st' -> do
+    (fromStack -> z):(fromStack -> y):(fromStack -> x):st' -> do
       runStackState $ put $ StackExtra (Opaque (P (GL.Vertex3 x y z))):st'
     _ -> unit
 runLogos Color = do
   st <- runStackState get
   case st of
-    StackSymbol (read -> b):StackSymbol (read -> g):StackSymbol (read -> r):st' -> do
+    (fromStack -> b):(fromStack -> g):(fromStack -> r):st' -> do
       runStackState $ put $ StackExtra (Opaque (C (GL.Color3 r g b))):st'
     _ -> unit
 runLogos Texture = do
   st <- runStackState get
   case st of
-    StackSymbol (read -> y):StackSymbol (read -> x):st' -> do
+    (fromStack -> y):(fromStack -> x):st' -> do
       runStackState $ put $ StackExtra (Opaque (T (GL.TexCoord2 x y))):st'
     _ -> unit
 runLogos Draw = do
