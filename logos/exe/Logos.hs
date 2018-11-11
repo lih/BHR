@@ -294,7 +294,6 @@ main = do
     args <- getArgs
 
     prelude <- fold <$> for args readString
-    putStrLn "Hello from Logos !"
     text <- readHString stdin
     let go (w:ws) = do
           execSymbol runLogos (\_ -> unit) w
