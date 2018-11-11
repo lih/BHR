@@ -163,7 +163,7 @@ main = do
     textureLoaded <- do
       tex <- GL.genObjectName
       GL.textureBinding GL.Texture2D SV.$= Just tex
-      succ <- GLFW.loadTexture2D "tile.tga" [GLFW.NoRescale]
+      succ <- GLFW.loadTexture2D "tile.tga" []
       return $ if succ then Just tex else Nothing
     putStrLn $ if has t'Just textureLoaded then "Texture loaded successfully." else "Failed loading texture"
     args <- getArgs
