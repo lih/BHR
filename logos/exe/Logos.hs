@@ -106,8 +106,7 @@ runLogos OpenWindow = do
         void $ GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8] GLFW.Window
     _ -> unit
 
-main = do
-  GLFW.initialize
+main = between (void GLFW.initialize) GLFW.terminate $ do
   putStrLn "Hello from Logos !"
   text <- readHString stdin
   let go (w:ws) = do
