@@ -240,26 +240,27 @@ runLogos Draw = do
 
         let fullVertices = vertices [x | StackExtra (Opaque x) <- l]
             newVec f = GL.genObjectName <*= \vb -> do
-              let vs = V.unfoldr f fullVertices
+              let vs = V.unfoldr (\case
+                                     h:t -> Just (f h,t)
+                                     [] -> Nothing) fullVertices
               GL.bindBuffer GL.ArrayBuffer $= Just vb
               V.unsafeWith vs $ \p -> do
                 GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length vs * sizeOf (vs V.! 0)),p,GL.StaticDraw)
         
-        vb <- newVec (\case
-                         (_,_,h):t -> Just (h,t)
-                         [] -> Nothing)
-        cb <- newVec (\case
-                         (h,_,_):t -> Just (h,t)
-                         [] -> Nothing)
+        cb <- newVec (\(h,_,_) -> h)
+        tb <- newVec (\(_,h,_) -> h)
+        vb <- newVec (\(_,_,h) -> h)
 
         GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
 
         let withAttrib n = between (GL.vertexAttribArray (GL.AttribLocation n) $= GL.Enabled) (GL.vertexAttribArray (GL.AttribLocation n) $= GL.Disabled)
-        withAttrib 0 $ withAttrib 1 $ do
+        withAttrib 0 $ withAttrib 1 $ withAttrib 2 $ do
           GL.bindBuffer GL.ArrayBuffer $= Just vb
           GL.vertexAttribPointer (GL.AttribLocation 0) $= (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Float 0 nullPtr)
           GL.bindBuffer GL.ArrayBuffer $= Just cb
           GL.vertexAttribPointer (GL.AttribLocation 1) $= (GL.ToFloat, GL.VertexArrayDescriptor 4 GL.Float 0 nullPtr)
+          GL.bindBuffer GL.ArrayBuffer $= Just tb
+          GL.vertexAttribPointer (GL.AttribLocation 2) $= (GL.ToFloat, GL.VertexArrayDescriptor 2 GL.Float 0 nullPtr)
           GL.drawArrays mode 0 (fromIntegral $ length fullVertices)
         GLFW.swapBuffers
     _ -> unit
