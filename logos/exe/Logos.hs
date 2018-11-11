@@ -250,7 +250,22 @@ main = do
   putStrLn "Initializing graphical environment..."
   between (void GLFW.initialize) GLFW.terminate $ do
     args <- getArgs
-  
+
+    prog <- GL.createProgram <*= \prog -> do
+      GL.createShader GL.VertexShader <*= \vs -> do
+        body <- readChunk "vertex.shader"
+        GL.shaderSourceBS vs $= body
+        GL.compileShader vs
+        GL.attachShader prog vs
+      GL.createShader GL.FragmentShader <*= \fs -> do
+        body <- readChunk "fragment.shader"
+        GL.shaderSourceBS fs $= body
+        GL.compileShader fs
+        GL.attachShader prog fs
+
+      GL.linkProgram prog
+      GL.currentProgram $= Just prog
+    
     GLFW.openWindowHint GLFW.OpenGLVersionMajor 3
     GLFW.openWindowHint GLFW.OpenGLVersionMinor 3
     GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
