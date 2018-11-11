@@ -24,6 +24,7 @@ stringWords = map fromString . fromBlank
 
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color | Texture | Draw
                   deriving Show
+data LogosData = P (GL.Vertex3 GL.GLdouble) | C (GL.Color3 GL.GLdouble) | T (GL.TexCoord2 GL.GLdouble)
 data LogosState = LogosState {
   _running :: Bool
   }
@@ -114,22 +115,36 @@ runLogos Point = do
   st <- runStackState get
   case st of
     StackSymbol (read -> z):StackSymbol (read -> y):StackSymbol (read -> x):st' -> do
-      runStackState $ put st'
-      liftIO $ GL.vertex (GL.Vertex3 x y (z :: GL.GLdouble))
+      runStackState $ put $ StackExtra (Opaque (P (GL.Vertex3 x y z))):st'
     _ -> unit
 runLogos Color = do
   st <- runStackState get
   case st of
     StackSymbol (read -> b):StackSymbol (read -> g):StackSymbol (read -> r):st' -> do
-      runStackState $ put st'
-      liftIO $ GL.color (GL.Color3 r g (b :: GL.GLdouble))
+      runStackState $ put $ StackExtra (Opaque (C (GL.Color3 r g b))):st'
     _ -> unit
 runLogos Texture = do
   st <- runStackState get
   case st of
     StackSymbol (read -> y):StackSymbol (read -> x):st' -> do
+      runStackState $ put $ StackExtra (Opaque (T (GL.TexCoord2 x y))):st'
+    _ -> unit
+runLogos Draw = do
+  st <- runStackState get
+  case st of
+    StackSymbol s:StackList l:st' -> do
       runStackState $ put st'
-      liftIO $ GL.texCoord (GL.TexCoord2 x (y::GL.GLdouble))
+      liftIO $ do
+        let mode = case s of
+              "lines" -> GL.Lines
+              "triangles" -> GL.Triangles
+              "points" -> GL.Points
+              _ -> GL.Points
+        GL.renderPrimitive mode $ for_ l $ \case
+          StackExtra (Opaque (P v)) -> GL.vertex v
+          StackExtra (Opaque (C c)) -> GL.color c
+          StackExtra (Opaque (T t)) -> GL.texCoord t
+          _ -> unit
     _ -> unit
 
 main = between (void GLFW.initialize) GLFW.terminate $ do
