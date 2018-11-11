@@ -149,7 +149,7 @@ runLogos Texture = do
       textureLoaded <- liftIO $ do
         tex <- GL.genObjectName
         GL.textureBinding GL.Texture2D SV.$= Just tex
-        imgbytes <- readChunk "tile.png"
+        imgbytes <- readChunk file
         let img = convertRGBA8 <$> decodeImage imgbytes
         case img of
           Right (Image w h imgd) -> do
