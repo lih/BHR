@@ -122,7 +122,7 @@ runLogos OpenWindow = do
     StackInt h:StackInt w:st' -> do
       runStackState $ put st'
       liftIO $ do
-        success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 8] GLFW.Window
+        success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 8] GLFW.FullScreen
         if not success then putStrLn "Failed to open OpenGL window" else unit
     _ -> unit
 runLogos Point = do
