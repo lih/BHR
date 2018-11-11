@@ -142,22 +142,28 @@ runLogos TextureCoord = do
       runStackState $ put $ StackExtra (Opaque (T (GL.TexCoord2 x y))):st'
     _ -> unit
 runLogos Texture = do
-  textureLoaded <- liftIO $ do
-    tex <- GL.genObjectName
-    GL.textureBinding GL.Texture2D SV.$= Just tex
-    imgbytes <- readChunk "tile.png"
-    let img = convertRGBA8 <$> decodeImage imgbytes
-    case img of
-      Right (Image w h imgd) -> do
-        V.unsafeWith imgd $ \imgp -> do
-          GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA' (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.RGBA GL.UnsignedByte imgp)
-        return $ Just tex
-      Left err -> do
-        putStrLn err
-        return Nothing
-  case textureLoaded of
-    Just tex -> runStackState $ modify (StackExtra (Opaque (TI tex)):)
-    Nothing -> unit
+  st <- runStackState get
+  case st of
+    StackSymbol file:st' -> do
+      runStackState (put st')
+      textureLoaded <- liftIO $ do
+        tex <- GL.genObjectName
+        GL.textureBinding GL.Texture2D SV.$= Just tex
+        imgbytes <- readChunk "tile.png"
+        let img = convertRGBA8 <$> decodeImage imgbytes
+        case img of
+          Right (Image w h imgd) -> do
+            V.unsafeWith imgd $ \imgp -> do
+              GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA' (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.RGBA GL.UnsignedByte imgp)
+            return $ Just tex
+          Left err -> do
+            putStrLn err
+            return Nothing
+      case textureLoaded of
+        Just tex -> runStackState $ modify (StackExtra (Opaque (TI tex)):)
+        Nothing -> unit
+
+    _ -> unit
 
 runLogos Draw = do
   st <- runStackState get
