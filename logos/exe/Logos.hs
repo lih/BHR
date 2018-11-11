@@ -19,7 +19,8 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
 
-data LogosBuiltin = Wait | Quit
+data LogosBuiltin = Wait | Quit | Format | Print
+                  deriving Show
 data LogosState = LogosState {
   _running :: Bool
   }
@@ -29,6 +30,8 @@ running = lens _running (\x y -> x { _running = y })
 dict = fromAList $ map (second StackBuiltin) $
   [("wait"       , Builtin_Extra Wait  ),
    ("quit"       , Builtin_Extra Quit  ),
+   ("format"     , Builtin_Extra Format),
+   ("print"      , Builtin_Extra Print ),
                    
    ("def"        , Builtin_Def         ),
    ("$"          , Builtin_DeRef       ),
@@ -75,6 +78,21 @@ runLogos Wait = do
       runStackState $ put st'
     _ -> unit
 runLogos Quit = runExtraState $ do running =- False
+runLogos Format = do
+  st <- runStackState get
+  case st of
+    StackSymbol str:st' -> do
+      let format ('%':'s':xs) (h:t) = second (show h+) $ format xs t
+          format (x:xs) l = second (x:) $ format xs l
+          format _ st' = (st',"")
+          (st'',msg) = format str st'
+      runStackState $ put (StackSymbol msg:st'')
+    _ -> unit
+runLogos Print = do
+  st <- runStackState get
+  case st of
+    StackSymbol str:st' -> liftIO (putStr str) >> runStackState (put st')
+    _ -> unit
 
 main = do
   putStrLn "Hello from Logos !"
