@@ -194,9 +194,6 @@ main = do
     GL.textureFunction      SV.$= GL.Blend
     GL.combineRGB           SV.$= GL.Interpolate
     GL.combineAlpha           SV.$= GL.Interpolate
-    x <- SV.get GL.combineAlpha
-    y <- SV.get GL.combineRGB
-    print (x,y)
 
     args <- getArgs
     prelude <- fold <$> for args readString
