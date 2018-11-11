@@ -279,7 +279,8 @@ main = do
   putStrLn "Initializing graphical environment..."
   between (void GLFW.initialize) GLFW.terminate $ do
     args <- getArgs
-        
+
+    GLFW.openWindowHint GLFW.FSAASamples 4
     GLFW.openWindowHint GLFW.OpenGLVersionMajor 3
     GLFW.openWindowHint GLFW.OpenGLVersionMinor 3
     GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
