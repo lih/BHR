@@ -160,7 +160,7 @@ runLogos Draw = do
 main = do
   putStrLn "Initializing graphical environment..."
   between (void GLFW.initialize) GLFW.terminate $ do
-    textureLoaded <- GLFW.loadTexture2D "tile.tga" [GLFW.NoRescale]
+    textureLoaded <- GLFW.loadTexture2D "tile" [GLFW.NoRescale]
     putStrLn $ if textureLoaded then "Texture loaded successfully." else "Failed loading texture"
     args <- getArgs
     prelude <- fold <$> for args readString
