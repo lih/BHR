@@ -59,7 +59,7 @@ stringWords = map fromString . fromBlank
 
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
-data LogosData = P (GL.Vertex3 GL.GLdouble) | C (GL.Color4 GL.GLdouble) | T (GL.TexCoord2 GL.GLdouble) | TI GL.TextureObject
+data LogosData = P (GL.Vertex3 GL.GLfloat) | C (GL.Color4 GL.GLfloat) | T (GL.TexCoord2 GL.GLfloat) | TI GL.TextureObject
                deriving Show
 data LogosState = LogosState {
   _running :: Bool
@@ -118,7 +118,7 @@ dict = fromAList $ map (second StackBuiltin) $
    ("delete"     , Builtin_Delete      ),
    ("keys"       , Builtin_Keys        )]
 
-fromStack (StackSymbol x) = read x :: GL.GLdouble
+fromStack (StackSymbol x) = read x :: GL.GLfloat
 fromStack (StackInt n) = fromIntegral n
 fromStack _ = undefined
 
@@ -245,7 +245,7 @@ runLogos Draw = do
 
         between (GL.vertexAttribArray (GL.AttribLocation 0) $= GL.Enabled) (GL.vertexAttribArray (GL.AttribLocation 0) $= GL.Disabled) $ do
           GL.bindBuffer GL.ArrayBuffer $= Just vb
-          GL.vertexAttribPointer (GL.AttribLocation 0) $= (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Double 0 nullPtr)
+          GL.vertexAttribPointer (GL.AttribLocation 0) $= (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Float 0 nullPtr)
           GL.drawArrays mode 0 (debug $ fromIntegral $ V.length vs)
         GLFW.swapBuffers
     _ -> unit
