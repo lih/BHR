@@ -157,6 +157,7 @@ runLogos Texture = do
               GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.RGBA GL.UnsignedByte imgp)
             GL.textureFilter GL.Texture2D SV.$= ((GL.Nearest,Nothing),GL.Nearest)
             GL.generateMipmap' GL.Texture2D
+            GL.textureBinding GL.Texture2D SV.$= Nothing
             return $ Just tex
           Left err -> do
             putStrLn err
@@ -190,14 +191,13 @@ runLogos Draw = do
 main = do
   putStrLn "Initializing graphical environment..."
   between (void GLFW.initialize) GLFW.terminate $ do
+    args <- getArgs
+
     GL.blend                SV.$= GL.Enabled
     GL.blendFunc            SV.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
     GL.texture GL.Texture2D SV.$= GL.Enabled
     GL.textureFunction      SV.$= GL.Blend
-    GL.combineRGB           SV.$= GL.Interpolate
-    GL.combineAlpha         SV.$= GL.Interpolate
 
-    args <- getArgs
     prelude <- fold <$> for args readString
     putStrLn "Hello from Logos !"
     text <- readHString stdin
