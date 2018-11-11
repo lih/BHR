@@ -260,6 +260,7 @@ initShaders = GL.createProgram >>= \prog -> do
 
   GL.linkProgram prog
   GL.currentProgram $= Just prog
+  putStrLn =<< SV.get (GL.programInfoLog prog)
 
 
 main = do
