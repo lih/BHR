@@ -157,16 +157,19 @@ runLogos Draw = do
         GLFW.swapBuffers
     _ -> unit
 
-main = between (void GLFW.initialize) GLFW.terminate $ do
-  args <- getArgs
-  prelude <- fold <$> for args readString
-  GLFW.loadTexture2D "tile.tga" [GLFW.NoRescale] 
-  putStrLn "Hello from Logos !"
-  text <- readHString stdin
-  let go (w:ws) = do
-        execSymbol runLogos (\_ -> unit) w
-        r <- runExtraState $ getl running
-        if r then go ws else unit
-      go [] = unit
-  (go (stringWords (prelude + " " + text))^..stateT.concatT) (defaultState dict (LogosState True))
+main = do
+  putStrLn "Initializing graphical environment..."
+  between (void GLFW.initialize) GLFW.terminate $ do
+    textureLoaded <- GLFW.loadTexture2D "tile.tga" [GLFW.NoRescale]
+    putStrLn $ if textureLoaded then "Texture loaded successfully." else "Failed loading texture"
+    args <- getArgs
+    prelude <- fold <$> for args readString
+    putStrLn "Hello from Logos !"
+    text <- readHString stdin
+    let go (w:ws) = do
+          execSymbol runLogos (\_ -> unit) w
+          r <- runExtraState $ getl running
+          if r then go ws else unit
+        go [] = unit
+    (go (stringWords (prelude + " " + text))^..stateT.concatT) (defaultState dict (LogosState True))
         
