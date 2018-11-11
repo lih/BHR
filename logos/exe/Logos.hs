@@ -121,7 +121,7 @@ runLogos OpenWindow = do
     StackInt h:StackInt w:st' -> do
       runStackState $ put st'
       liftIO $ do
-        void $ GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8] GLFW.Window
+        void $ GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 8] GLFW.Window
         
     _ -> unit
 runLogos Point = do
