@@ -9,6 +9,35 @@ import qualified Data.StateVar as SV
 import System.Environment (getArgs)
 import Codec.Picture
 import qualified Data.Vector.Storable as V
+import Data.StateVar (($=))
+import Foreign.Storable
+import Foreign.Ptr
+
+instance (Storable a,Storable b) => Storable (a,b) where
+  sizeOf x = sizeOf (fst x) + sizeOf (snd x)
+  alignment x = lcm (alignment (fst x)) (alignment (snd x))
+  peek p = do
+    x <- peek (castPtr p)
+    y <- peek (castPtr $ p`plusPtr`sizeOf x)
+    return (x,y)
+  poke p (x,y) = do
+    poke (castPtr p) x
+    poke (castPtr $ p`plusPtr`sizeOf x) y
+instance (Storable a,Storable b,Storable c) => Storable (a,b,c) where
+  sizeOf ~(x,y,z) = sizeOf (x,(y,z))
+  alignment ~(x,y,z) = alignment (x,(y,z))
+  peek p = peek (castPtr p) <&> \(x,(y,z)) -> (x,y,z)
+  poke p (x,y,z) = poke (castPtr p) (x,(y,z))
+instance (Storable a,Storable b,Storable c,Storable d) => Storable (a,b,c,d) where
+  sizeOf ~(x,y,z,u) = sizeOf (x,(y,z,u))
+  alignment ~(x,y,z,u) = alignment (x,(y,z,u))
+  peek p = peek (castPtr p) <&> \(x,(y,z,u)) -> (x,y,z,u)
+  poke p (x,y,z,u) = poke (castPtr p) (x,(y,z,u))
+instance (Storable a,Storable b,Storable c,Storable d,Storable e) => Storable (a,b,c,d,e) where
+  sizeOf ~(x,y,z,u,v) = sizeOf (x,(y,z,u,v))
+  alignment ~(x,y,z,u,v) = alignment (x,(y,z,u,v))
+  peek p = peek (castPtr p) <&> \(x,(y,z,u,v)) -> (x,y,z,u,v)
+  poke p (x,y,z,u,v) = poke (castPtr p) (x,(y,z,u,v))
 
 stringWords :: String -> [String]
 stringWords = map fromString . fromBlank
@@ -151,7 +180,7 @@ runLogos BindTexture = do
     StackExtra (Opaque (TI tex)):st' -> do
       liftIO $ do
         putStrLn $ "Binding texture "+show tex
-        GL.textureBinding GL.Texture2D SV.$= Just tex
+        GL.textureBinding GL.Texture2D $= Just tex
       runStackState $ put st'
     _ -> unit
 runLogos Texture = do
@@ -165,12 +194,12 @@ runLogos Texture = do
         tex <- GL.genObjectName
         case img of
           Right (Image w h imgd) -> do
-            GL.textureBinding GL.Texture2D SV.$= Just tex
+            GL.textureBinding GL.Texture2D $= Just tex
             V.unsafeWith imgd $ \imgp -> do
               GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.BGR GL.UnsignedByte imgp)
-            GL.textureFilter GL.Texture2D SV.$= ((GL.Linear',Nothing),GL.Linear')
+            GL.textureFilter GL.Texture2D $= ((GL.Linear',Nothing),GL.Linear')
             GL.generateMipmap' GL.Texture2D
-            GL.textureBinding GL.Texture2D SV.$= Nothing
+            GL.textureBinding GL.Texture2D $= Nothing
             return $ Just tex
           Left err -> do
             putStrLn err
@@ -187,12 +216,29 @@ runLogos Draw = do
     StackSymbol s:StackList l:st' -> do
       runStackState $ put st'
       liftIO $ do
-        GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
         let mode = case s of
               "lines" -> GL.Lines
               "triangles" -> GL.Triangles
               "points" -> GL.Points
               _ -> GL.Points
+
+            vertices = go zacc
+              where zacc = (GL.Color4 0 0 0 0,GL.TexCoord2 0 0)
+                    go (c,tx) (P v:t) = (c,tx,v):go zacc t
+                    go (_,tx) (C c:t) = go (c,tx) t
+                    go (c,_)  (T tx:t) = go (c,tx) t
+                    go acc      (h:t) = go acc t
+                    go _ [] = []
+                    
+        vb <- GL.genObjectName
+        GL.bindBuffer GL.ArrayBuffer $= Just vb
+        let vs = V.unfoldr (\case
+                               h:t -> Just (h,t)
+                               [] -> Nothing) (vertices [x | StackExtra (Opaque x) <- l])
+        V.unsafeWith vs $ \p -> do
+          GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length vs),p,GL.StaticDraw)
+
+        GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
         GL.renderPrimitive mode $ for_ l $ \case
           StackExtra (Opaque (P v)) -> GL.vertex v
           StackExtra (Opaque (C c)) -> GL.color c
@@ -210,13 +256,14 @@ main = do
     GLFW.openWindowHint GLFW.OpenGLVersionMinor 3
     GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
     vao <- GL.genObjectName
-    GL.bindVertexArrayObject SV.$= Just vao
+    GL.bindVertexArrayObject $= Just vao
+    
 
-    GL.depthFunc            SV.$= Just GL.Lequal
-    GL.blend                SV.$= GL.Enabled
-    GL.blendFunc            SV.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
-    GL.texture GL.Texture2D SV.$= GL.Enabled
-    GL.textureFunction      SV.$= GL.Blend
+    GL.depthFunc            $= Just GL.Lequal
+    GL.blend                $= GL.Enabled
+    GL.blendFunc            $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
+    GL.texture GL.Texture2D $= GL.Enabled
+    GL.textureFunction      $= GL.Blend
 
     prelude <- fold <$> for args readString
     putStrLn "Hello from Logos !"
