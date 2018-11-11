@@ -192,7 +192,9 @@ main = do
     GL.blendFunc            SV.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
     GL.texture GL.Texture2D SV.$= GL.Enabled
     GL.textureFunction      SV.$= GL.Blend
-
+    x <- SV.get GL.combineAlpha
+    y <- SV.get GL.combineRGB
+    print (x,y)
 
     args <- getArgs
     prelude <- fold <$> for args readString
