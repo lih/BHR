@@ -246,7 +246,7 @@ runLogos Draw = do
         GLFW.swapBuffers
     _ -> unit
 
-initShaders = GL.createProgram <*= \prog -> do
+initShaders = GL.createProgram >>= \prog -> do
   GL.createShader GL.VertexShader <*= \vs -> do
     body <- readChunk "vertex.shader"
     GL.shaderSourceBS vs $= body
