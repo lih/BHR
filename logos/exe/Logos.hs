@@ -189,6 +189,7 @@ main = do
   putStrLn "Initializing graphical environment..."
   between (void GLFW.initialize) GLFW.terminate $ do
     GL.texture GL.Texture2D SV.$= GL.Enabled
+    GL.textureFunction SV.$= GL.Blend
 
     args <- getArgs
     prelude <- fold <$> for args readString
