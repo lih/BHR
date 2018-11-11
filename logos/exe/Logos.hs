@@ -244,10 +244,9 @@ runLogos Draw = do
         GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
 
         between (GL.vertexAttribArray (GL.AttribLocation 0) $= GL.Enabled) (GL.vertexAttribArray (GL.AttribLocation 0) $= GL.Disabled) $ do
-          SV.get GL.currentProgram >>= maybe unit (const $ putStrLn "The current program is set")
           GL.bindBuffer GL.ArrayBuffer $= Just vb
           GL.vertexAttribPointer (GL.AttribLocation 0) $= (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Double 0 nullPtr)
-          GL.drawArrays mode 0 (fromIntegral $ V.length vs)
+          GL.drawArrays mode 0 (debug $ fromIntegral $ V.length vs)
         GLFW.swapBuffers
     _ -> unit
 
