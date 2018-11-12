@@ -33,10 +33,17 @@ stringWords = map fromString . fromBlank
 
 data Zero = Zero
 data Succ x = Succ x
+
+type One = Succ Zero
+type Two = Succ One
+type Three = Succ Two
+type Four = Succ Three
+
 _One = Succ Zero
 _Two = Succ _One
 _Three = Succ _Two
 _Four = Succ _Three
+
 data family Vec n :: * -> *
 data instance Vec Zero a = V0
 data instance Vec (Succ n) a = VS a (Vec n a) 
@@ -49,7 +56,21 @@ instance SemiApplicative (Vec Zero) where
   V0 <*> V0 = V0
 instance SemiApplicative (Vec n) => SemiApplicative (Vec (Succ n)) where
   VS f fs <*> VS x xs = VS (f x) (fs<*>xs)
+instance Unit (Vec Zero) where pure _ = V0
+instance Unit (Vec n) => Unit (Vec (Succ n)) where pure x = VS x (pure x)
+instance Applicative (Vec Zero)
+instance Applicative (Vec n) => Applicative (Vec (Succ n))
 
+type V1 = Vec One
+type V2 = Vec Two
+type V3 = Vec Three
+type V4 = Vec Four
+
+instance (Semigroup a,Applicative (Vec n)) => Semigroup (Vec n a) where a + b = liftA2 (+) a b
+instance (Monoid a,Applicative (Vec n)) => Monoid (Vec n a) where zero = pure zero
+
+
+  
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
 -- data VertexInfo = VertexInfo !(GL.Vector3 GL.GLfloat) !(GL.Color4 GL.GLfloat) !(GL.TexCoord2 GL.GLfloat)
