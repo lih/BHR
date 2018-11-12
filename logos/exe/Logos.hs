@@ -46,7 +46,7 @@ _Four = Succ _Three
 
 data family Vec n :: * -> *
 data instance Vec Zero a = V0
-data instance Vec (Succ n) a = VS a (Vec n a) 
+data instance Vec (Succ n) a = VS !a !(Vec n a) 
 
 instance Functor (Vec Zero) where
   map f V0 = V0
