@@ -259,7 +259,7 @@ runLogos Draw = do
         GL.perspective (pi/4) (4/3) 0.1 100
         m <- SV.get (GL.matrix Nothing)
         vpu <- GL.uniformLocation prog "viewMatrix"
-        GL.uniform vpu $= (m :: GL.GLmatrix GL.GLdouble)
+        GL.uniform vpu $= (debug m :: GL.GLmatrix GL.GLdouble)
 
         let withAttrib n f = do
               l <- SV.get (GL.attribLocation prog n)
