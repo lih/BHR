@@ -263,6 +263,7 @@ runLogos Draw = do
         GL.uniform vpu $= (debug m :: GL.GLmatrix GL.GLdouble)
 
         GL.matrixMode $= GL.Modelview 0
+        GL.loadIdentity
 
         let withAttrib n f = do
               l <- SV.get (GL.attribLocation prog n)
