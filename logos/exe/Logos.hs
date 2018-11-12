@@ -258,9 +258,9 @@ runLogos Draw = do
         GL.loadIdentity
         GL.lookAt (GL.Vertex3 4 3 3) (GL.Vertex3 0 0 0) (GL.Vector3 0 1 0)
         GL.perspective (pi/4) (4/3) 0.1 100
-        m <- SV.get (GL.matrix (Just $ GL.Projection))
         vpu <- GL.uniformLocation prog "viewMatrix"
-        GL.uniform vpu $= (debug m :: GL.GLmatrix GL.GLdouble)
+        -- m <- SV.get (GL.matrix (Just $ GL.Projection))
+        -- GL.uniform vpu $= (debug m :: GL.GLmatrix GL.GLdouble)
 
         let withAttrib n f = do
               l <- SV.get (GL.attribLocation prog n)
