@@ -254,7 +254,7 @@ runLogos Draw = do
         GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
 
         Just prog <- SV.get GL.currentProgram
-        m <- GL.newMatrix GL.ColumnMajor [2,0,0,0 , 0,2,0,0 , 0,0,2,0 , 0,0,0,1]
+        m <- GL.newMatrix GL.ColumnMajor [0.5,0,0,0 , 0,0.5,0,0 , 0,0,0.5,0 , 0,0,0,1]
         mcs <- GL.getMatrixComponents GL.ColumnMajor m
         vpu <- GL.uniformLocation prog "viewMat"
         GL.uniform (debug vpu) $= (trace (show mcs) m :: GL.GLmatrix GL.GLdouble)
