@@ -153,14 +153,14 @@ runLogos OpenWindow = do
   case st of
     StackInt h:StackInt w:st' -> do
       runStackState $ put st'
-      liftIO $ do
+      void $ liftIO $ do
         GLFW.openWindowHint GLFW.FSAASamples 4
         GLFW.openWindowHint GLFW.OpenGLVersionMajor 3
         GLFW.openWindowHint GLFW.OpenGLVersionMinor 3
         GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
  
         success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 8] GLFW.Window
-        if not success then putStrLn "Failed to open OpenGL window" else (initGL >> initShaders)
+        if not success then throw $ SomeException GLFWWindowOpenException else (initGL >> initShaders)
     _ -> unit
 runLogos Point = do
   st <- runStackState get
@@ -193,7 +193,7 @@ runLogos BindTexture = do
 runLogos Texture = do
   st <- runStackState get
   case st of
-    StackSymbol file:st' -> do
+    StackSymbol file:StackSymbol name:st' -> do
       runStackState (put st')
       textureLoaded <- liftIO $ do
         imgbytes <- readChunk file
@@ -207,7 +207,9 @@ runLogos Texture = do
               GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.RGB GL.UnsignedByte imgp)
             GL.textureFilter GL.Texture2D $= ((GL.Linear',Nothing),GL.Linear')
             GL.generateMipmap' GL.Texture2D
-            
+            Just prog <- SV.get GL.currentProgram
+            ul <- GL.uniformLocation prog name
+            GL.uniform ul $= GL.TextureUnit texi
             return $ Just tex
           Left err -> do
             putStrLn err
@@ -251,16 +253,18 @@ runLogos Draw = do
 
         GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
 
-        let withAttrib n = between (GL.vertexAttribArray (GL.AttribLocation n) $= GL.Enabled) (GL.vertexAttribArray (GL.AttribLocation n) $= GL.Disabled)
-        for_ (zip [0..] [i | TI i <- extras]) $ \(j,GL.TextureObject i) -> do
-          GL.uniform (GL.UniformLocation j) $= GL.TextureUnit i
-        withAttrib 0 $ withAttrib 1 $ withAttrib 2 $ do
+        Just prog <- SV.get GL.currentProgram
+
+        let withAttrib n f = do
+              l <- SV.get (GL.attribLocation prog n)
+              between (GL.vertexAttribArray l $= GL.Enabled) (GL.vertexAttribArray l $= GL.Disabled) (f l)
+        withAttrib "vertexPosition" $ \vpos -> withAttrib "vertexColor" $ \vcol -> withAttrib "vertexUV" $ \vtex -> do
           GL.bindBuffer GL.ArrayBuffer $= Just vb
-          GL.vertexAttribPointer (GL.AttribLocation 0) $= (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Float 0 nullPtr)
+          GL.vertexAttribPointer vpos $= (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Float 0 nullPtr)
           GL.bindBuffer GL.ArrayBuffer $= Just cb
-          GL.vertexAttribPointer (GL.AttribLocation 1) $= (GL.ToFloat, GL.VertexArrayDescriptor 4 GL.Float 0 nullPtr)
+          GL.vertexAttribPointer vcol $= (GL.ToFloat, GL.VertexArrayDescriptor 4 GL.Float 0 nullPtr)
           GL.bindBuffer GL.ArrayBuffer $= Just tb
-          GL.vertexAttribPointer (GL.AttribLocation 2) $= (GL.ToFloat, GL.VertexArrayDescriptor 2 GL.Float 0 nullPtr)
+          GL.vertexAttribPointer vtex $= (GL.ToFloat, GL.VertexArrayDescriptor 2 GL.Float 0 nullPtr)
           GL.drawArrays mode 0 (fromIntegral $ length fullVertices)
         GLFW.swapBuffers
     _ -> unit
@@ -268,8 +272,11 @@ runLogos Draw = do
 data GLSLCompileException = GLSLShaderCompileError String | GLSLProgramLinkError String
   deriving (Show,Generic)
 instance Exception GLSLCompileException
+data GLFWException = GLFWWindowOpenException
+  deriving (Show,Generic)
+instance Exception GLFWException
 
-initShaders = GL.createProgram >>= \prog -> do
+initShaders = GL.createProgram <*= \prog -> do
   let compileShader shType shFile = GL.createShader shType <*= \vs -> do
         body <- readChunk shFile
         GL.shaderSourceBS vs $= body
