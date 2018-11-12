@@ -254,6 +254,12 @@ runLogos Draw = do
         GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
 
         Just prog <- SV.get GL.currentProgram
+        GL.loadIdentity
+        GL.lookAt (GL.Vertex3 4 3 3) (GL.Vertex3 0 0 0) (GL.Vector3 0 1 0)
+        GL.perspective (pi/4) (4/3) 0.1 100
+        m <- SV.get (GL.matrix Nothing)
+        vpu <- GL.uniformLocation prog "viewMatrix"
+        GL.uniform vpu $= (m :: GL.GLmatrix GL.GLdouble)
 
         let withAttrib n f = do
               l <- SV.get (GL.attribLocation prog n)
