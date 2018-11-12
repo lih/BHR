@@ -258,6 +258,7 @@ runLogos Draw = do
         mcs <- GL.getMatrixComponents GL.ColumnMajor m
         vpu <- GL.uniformLocation prog "viewMat"
         GL.uniform (debug vpu) $= (trace (show mcs) m :: GL.GLmatrix GL.GLdouble)
+        SV.get (GL.activeUniforms prog) >>= print
 
         let withAttrib n f = do
               l <- SV.get (GL.attribLocation prog n)
