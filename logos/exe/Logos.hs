@@ -251,8 +251,6 @@ runLogos Draw = do
         tb <- newVec (\(_,h,_) -> h)
         vb <- newVec (\(_,_,h) -> h)
 
-        GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
-
         Just prog <- SV.get GL.currentProgram
         m <- GL.newMatrix GL.ColumnMajor [0.5,0,0,0 , 0,0.5,0,0 , 0,0,0.5,0 , 0,0,0,1]
         mcs <- GL.getMatrixComponents GL.ColumnMajor m
@@ -266,6 +264,8 @@ runLogos Draw = do
             setAttrib b v n = do
               GL.bindBuffer GL.ArrayBuffer $= Just b
               GL.vertexAttribPointer v $= (GL.ToFloat, GL.VertexArrayDescriptor n GL.Float 0 nullPtr)
+
+        GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
 
         withAttrib "vertexPosition" $ \vpos -> withAttrib "vertexColor" $ \vcol -> withAttrib "vertexUV" $ \vtex -> do
           setAttrib vb vpos 3
