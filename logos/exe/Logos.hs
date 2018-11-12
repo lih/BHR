@@ -72,18 +72,20 @@ type V4 = Vec Four
 instance (Semigroup a,Applicative (Vec n)) => Semigroup (Vec n a) where a + b = liftA2 (+) a b
 instance (Monoid a,Applicative (Vec n)) => Monoid (Vec n a) where zero = pure zero
 
+newtype MatT a n m = MatT (Vec n (Vec m a)) 
+
 class Mat mat where
   type Transpose mat :: *
   _transpose :: mat -> Transpose mat
   type MultParam mat :: * -> *
   type MultRes mat :: * -> *
   _mult :: mat -> MultParam mat n -> MultRes mat n
-instance Mat (Vec Zero (Vec Zero a)) where
-  type Transpose (Vec Zero (Vec Zero a)) = Vec Zero (Vec Zero a)
-  _transpose V0 = V0
-  type MultParam (Vec Zero (Vec Zero a)) = Vec Zero
-  type MultRes (Vec Zero (Vec Zero a)) = Vec Zero
-  _mult V0 = id
+instance Mat (MatT a Zero Zero) where
+  type Transpose (MatT a Zero Zero) = MatT a Zero Zero
+  _transpose (MatT V0) = MatT V0
+  type MultParam (MatT a Zero Zero) = MatT a Zero
+  type MultRes (MatT a Zero Zero) = MatT a Zero
+  _mult (MatT V0) = id
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
