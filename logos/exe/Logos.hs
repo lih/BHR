@@ -247,16 +247,16 @@ runLogos Draw = do
               V.unsafeWith vs $ \p -> do
                 GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length vs * sizeOf (vs V.! 0)),p,GL.StaticDraw)
         
-        cb <- newVec (\(h,_,_) -> h)
-        tb <- newVec (\(_,h,_) -> h)
-        vb <- newVec (\(_,_,h) -> h)
-
         Just prog <- SV.get GL.currentProgram
         m <- GL.newMatrix GL.ColumnMajor [0.5,0,0,0 , 0,0.5,0,0 , 0,0,0.5,0 , 0,0,0,1]
         mcs <- GL.getMatrixComponents GL.ColumnMajor m
         vpu <- GL.uniformLocation prog "viewMat"
         GL.uniform (debug vpu) $= (trace (show mcs) m :: GL.GLmatrix GL.GLdouble)
         SV.get (GL.activeUniforms prog) >>= print
+
+        cb <- newVec (\(h,_,_) -> h)
+        tb <- newVec (\(_,h,_) -> h)
+        vb <- newVec (\(_,_,h) -> h)
 
         let withAttrib n f = do
               l <- SV.get (GL.attribLocation prog n)
