@@ -60,6 +60,9 @@ instance Unit (Vec Zero) where pure _ = V0
 instance Unit (Vec n) => Unit (Vec (Succ n)) where pure x = VS x (pure x)
 instance Applicative (Vec Zero)
 instance Applicative (Vec n) => Applicative (Vec (Succ n))
+instance Foldable (Vec Zero) where fold V0 = zero
+instance Foldable (Vec One) where fold (VS x V0) = x
+instance Foldable (Vec (Succ n)) => Foldable (Vec (Succ (Succ n))) where fold (VS a x) = a + fold x
 
 type V1 = Vec One
 type V2 = Vec Two
@@ -72,8 +75,15 @@ instance (Monoid a,Applicative (Vec n)) => Monoid (Vec n a) where zero = pure ze
 class Mat mat where
   type Transpose mat :: *
   _transpose :: mat -> Transpose mat
+  type MultParam mat :: * -> *
   type MultRes mat :: * -> *
-  _mult :: mat -> MultRes mat n
+  _mult :: mat -> MultParam mat n -> MultRes mat n
+instance Mat (Vec Zero (Vec Zero a)) where
+  type Transpose (Vec Zero (Vec Zero a)) = Vec Zero (Vec Zero a)
+  _transpose V0 = V0
+  type MultParam (Vec Zero (Vec Zero a)) = Vec Zero
+  type MultRes (Vec Zero (Vec Zero a)) = Vec Zero
+  _mult V0 = id
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
