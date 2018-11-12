@@ -248,7 +248,7 @@ runLogos Draw = do
                 GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length vs * sizeOf (vs V.! 0)),p,GL.StaticDraw)
         
         Just prog <- SV.get GL.currentProgram
-        m <- GL.newMatrix GL.ColumnMajor [0.5,0,0,0 , 0,0.5,0,0 , 0,0,0.5,0 , 0,0,0,1]
+        m <- GL.newMatrix GL.ColumnMajor [1,0,0,0 , 0,1,0,0 , 0,0,1,0 , 0,0,0,1]
         vpu <- GL.uniformLocation prog "viewMat"
         GL.uniform vpu $= (m :: GL.GLmatrix GL.GLfloat)
         SV.get (GL.activeUniforms prog) >>= print
