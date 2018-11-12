@@ -254,13 +254,13 @@ runLogos Draw = do
         GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
 
         Just prog <- SV.get GL.currentProgram
-        GL.matrixMode $= GL.Projection 
+        GL.matrixMode $= GL.Projection
         GL.loadIdentity
         GL.lookAt (GL.Vertex3 0 0 0) (GL.Vertex3 4 3 3) (GL.Vector3 0 1 0)
         GL.perspective 45 (4/3) 0.1 100
-        vpu <- GL.uniformLocation prog "viewMatrix"
         m <- SV.get (GL.matrix (Just GL.Projection))
         mcs <- GL.getMatrixComponents GL.ColumnMajor m
+        vpu <- GL.uniformLocation prog "viewMatrix"
         GL.uniform vpu $= (trace (show mcs) m :: GL.GLmatrix GL.GLdouble)
 
         let withAttrib n f = do
