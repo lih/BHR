@@ -86,6 +86,12 @@ instance Mat (MatT a Zero Zero) where
   type MultParam (MatT a Zero Zero) = MatT a Zero
   type MultRes (MatT a Zero Zero) = MatT a Zero
   _mult (MatT V0) = id
+instance (Applicative (Vec n),Mat (MatT a Zero n)) => Mat (MatT a Zero (Succ n)) where
+  type Transpose (MatT a Zero (Succ n)) = MatT a (Succ n) Zero
+  _transpose (MatT V0) = MatT (pure V0)
+  type MultParam (MatT a Zero (Succ n)) = MatT a (Succ n)
+  type MultRes (MatT a Zero (Succ n)) = MatT a Zero
+  _mult (MatT V0) = const (MatT V0)
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
