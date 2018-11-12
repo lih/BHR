@@ -76,6 +76,8 @@ instance (Semigroup a,Applicative (Vec n)) => Semigroup (Vec n a) where a + b = 
 instance (Monoid a,Applicative (Vec n)) => Monoid (Vec n a) where zero = pure zero
 
 type Mat n m a = Vec n (Vec m a)
+toMat :: Vec n a -> Mat One n a
+toMat = pure
 matMult :: (Ring a, Vector (Vec n), Vector (Vec m), Vector (Vec p)) => Mat n m a -> Mat m p a -> Mat n p a
 matMult x y = map (\vm -> map (\vm' -> sum (liftA2 (*) vm vm')) (transpose y)) x
   
