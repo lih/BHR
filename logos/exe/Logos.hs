@@ -253,7 +253,7 @@ runLogos Draw = do
 
         let withAttrib n = between (GL.vertexAttribArray (GL.AttribLocation n) $= GL.Enabled) (GL.vertexAttribArray (GL.AttribLocation n) $= GL.Disabled)
         for_ [i | TI i <- extras] $ \(GL.TextureObject i) -> do
-          GL.uniform (GL.UniformLocation 0) $= GL.TextureUnit (debug i)
+          GL.uniform (GL.UniformLocation 0) $= GL.TextureUnit i
         withAttrib 0 $ withAttrib 1 $ withAttrib 2 $ do
           GL.bindBuffer GL.ArrayBuffer $= Just vb
           GL.vertexAttribPointer (GL.AttribLocation 0) $= (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Float 0 nullPtr)
