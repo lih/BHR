@@ -259,7 +259,7 @@ runLogos Draw = do
         GL.loadIdentity
         GL.lookAt (GL.Vertex3 0 0 0) (GL.Vertex3 4 3 3) (GL.Vector3 0 1 0)
         mcs <- GL.getMatrixComponents GL.ColumnMajor m
-        vpu <- GL.uniformLocation prog "viewMatrix"
+        vpu <- GL.uniformLocation prog "viewMat"
         GL.uniform vpu $= (trace (show mcs) m :: GL.GLmatrix GL.GLdouble)
 
         let withAttrib n f = do
