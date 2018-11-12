@@ -45,6 +45,10 @@ instance Functor (Vec Zero) where
   map f V0 = V0
 instance Functor (Vec n) => Functor (Vec (Succ n)) where
   map f (VS x xs) = VS (f x) (map f xs)
+instance SemiApplicative (Vec Zero) where
+  V0 <*> V0 = V0
+instance SemiApplicative (Vec n) => SemiApplicative (Vec (Succ n)) where
+  VS f fs <*> VS x xs = VS (f x) (fs<*>xs)
 
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
