@@ -69,7 +69,11 @@ type V4 = Vec Four
 instance (Semigroup a,Applicative (Vec n)) => Semigroup (Vec n a) where a + b = liftA2 (+) a b
 instance (Monoid a,Applicative (Vec n)) => Monoid (Vec n a) where zero = pure zero
 
-
+class Mat mat where
+  type Transpose mat :: *
+  _transpose :: mat -> Transpose mat
+  type MultRes mat :: * -> *
+  _mult :: mat -> MultRes mat n
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
