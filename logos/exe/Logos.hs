@@ -61,11 +61,12 @@ instance Unit (Vec n) => Unit (Vec (Succ n)) where pure x = VS x (pure x)
 instance Applicative (Vec Zero)
 instance Applicative (Vec n) => Applicative (Vec (Succ n))
 instance Foldable (Vec Zero) where fold V0 = zero
-instance Foldable (Vec One) where fold (VS x V0) = x
-instance Foldable (Vec (Succ n)) => Foldable (Vec (Succ (Succ n))) where fold (VS a x) = a + fold x
+instance Foldable (Vec n) => Foldable (Vec (Succ n)) where fold (VS a x) = a + fold x
 instance Traversable (Vec Zero) where sequence V0 = pure V0
 instance Traversable (Vec n) => Traversable (Vec (Succ n)) where sequence (VS a x) = VS<$>a<*>sequence x
 class (Applicative v, Foldable v, Traversable v) => Vector v
+instance Vector (Vec Zero)
+instance Vector (Vec n) => Vector (Vec (Succ n))
 
 type V1 = Vec One
 type V2 = Vec Two
@@ -80,6 +81,9 @@ toMat :: Vec n a -> Mat One n a
 toMat = pure
 matMult :: (Ring a, Vector (Vec n), Vector (Vec m), Vector (Vec p)) => Mat n m a -> Mat m p a -> Mat n p a
 matMult x y = map (\vm -> map (\vm' -> sum (liftA2 (*) vm vm')) (transpose y)) x
+
+scalProd :: (Ring a,Vector (Vec n)) => Vec n a -> Vec n a -> a
+scalProd u v = let VS (VS x V0) V0 = matMult (toMat u) (transpose (toMat v)) in x
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
