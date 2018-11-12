@@ -33,9 +33,18 @@ stringWords = map fromString . fromBlank
 
 data Zero = Zero
 data Succ x = Succ x
+_One = Succ Zero
+_Two = Succ _One
+_Three = Succ _Two
+_Four = Succ _Three
 data family Vec n :: * -> *
 data instance Vec Zero a = V0
 data instance Vec (Succ n) a = VS a (Vec n a) 
+
+instance Functor (Vec Zero) where
+  map f V0 = V0
+instance Functor (Vec n) => Functor (Vec (Succ n)) where
+  map f (VS x xs) = VS (f x) (map f xs)
 
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
