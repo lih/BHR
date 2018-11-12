@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric, TypeFamilies, ScopedTypeVariables #-}
 module Main where
 
 import Definitive
@@ -63,6 +63,9 @@ instance Applicative (Vec n) => Applicative (Vec (Succ n))
 instance Foldable (Vec Zero) where fold V0 = zero
 instance Foldable (Vec One) where fold (VS x V0) = x
 instance Foldable (Vec (Succ n)) => Foldable (Vec (Succ (Succ n))) where fold (VS a x) = a + fold x
+instance Traversable (Vec Zero) where sequence V0 = pure V0
+instance Traversable (Vec n) => Traversable (Vec (Succ n)) where sequence (VS a x) = VS<$>a<*>sequence x
+class (Applicative v, Foldable v, Traversable v) => Vector v
 
 type V1 = Vec One
 type V2 = Vec Two
@@ -72,26 +75,9 @@ type V4 = Vec Four
 instance (Semigroup a,Applicative (Vec n)) => Semigroup (Vec n a) where a + b = liftA2 (+) a b
 instance (Monoid a,Applicative (Vec n)) => Monoid (Vec n a) where zero = pure zero
 
-newtype MatT a n m = MatT (Vec n (Vec m a)) 
-
-class Mat mat where
-  type Transpose mat :: *
-  _transpose :: mat -> Transpose mat
-  type MultParam mat :: * -> *
-  type MultRes mat :: * -> *
-  _mult :: mat -> MultParam mat n -> MultRes mat n
-instance Mat (MatT a Zero Zero) where
-  type Transpose (MatT a Zero Zero) = MatT a Zero Zero
-  _transpose (MatT V0) = MatT V0
-  type MultParam (MatT a Zero Zero) = MatT a Zero
-  type MultRes (MatT a Zero Zero) = MatT a Zero
-  _mult (MatT V0) = id
-instance (Applicative (Vec n),Mat (MatT a Zero n)) => Mat (MatT a Zero (Succ n)) where
-  type Transpose (MatT a Zero (Succ n)) = MatT a (Succ n) Zero
-  _transpose (MatT V0) = MatT (pure V0)
-  type MultParam (MatT a Zero (Succ n)) = MatT a (Succ n)
-  type MultRes (MatT a Zero (Succ n)) = MatT a Zero
-  _mult (MatT V0) = const (MatT V0)
+type Mat n m a = Vec n (Vec m a)
+matMult :: (Ring a, Vector (Vec n), Vector (Vec m), Vector (Vec p)) => Mat n m a -> Mat m p a -> Mat n p a
+matMult x y = map (\vm -> map (\vm' -> sum (liftA2 (*) vm vm')) (transpose y)) x
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
