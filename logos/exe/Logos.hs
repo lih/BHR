@@ -262,9 +262,6 @@ runLogos Draw = do
         vpu <- GL.uniformLocation prog "viewMatrix"
         GL.uniform vpu $= (debug m :: GL.GLmatrix GL.GLdouble)
 
-        GL.matrixMode $= GL.Modelview 0
-        GL.loadIdentity
-
         let withAttrib n f = do
               l <- SV.get (GL.attribLocation prog n)
               between (GL.vertexAttribArray l $= GL.Enabled) (GL.vertexAttribArray l $= GL.Disabled) (f l)
