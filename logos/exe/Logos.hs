@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric, TypeFamilies #-}
 module Main where
 
 import Definitive
@@ -16,32 +16,6 @@ import Foreign.Ptr
 import Control.Exception (SomeException(..),Exception)
 import GHC.Generics
 
-instance (Storable a,Storable b) => Storable (a,b) where
-  sizeOf x = sizeOf (fst x) + sizeOf (snd x)
-  alignment x = lcm (alignment (fst x)) (alignment (snd x))
-  peek p = do
-    x <- peek (castPtr p)
-    y <- peek (castPtr $ p`plusPtr`sizeOf x)
-    return (x,y)
-  poke p (x,y) = do
-    poke (castPtr p) x
-    poke (castPtr $ p`plusPtr`sizeOf x) y
-instance (Storable a,Storable b,Storable c) => Storable (a,b,c) where
-  sizeOf ~(x,y,z) = sizeOf (x,(y,z))
-  alignment ~(x,y,z) = alignment (x,(y,z))
-  peek p = peek (castPtr p) <&> \(x,(y,z)) -> (x,y,z)
-  poke p (x,y,z) = poke (castPtr p) (x,(y,z))
-instance (Storable a,Storable b,Storable c,Storable d) => Storable (a,b,c,d) where
-  sizeOf ~(x,y,z,u) = sizeOf (x,(y,z,u))
-  alignment ~(x,y,z,u) = alignment (x,(y,z,u))
-  peek p = peek (castPtr p) <&> \(x,(y,z,u)) -> (x,y,z,u)
-  poke p (x,y,z,u) = poke (castPtr p) (x,(y,z,u))
-instance (Storable a,Storable b,Storable c,Storable d,Storable e) => Storable (a,b,c,d,e) where
-  sizeOf ~(x,y,z,u,v) = sizeOf (x,(y,z,u,v))
-  alignment ~(x,y,z,u,v) = alignment (x,(y,z,u,v))
-  peek p = peek (castPtr p) <&> \(x,(y,z,u,v)) -> (x,y,z,u,v)
-  poke p (x,y,z,u,v) = poke (castPtr p) (x,(y,z,u,v))
-
 stringWords :: String -> [String]
 stringWords = map fromString . fromBlank
   where fromBlank (c:t) | c `elem` [' ', '\t', '\r', '\n'] = fromBlank t
@@ -57,8 +31,19 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
 
+data Zero = Zero
+data Succ x = Succ x
+data family Vec n :: * -> *
+data instance Vec Zero a = V0
+data instance Vec (Succ n) a = VS a (Vec n a) 
+
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
+-- data VertexInfo = VertexInfo !(GL.Vector3 GL.GLfloat) !(GL.Color4 GL.GLfloat) !(GL.TexCoord2 GL.GLfloat)
+-- data Mesh = Mesh GL.PrimitiveMode [VertexInfo]
+-- data Scene = OriginMesh Mesh | Subscenes [TransformedScene]
+-- type TransformedScene = ([Transform],Scene)
+
 data LogosData = P (GL.Vertex3 GL.GLfloat) | C (GL.Color4 GL.GLfloat) | T (GL.TexCoord2 GL.GLfloat) | TI GL.TextureObject
                deriving Show
 data LogosState = LogosState {
@@ -323,3 +308,30 @@ main = do
         go [] = unit
     (go (stringWords (prelude + " " + text))^..stateT.concatT) (defaultState dict (LogosState True))
         
+
+instance (Storable a,Storable b) => Storable (a,b) where
+  sizeOf x = sizeOf (fst x) + sizeOf (snd x)
+  alignment x = lcm (alignment (fst x)) (alignment (snd x))
+  peek p = do
+    x <- peek (castPtr p)
+    y <- peek (castPtr $ p`plusPtr`sizeOf x)
+    return (x,y)
+  poke p (x,y) = do
+    poke (castPtr p) x
+    poke (castPtr $ p`plusPtr`sizeOf x) y
+instance (Storable a,Storable b,Storable c) => Storable (a,b,c) where
+  sizeOf ~(x,y,z) = sizeOf (x,(y,z))
+  alignment ~(x,y,z) = alignment (x,(y,z))
+  peek p = peek (castPtr p) <&> \(x,(y,z)) -> (x,y,z)
+  poke p (x,y,z) = poke (castPtr p) (x,(y,z))
+instance (Storable a,Storable b,Storable c,Storable d) => Storable (a,b,c,d) where
+  sizeOf ~(x,y,z,u) = sizeOf (x,(y,z,u))
+  alignment ~(x,y,z,u) = alignment (x,(y,z,u))
+  peek p = peek (castPtr p) <&> \(x,(y,z,u)) -> (x,y,z,u)
+  poke p (x,y,z,u) = poke (castPtr p) (x,(y,z,u))
+instance (Storable a,Storable b,Storable c,Storable d,Storable e) => Storable (a,b,c,d,e) where
+  sizeOf ~(x,y,z,u,v) = sizeOf (x,(y,z,u,v))
+  alignment ~(x,y,z,u,v) = alignment (x,(y,z,u,v))
+  peek p = peek (castPtr p) <&> \(x,(y,z,u,v)) -> (x,y,z,u,v)
+  poke p (x,y,z,u,v) = poke (castPtr p) (x,(y,z,u,v))
+
