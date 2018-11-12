@@ -257,7 +257,7 @@ runLogos Draw = do
         GL.matrixMode $= GL.Projection 
         GL.loadIdentity
         GL.lookAt (GL.Vertex3 0 0 0) (GL.Vertex3 4 3 3) (GL.Vector3 0 1 0)
-        GL.perspective (pi/4) (4/3) 0.1 100
+        GL.perspective 45 (4/3) 0.1 100
         vpu <- GL.uniformLocation prog "viewMatrix"
         m <- SV.get (GL.matrix Nothing)
         mcs <- GL.getMatrixComponents GL.ColumnMajor m
