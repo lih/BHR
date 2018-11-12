@@ -258,13 +258,14 @@ runLogos Draw = do
         let withAttrib n f = do
               l <- SV.get (GL.attribLocation prog n)
               between (GL.vertexAttribArray l $= GL.Enabled) (GL.vertexAttribArray l $= GL.Disabled) (f l)
+            setAttrib b v n = do
+              GL.bindBuffer GL.ArrayBuffer $= Just b
+              GL.vertexAttribPointer v $= (GL.ToFloat, GL.VertexArrayDescriptor n GL.Float 0 nullPtr)
+
         withAttrib "vertexPosition" $ \vpos -> withAttrib "vertexColor" $ \vcol -> withAttrib "vertexUV" $ \vtex -> do
-          GL.bindBuffer GL.ArrayBuffer $= Just vb
-          GL.vertexAttribPointer vpos $= (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Float 0 nullPtr)
-          GL.bindBuffer GL.ArrayBuffer $= Just cb
-          GL.vertexAttribPointer vcol $= (GL.ToFloat, GL.VertexArrayDescriptor 4 GL.Float 0 nullPtr)
-          GL.bindBuffer GL.ArrayBuffer $= Just tb
-          GL.vertexAttribPointer vtex $= (GL.ToFloat, GL.VertexArrayDescriptor 2 GL.Float 0 nullPtr)
+          setAttrib vb vpos 3
+          setAttrib cb vcol 4
+          setAttrib tb vtex 2
           GL.drawArrays mode 0 (fromIntegral $ length fullVertices)
         GLFW.swapBuffers
     _ -> unit
