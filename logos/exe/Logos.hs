@@ -251,7 +251,7 @@ runLogos Draw = do
         m <- GL.newMatrix GL.ColumnMajor [0.5,0,0,0 , 0,0.5,0,0 , 0,0,0.5,0 , 0,0,0,1]
         mcs <- GL.getMatrixComponents GL.ColumnMajor m
         vpu <- GL.uniformLocation prog "viewMat"
-        GL.uniform (debug vpu) $= (trace (show mcs) m :: GL.GLmatrix GL.GLdouble)
+        GL.uniform vpu $= (m :: GL.GLmatrix GL.GLdouble)
         SV.get (GL.activeUniforms prog) >>= print
 
         cb <- newVec (\(h,_,_) -> h)
