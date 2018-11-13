@@ -30,60 +30,6 @@ stringWords = map fromString . fromBlank
         fromWChar k (c:t) | c `elem` [' ', '\t', '\r', '\n'] = k "":fromBlank t
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
-
-data Zero = Zero
-data Succ x = Succ x
-
-type One = Succ Zero
-type Two = Succ One
-type Three = Succ Two
-type Four = Succ Three
-
-_One = Succ Zero
-_Two = Succ _One
-_Three = Succ _Two
-_Four = Succ _Three
-
-data family Vec n :: * -> *
-data instance Vec Zero a = V0
-data instance Vec (Succ n) a = VS !a !(Vec n a) 
-
-instance Functor (Vec Zero) where
-  map f V0 = V0
-instance Functor (Vec n) => Functor (Vec (Succ n)) where
-  map f (VS x xs) = VS (f x) (map f xs)
-instance SemiApplicative (Vec Zero) where
-  V0 <*> V0 = V0
-instance SemiApplicative (Vec n) => SemiApplicative (Vec (Succ n)) where
-  VS f fs <*> VS x xs = VS (f x) (fs<*>xs)
-instance Unit (Vec Zero) where pure _ = V0
-instance Unit (Vec n) => Unit (Vec (Succ n)) where pure x = VS x (pure x)
-instance Applicative (Vec Zero)
-instance Applicative (Vec n) => Applicative (Vec (Succ n))
-instance Foldable (Vec Zero) where fold V0 = zero
-instance Foldable (Vec n) => Foldable (Vec (Succ n)) where fold (VS a x) = a + fold x
-instance Traversable (Vec Zero) where sequence V0 = pure V0
-instance Traversable (Vec n) => Traversable (Vec (Succ n)) where sequence (VS a x) = VS<$>a<*>sequence x
-class (Applicative v, Foldable v, Traversable v) => Vector v
-instance Vector (Vec Zero)
-instance Vector (Vec n) => Vector (Vec (Succ n))
-
-type V1 = Vec One
-type V2 = Vec Two
-type V3 = Vec Three
-type V4 = Vec Four
-
-instance (Semigroup a,Applicative (Vec n)) => Semigroup (Vec n a) where a + b = liftA2 (+) a b
-instance (Monoid a,Applicative (Vec n)) => Monoid (Vec n a) where zero = pure zero
-
-type Mat n m a = Vec n (Vec m a)
-toMat :: Vec n a -> Mat One n a
-toMat = pure
-matMult :: (Ring a, Vector (Vec n), Vector (Vec m), Vector (Vec p)) => Mat n m a -> Mat m p a -> Mat n p a
-matMult x y = map (\vm -> map (\vm' -> scalProd vm vm') (transpose y)) x
-
-scalProd :: (Ring a,Vector (Vec n)) => Vec n a -> Vec n a -> a
-scalProd u v = sum (liftA2 (*) u v)
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
                   deriving Show
