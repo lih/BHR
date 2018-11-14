@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, TypeFamilies, ScopedTypeVariables #-}
+{-# LANGUAGE DeriveGeneric, TypeFamilies, ScopedTypeVariables, ExistentialQuantification #-}
 module Main where
 
 import Definitive
@@ -39,10 +39,12 @@ data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bo
 -- data Scene = OriginMesh Mesh | Subscenes [TransformedScene]
 -- type TransformedScene = ([Transform],Scene)
 
-data LogosData =
+data LogosData = F GL.GLfloat
+               | forall n. Vector (Vec n) => V (Vec n LogosData)
+               | forall n m. (Vector (Vec n), Vector (Vec m)) => M (Mat n m LogosData)
+               | P (GL.Vertex3 GL.GLfloat) | C (GL.Color4 GL.GLfloat) | T (GL.TexCoord2 GL.GLfloat) | TI GL.TextureObject
 
-  P (GL.Vertex3 GL.GLfloat) | C (GL.Color4 GL.GLfloat) | T (GL.TexCoord2 GL.GLfloat) | TI GL.TextureObject
-               deriving Show
+deriving instance Show LogosData
 data LogosState = LogosState {
   _running :: Bool
   }
