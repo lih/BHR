@@ -15,6 +15,7 @@ import Foreign.Storable
 import Foreign.Ptr
 import Control.Exception (SomeException(..),Exception)
 import GHC.Generics
+import Data.Matricial
 
 stringWords :: String -> [String]
 stringWords = map fromString . fromBlank
@@ -38,7 +39,9 @@ data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bo
 -- data Scene = OriginMesh Mesh | Subscenes [TransformedScene]
 -- type TransformedScene = ([Transform],Scene)
 
-data LogosData = P (GL.Vertex3 GL.GLfloat) | C (GL.Color4 GL.GLfloat) | T (GL.TexCoord2 GL.GLfloat) | TI GL.TextureObject
+data LogosData =
+
+  P (GL.Vertex3 GL.GLfloat) | C (GL.Color4 GL.GLfloat) | T (GL.TexCoord2 GL.GLfloat) | TI GL.TextureObject
                deriving Show
 data LogosState = LogosState {
   _running :: Bool
