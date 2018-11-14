@@ -16,6 +16,7 @@ import Foreign.Ptr
 import Control.Exception (SomeException(..),Exception)
 import GHC.Generics
 import Data.Matricial
+import Language.Parser
 
 stringWords :: String -> [String]
 stringWords = map fromString . fromBlank
@@ -39,6 +40,9 @@ data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bo
 -- data Mesh = Mesh GL.PrimitiveMode [VertexInfo]
 -- data Scene = OriginMesh Mesh | Subscenes [TransformedScene]
 -- type TransformedScene = ([Transform],Scene)
+toFloat (StackInt n) = StackExtra (Opaque (F (fromIntegral n)))
+toFloat (StackSymbol (matches Just readable -> Just f)) = StackExtra (Opaque (F f))
+toFloat x = x
 
 data LogosData = F GL.GLfloat
                | forall n. Vector (Vec n) => V (Vec n LogosData)
@@ -119,7 +123,7 @@ runLogos Wait = do
     _ -> unit
 runLogos Quit = runExtraState $ do running =- False
 runLogos VCons = runStackState $ modify $ \case
-  StackExtra (Opaque (V v)):StackExtra (Opaque x):st -> StackExtra (Opaque (V (VS x v))):st
+  StackExtra (Opaque (V v)):(toFloat -> StackExtra (Opaque x)):st -> StackExtra (Opaque (V (VS x v))):st
   st -> st
 runLogos Format = do
   st <- runStackState get
