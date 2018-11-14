@@ -33,6 +33,7 @@ stringWords = map fromString . fromBlank
         fromWChar k "" = [k ""]
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
+                  | VCons
                   deriving Show
 -- data VertexInfo = VertexInfo !(GL.Vector3 GL.GLfloat) !(GL.Color4 GL.GLfloat) !(GL.TexCoord2 GL.GLfloat)
 -- data Mesh = Mesh GL.PrimitiveMode [VertexInfo]
@@ -57,6 +58,7 @@ dict = fromAList $
   [("wait"       , Builtin_Extra Wait  ),
    ("quit"       , Builtin_Extra Quit  ),
    ("format"     , Builtin_Extra Format),
+   ("vcons"      , Builtin_Extra VCons),
    ("print"      , Builtin_Extra Print ),
    ("window"     , Builtin_Extra OpenWindow),
    ("point"      , Builtin_Extra Point),
@@ -116,6 +118,9 @@ runLogos Wait = do
       runStackState $ put st'
     _ -> unit
 runLogos Quit = runExtraState $ do running =- False
+runLogos VCons = runStackState $ modify $ \case
+  StackExtra (Opaque (V v)):StackExtra (Opaque x):st -> StackExtra (Opaque (V (VS x v))):st
+  st -> st
 runLogos Format = do
   st <- runStackState get
   case st of
