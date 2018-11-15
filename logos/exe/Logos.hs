@@ -228,9 +228,9 @@ runLogos BuildMesh = do
     StackSymbol s:StackList attribs:StackList props:st' -> do
       m <- liftIO $ do
         let mode = case s of
-              "lines" -> GL.Lines
-              "triangles" -> GL.Triangles
-              "points" -> GL.Points
+              "LINES" -> GL.Lines
+              "TRIANGLES" -> GL.Triangles
+              "POINTS" -> GL.Points
               _ -> GL.Points
             fullVertices = deZip $ traverse Zip [[v | StackVect v <- vs] | StackList vs <- props]
             newVec f l = GL.genObjectName <*= \vb -> do
