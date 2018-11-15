@@ -240,7 +240,7 @@ runLogos Texture = do
             GL.generateMipmap' GL.Texture2D
             Just prog <- SV.get GL.currentProgram
             ul <- GL.uniformLocation prog name
-            GL.uniform (debug ul) $= GL.TextureUnit texi
+            GL.uniform ul $= GL.TextureUnit texi
             return $ Just tex
           Left err -> do
             putStrLn err
