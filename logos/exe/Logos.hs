@@ -216,7 +216,7 @@ runLogos DefUniform = do
       case x of
         StackVect (V4 x y z w) -> liftIO $ GL.uniform u $= GL.Vector4 x y z w
         StackMat (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) -> liftIO $ do
-          m <- GL.newMatrix GL.ColumnMajor [a,e,i,m, b,f,j,n, c,g,k,o, d,h,l,p]
+          m <- GL.newMatrix GL.ColumnMajor [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p]
           GL.uniform u $= (m :: GL.GLmatrix GL.GLfloat)
         _ -> unit
     _ -> unit
