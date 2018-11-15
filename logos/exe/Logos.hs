@@ -34,7 +34,7 @@ stringWords = map fromString . fromBlank
         fromWChar k "" = [k ""]
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
-                  | VCons | MCons
+                  | VCons | MCons | Rotation | Translation | Skew | Ejection
                   deriving Show
 -- data VertexInfo = VertexInfo !(GL.Vector3 GL.GLfloat) !(GL.Color4 GL.GLfloat) !(GL.TexCoord2 GL.GLfloat)
 -- data Mesh = Mesh GL.PrimitiveMode [VertexInfo]
@@ -47,6 +47,7 @@ toFloat x = Nothing
 
 pattern StackFloat f <- (toFloat -> Just f)
 pattern StackVect v = StackExtra (Opaque (V v))
+pattern StackMat m = StackExtra (Opaque (M m))
 
 data LogosData = F GL.GLfloat
                | V (V4 GL.GLfloat)
@@ -61,20 +62,24 @@ running = lens _running (\x y -> x { _running = y })
 
 dict = fromAList $
   map (second StackBuiltin)
-  [("wait"       , Builtin_Extra Wait  ),
-   ("quit"       , Builtin_Extra Quit  ),
-   ("format"     , Builtin_Extra Format),
-   ("vcons"      , Builtin_Extra VCons),
-   ("mcons"      , Builtin_Extra MCons),
-   ("print"      , Builtin_Extra Print ),
-   ("window"     , Builtin_Extra OpenWindow),
-   ("point"      , Builtin_Extra Point),
-   ("rgb"        , Builtin_Extra (Color False)),
-   ("rgba"       , Builtin_Extra (Color True)),
-   ("texture"    , Builtin_Extra Texture),
-   ("texbind"    , Builtin_Extra BindTexture),
-   ("texpoint"   , Builtin_Extra TextureCoord),
-   ("draw"       , Builtin_Extra Draw),
+  [("wait"        , Builtin_Extra Wait  ),
+   ("quit"        , Builtin_Extra Quit  ),
+   ("format"      , Builtin_Extra Format),
+   ("vcons"       , Builtin_Extra VCons),
+   ("mcons"       , Builtin_Extra MCons),
+   ("rotation"    , Builtin_Extra Rotation),
+   ("translation" , Builtin_Extra Translation),
+   ("skew"        , Builtin_Extra Skew),
+   ("ejection"    , Builtin_Extra Ejection),
+   ("print"       , Builtin_Extra Print ),
+   ("window"      , Builtin_Extra OpenWindow),
+   ("point"       , Builtin_Extra Point),
+   ("rgb"         , Builtin_Extra (Color False)),
+   ("rgba"        , Builtin_Extra (Color True)),
+   ("texture"     , Builtin_Extra Texture),
+   ("texbind"     , Builtin_Extra BindTexture),
+   ("texpoint"    , Builtin_Extra TextureCoord),
+   ("draw"        , Builtin_Extra Draw),
                    
    ("def"        , Builtin_Def         ),
    ("$"          , Builtin_DeRef       ),
@@ -126,10 +131,13 @@ runLogos Wait = do
     _ -> unit
 runLogos Quit = runExtraState $ do running =- False
 runLogos VCons = runStackState $ modify $ \case
-  StackFloat w:StackFloat z:StackFloat y:StackFloat x:st -> StackExtra (Opaque (V (V4 x y z w))):st
+  StackFloat w:StackFloat z:StackFloat y:StackFloat x:st -> StackVect (V4 x y z w):st
   st -> st
 runLogos MCons = runStackState $ modify $ \case
-  StackVect w:StackVect z:StackVect y:StackVect x:st -> StackExtra (Opaque (M (V4 x y z w))):st
+  StackVect w:StackVect z:StackVect y:StackVect x:st -> StackMat (V4 x y z w):st
+  st -> st
+runLogos Rotation = runStackState $ modify $ \case
+  StackVect u:StackVect v:st -> StackMat (rotation v u):st
   st -> st
 runLogos Format = do
   st <- runStackState get
