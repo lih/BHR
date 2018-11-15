@@ -139,6 +139,15 @@ runLogos MCons = runStackState $ modify $ \case
 runLogos Rotation = runStackState $ modify $ \case
   StackVect u:StackVect v:st -> StackMat (rotation v u):st
   st -> st
+runLogos Translation = runStackState $ modify $ \case
+  StackVect (V4 x y z _):st -> StackMat (translation (V3 x y z)):st
+  st -> st
+runLogos Ejection = runStackState $ modify $ \case
+  StackVect v:st -> StackMat (ejection v):st
+  st -> st
+runLogos Skew = runStackState $ modify $ \case
+  StackVect v:st -> StackMat (skew v):st
+  st -> st
 runLogos Format = do
   st <- runStackState get
   case st of
