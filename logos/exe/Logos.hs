@@ -329,7 +329,7 @@ main = do
     prelude <- fold <$> for args readString
     symList <- newIORef (keys (c'map dict))
     let getAll = unsafeInterleaveIO $ do
-          ln <- readline "Logos> "
+          ln <- readline "Logos> " 
           lns <- getAll
           case ln of
             Just x -> do addHistory x; return $ x + " .\n" + lns
