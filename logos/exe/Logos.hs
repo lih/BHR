@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, TypeFamilies, ScopedTypeVariables, ExistentialQuantification #-}
+{-# LANGUAGE DeriveGeneric, TypeFamilies, ScopedTypeVariables, ExistentialQuantification, PatternSynonyms #-}
 module Main where
 
 import Definitive
@@ -34,22 +34,25 @@ stringWords = map fromString . fromBlank
         fromWChar k "" = [k ""]
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
-                  | VCons
+                  | VCons | MCons
                   deriving Show
 -- data VertexInfo = VertexInfo !(GL.Vector3 GL.GLfloat) !(GL.Color4 GL.GLfloat) !(GL.TexCoord2 GL.GLfloat)
 -- data Mesh = Mesh GL.PrimitiveMode [VertexInfo]
 -- data Scene = OriginMesh Mesh | Subscenes [TransformedScene]
 -- type TransformedScene = ([Transform],Scene)
-toFloat (StackInt n) = StackExtra (Opaque (F (fromIntegral n)))
-toFloat (StackSymbol (matches Just readable -> Just f)) = StackExtra (Opaque (F f))
-toFloat x = x
+toFloat (StackInt n) = Just (fromIntegral n)
+toFloat (StackSymbol s) = matches Just readable s
+toFloat (StackExtra (Opaque (F f))) = Just f
+toFloat x = Nothing
+
+pattern StackFloat f <- (toFloat -> Just f)
+pattern StackVect v = StackExtra (Opaque (V v))
 
 data LogosData = F GL.GLfloat
-               | forall n. Vector (Vec n) => V (Vec n LogosData)
-               | forall n m. (Vector (Vec n), Vector (Vec m)) => M (Mat n m LogosData)
+               | V (V4 GL.GLfloat)
+               | M (Mat Four Four GL.GLfloat)
                | P (GL.Vertex3 GL.GLfloat) | C (GL.Color4 GL.GLfloat) | T (GL.TexCoord2 GL.GLfloat) | TI GL.TextureObject
-
-deriving instance Show LogosData
+               deriving Show
 data LogosState = LogosState {
   _running :: Bool
   }
@@ -57,12 +60,12 @@ running :: Lens' LogosState Bool
 running = lens _running (\x y -> x { _running = y })
 
 dict = fromAList $
-  ("nil", StackExtra (Opaque (V V0))):
   map (second StackBuiltin)
   [("wait"       , Builtin_Extra Wait  ),
    ("quit"       , Builtin_Extra Quit  ),
    ("format"     , Builtin_Extra Format),
    ("vcons"      , Builtin_Extra VCons),
+   ("mcons"      , Builtin_Extra MCons),
    ("print"      , Builtin_Extra Print ),
    ("window"     , Builtin_Extra OpenWindow),
    ("point"      , Builtin_Extra Point),
@@ -123,7 +126,10 @@ runLogos Wait = do
     _ -> unit
 runLogos Quit = runExtraState $ do running =- False
 runLogos VCons = runStackState $ modify $ \case
-  StackExtra (Opaque (V v)):(toFloat -> StackExtra (Opaque x)):st -> StackExtra (Opaque (V (VS x v))):st
+  StackFloat w:StackFloat z:StackFloat y:StackFloat x:st -> StackExtra (Opaque (V (V4 x y z w))):st
+  st -> st
+runLogos MCons = runStackState $ modify $ \case
+  StackVect w:StackVect z:StackVect y:StackVect x:st -> StackExtra (Opaque (M (V4 x y z w))):st
   st -> st
 runLogos Format = do
   st <- runStackState get
