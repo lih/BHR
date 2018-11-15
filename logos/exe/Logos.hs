@@ -321,34 +321,32 @@ initGL = do
   GL.texture GL.Texture2D $= GL.Enabled
   GL.textureFunction      $= GL.Blend
 
-main = do
-  putStrLn "Initializing graphical environment..."
-  between (void GLFW.initialize) GLFW.terminate $ do
-    isTerm <- hIsTerminalDevice stdin
-    args <- getArgs
-    prelude <- fold <$> for args readString
-    symList <- newIORef (keys (c'map dict))
-    let getAll = unsafeInterleaveIO $ do
-          ln <- readline "Logos> " 
-          lns <- getAll
-          case ln of
-            Just x -> do addHistory x; return $ x + " .\n" + lns
-            Nothing -> putStr "\n" >> return ""
-    setCompletionEntryFunction $ Just $ \line -> do
-      sl <- readIORef symList
-      case reverse (words (line+"?")) of
-        "?":_ -> return sl
-        wp:_ -> let wps = length wp-1; wp' = init wp in return [w | w <- sl, take wps w==wp']
-        _ -> return []
-    text <- if isTerm then getAll else readHString stdin
+main = between (void GLFW.initialize) GLFW.terminate $ do
+  isTerm <- hIsTerminalDevice stdin
+  args <- getArgs
+  prelude <- fold <$> for args readString
+  symList <- newIORef (keys (c'map dict))
+  let getAll = unsafeInterleaveIO $ do
+        ln <- readline "Logos> " 
+        lns <- getAll
+        case ln of
+          Just x -> do addHistory x; return $ x + " .\n" + lns
+          Nothing -> putStr "\n" >> return ""
+  setCompletionEntryFunction $ Just $ \line -> do
+    sl <- readIORef symList
+    case reverse (words (line+"?")) of
+      "?":_ -> return sl
+      wp:_ -> let wps = length wp-1; wp' = init wp in return [w | w <- sl, take wps w==wp']
+      _ -> return []
+  text <- if isTerm then getAll else readHString stdin
 
-    let go (w:ws) = do
-          execSymbol runLogos (\_ -> unit) w
-          runDictState get >>= \d -> liftIO (writeIORef symList (keys d))
-          r <- runExtraState $ getl running
-          if r then go ws else unit
-        go [] = unit
-    (go (stringWords (prelude + " " + text))^..stateT.concatT) (defaultState dict (LogosState True))
+  let go (w:ws) = do
+        execSymbol runLogos (\_ -> unit) w
+        runDictState get >>= \d -> liftIO (writeIORef symList (keys d))
+        r <- runExtraState $ getl running
+        if r then go ws else unit
+      go [] = unit
+  (go (stringWords (prelude + " " + text))^..stateT.concatT) (defaultState dict (LogosState True))
 
 instance Storable (Vec Zero a) where
   sizeOf _ = zero
