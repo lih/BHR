@@ -33,8 +33,8 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
   
-data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
-                  | VCons | MCons | Rotation | Translation | Skew | Ejection | MCompose | MAdd | BuildMesh
+data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw
+                  | VCons | MCons | Rotation | Translation | Skew | Ejection | MCompose | MAdd
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
 toFloat (StackSymbol s) = matches Just readable s
@@ -72,14 +72,9 @@ dict = fromAList $
    ("++"          , Builtin_Extra MAdd),
    ("skew"        , Builtin_Extra Skew),
    ("ejection"    , Builtin_Extra Ejection),
-   ("print"       , Builtin_Extra Print ),
+   ("print"       , Builtin_Extra Print),
    ("window"      , Builtin_Extra OpenWindow),
-   ("point"       , Builtin_Extra Point),
-   ("rgb"         , Builtin_Extra (Color False)),
-   ("rgba"        , Builtin_Extra (Color True)),
    ("texture"     , Builtin_Extra Texture),
-   ("texbind"     , Builtin_Extra BindTexture),
-   ("texpoint"    , Builtin_Extra TextureCoord),
    ("mesh"        , Builtin_Extra BuildMesh),
    ("draw"        , Builtin_Extra Draw),
                    
