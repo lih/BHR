@@ -251,13 +251,14 @@ runLogos BuildMesh = do
                                in \l -> run l <&> (s,n,)
                               | StackList [StackSymbol s,StackInt n] <- attribs] fullVertices)
         return (Mesh mode (length (head fullVertices)) vecs)
-      runStackState $ modify (StackExtra (Opaque m):)
+      runStackState $ put (StackExtra (Opaque m):st')
     _ -> unit
       
 runLogos Draw = do
   st <- runStackState get
   case st of
     StackExtra (Opaque (Mesh mode size vecs)):st' -> do
+      runStackState $ put st'
       liftIO $ do
         Just prog <- SV.get GL.currentProgram
         m <- GL.newMatrix GL.ColumnMajor [1,0,0,0 , 0,1,0,0 , 0,0,1,0 , 0,0,0,1]
