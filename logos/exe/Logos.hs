@@ -34,7 +34,7 @@ stringWords = map fromString . fromBlank
         fromWChar k "" = [k ""]
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Point | Color Bool | Texture | TextureCoord | Draw | BindTexture
-                  | VCons | MCons | Rotation | Translation | Skew | Ejection | MCompose
+                  | VCons | MCons | Rotation | Translation | Skew | Ejection | MCompose | MAdd
                   deriving Show
 -- data VertexInfo = VertexInfo !(GL.Vector3 GL.GLfloat) !(GL.Color4 GL.GLfloat) !(GL.TexCoord2 GL.GLfloat)
 -- data Mesh = Mesh GL.PrimitiveMode [VertexInfo]
@@ -70,6 +70,7 @@ dict = fromAList $
    ("rotation"    , Builtin_Extra Rotation),
    ("translation" , Builtin_Extra Translation),
    ("**"          , Builtin_Extra MCompose),
+   ("++"          , Builtin_Extra MAdd),
    ("skew"        , Builtin_Extra Skew),
    ("ejection"    , Builtin_Extra Ejection),
    ("print"       , Builtin_Extra Print ),
@@ -149,12 +150,19 @@ runLogos Ejection = runStackState $ modify $ \case
 runLogos Skew = runStackState $ modify $ \case
   StackVect v:st -> StackMat (skew v):st
   st -> st
+runLogos MAdd = runStackState $ modify $ \case
+  StackMat m:StackMat m':st -> StackMat (m+m'):st
+  StackVect v:StackVect v':st -> StackVect (v+v'):st
+  StackFloat f:StackFloat f':st -> StackExtra (Opaque $ F $ f+f'):st
+  st -> st
 runLogos MCompose = runStackState $ modify $ \case
   StackMat m':StackMat m:st -> StackMat (m$*m'):st
   StackMat m:StackVect v:st -> StackVect (v & from scalar %~ ($*m)):st
   StackVect v:StackVect v':st -> StackExtra (Opaque $ F $ scalProd v v'):st
   StackFloat f:StackVect v:st -> StackVect (pure f * v):st
   StackVect v:StackFloat f:st -> StackVect (pure f * v):st
+  StackFloat f:StackMat m:st -> StackMat (map2 (f*) m):st
+  StackMat m:StackFloat f:st -> StackMat (map2 (f*) m):st
   st -> st
 runLogos Format = do
   st <- runStackState get
