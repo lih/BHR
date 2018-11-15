@@ -153,6 +153,8 @@ runLogos MCompose = runStackState $ modify $ \case
   StackMat m':StackMat m:st -> StackMat (m$*m'):st
   StackMat m:StackVect v:st -> StackVect (v & from scalar %~ ($*m)):st
   StackVect v:StackVect v':st -> StackExtra (Opaque $ F $ scalProd v v'):st
+  StackFloat f:StackVect v:st -> StackVect (pure f * v):st
+  StackVect v:StackFloat f:st -> StackVect (pure f * v):st
   st -> st
 runLogos Format = do
   st <- runStackState get
