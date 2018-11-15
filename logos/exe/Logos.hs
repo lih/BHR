@@ -238,16 +238,23 @@ runLogos BuildMesh = do
               "points" -> GL.Points
               _ -> GL.Points
             fullVertices = deZip $ traverse Zip [[v | StackVect v <- vs] | StackList vs <- props]
-            newVec l = GL.genObjectName <*= \vb -> do
+            newVec f l = GL.genObjectName <*= \vb -> do
               let vs = V.unfoldr (\case
-                                     h:t -> Just (h,t)
+                                     h:t -> Just (f h,t)
                                      [] -> Nothing) l
               GL.bindBuffer GL.ArrayBuffer $= Just vb
               V.unsafeWith vs $ \p -> do
                 GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length vs * sizeOf (vs V.! 0)),p,GL.StaticDraw)
 
-        vecs <- traverse newVec fullVertices
-        return (Mesh mode (length (head fullVertices)) (zap [(s,n,) | StackList [StackSymbol s,StackInt n] <- attribs] vecs))
+        vecs <- sequence (zap [let run = case n of
+                                     1 -> newVec (\(V4 x _ _ _) -> V1 x)
+                                     2 -> newVec (\(V4 x y _ _) -> V2 x y)
+                                     3 -> newVec (\(V4 x y z _) -> V3 x y z)
+                                     4 -> newVec id
+                                     _ -> error $ "Invalid attribute size "+show n+" (must be between 1 and 4)"
+                               in \l -> run l <&> (s,n,)
+                              | StackList [StackSymbol s,StackInt n] <- attribs] fullVertices)
+        return (Mesh mode (length (head fullVertices)) vecs)
       runStackState $ modify (StackExtra (Opaque m):)
     _ -> unit
       
