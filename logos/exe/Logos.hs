@@ -53,7 +53,7 @@ pattern StackMat m = StackExtra (Opaque (M m))
 data LogosData = F GL.GLfloat
                | V (V4 GL.GLfloat)
                | M (Mat Four Four GL.GLfloat)
-               | Mesh GL.PrimitiveMode Int [(String,Int,GL.BufferObject)]
+               | Mesh GL.PrimitiveMode Int [(GL.AttribLocation,Int,GL.BufferObject)]
                | Uni GL.UniformLocation
                | TI GL.TextureObject
                deriving Show
@@ -269,14 +269,16 @@ runLogos BuildMesh = do
               GL.bindBuffer GL.ArrayBuffer $= Just vb
               V.unsafeWith vs $ \p -> do
                 GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length vs * sizeOf (vs V.! 0)),p,GL.StaticDraw)
-
+        Just prog <- SV.get GL.currentProgram
         vecs <- sequence (zap [let run = case n of
                                      1 -> newVec (\(V4 x _ _ _) -> V1 x)
                                      2 -> newVec (\(V4 x y _ _) -> V2 x y)
                                      3 -> newVec (\(V4 x y z _) -> V3 x y z)
                                      4 -> newVec id
                                      _ -> error $ "Invalid attribute size "+show n+" (must be between 1 and 4)"
-                               in \l -> run l <&> (s,n,)
+                               in \l -> do
+                                  loc <- SV.get (GL.attribLocation prog s)
+                                  run l <&> (loc,n,)
                               | StackList [StackSymbol s,StackInt n] <- attribs] fullVertices)
         return (Mesh mode (length (head fullVertices)) vecs)
       runStackState $ put (StackExtra (Opaque m):st')
@@ -288,18 +290,10 @@ runLogos Draw = do
     StackExtra (Opaque (Mesh mode size vecs)):st' -> do
       runStackState $ put st'
       liftIO $ do
-        Just prog <- SV.get GL.currentProgram
-        m <- GL.newMatrix GL.ColumnMajor [1,0,0,0 , 0,1,0,0 , 0,0,1,0 , 0,0,0,1]
-        vpu <- GL.uniformLocation prog "viewMat"
-        GL.uniform vpu $= (m :: GL.GLmatrix GL.GLfloat)
-        SV.get (GL.activeUniforms prog) >>= print
-
-        let withAttrib (name,sz,vec) go = do
-              l <- SV.get (GL.attribLocation prog name)
-              between (GL.vertexAttribArray l $= GL.Enabled) (GL.vertexAttribArray l $= GL.Disabled) $ do
-                GL.bindBuffer GL.ArrayBuffer $= Just vec
-                GL.vertexAttribPointer l $= (GL.ToFloat, GL.VertexArrayDescriptor (fromIntegral sz) GL.Float 0 nullPtr)
-                go
+        let withAttrib (l,sz,vec) go = between (GL.vertexAttribArray l $= GL.Enabled) (GL.vertexAttribArray l $= GL.Disabled) $ do
+              GL.bindBuffer GL.ArrayBuffer $= Just vec
+              GL.vertexAttribPointer l $= (GL.ToFloat, GL.VertexArrayDescriptor (fromIntegral sz) GL.Float 0 nullPtr)
+              go
 
         GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
         
