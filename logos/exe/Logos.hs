@@ -1,22 +1,27 @@
 {-# LANGUAGE DeriveGeneric, TypeFamilies, ScopedTypeVariables, ExistentialQuantification, PatternSynonyms #-}
 module Main where
 
-import Definitive
 import Algebra.Monad.Concatenative
+import Codec.Picture hiding (Uniform)
+import Console.Readline (readline,addHistory,setCompletionEntryFunction)
 import Control.Concurrent (threadDelay)
+import Control.Exception (SomeException(..),Exception)
+import Data.IORef
+import Data.Matricial
+import Data.StateVar (($=))
+import Definitive
+import Foreign.Ptr
+import Foreign.Storable
+import GHC.Generics (Generic)
+import Language.Parser
+import System.Environment (getArgs)
+import System.IO (hIsTerminalDevice)
+import System.IO.Unsafe (unsafeInterleaveIO)
+
+import qualified Data.StateVar as SV
+import qualified Data.Vector.Storable as V
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
-import qualified Data.StateVar as SV
-import System.Environment (getArgs)
-import Codec.Picture
-import qualified Data.Vector.Storable as V
-import Data.StateVar (($=))
-import Foreign.Storable
-import Foreign.Ptr
-import Control.Exception (SomeException(..),Exception)
-import GHC.Generics (Generic)
-import Data.Matricial
-import Language.Parser
 
 stringWords :: String -> [String]
 stringWords = map fromString . fromBlank
@@ -33,8 +38,8 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
   
-data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw
-                  | VCons | MCons | Rotation | Translation | Skew | Ejection | MCompose | MAdd
+data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw | Uniform | DefUniform
+                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | MAdd | Recip
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
 toFloat (StackSymbol s) = matches Just readable s
@@ -45,12 +50,11 @@ pattern StackFloat f <- (toFloat -> Just f)
 pattern StackVect v = StackExtra (Opaque (V v))
 pattern StackMat m = StackExtra (Opaque (M m))
 
-
-
 data LogosData = F GL.GLfloat
                | V (V4 GL.GLfloat)
                | M (Mat Four Four GL.GLfloat)
-               | Mesh GL.PrimitiveMode Int [(String,Int,GL.BufferObject)]
+               | Mesh GL.PrimitiveMode Int [(GL.AttribLocation,Int,GL.BufferObject)]
+               | Uni GL.UniformLocation
                | TI GL.TextureObject
                deriving Show
 data LogosState = LogosState {
@@ -60,6 +64,7 @@ running :: Lens' LogosState Bool
 running = lens _running (\x y -> x { _running = y })
 
 dict = fromAList $
+  (".",StackProg []):
   map (second StackBuiltin)
   [("wait"        , Builtin_Extra Wait  ),
    ("quit"        , Builtin_Extra Quit  ),
@@ -77,7 +82,11 @@ dict = fromAList $
    ("texture"     , Builtin_Extra Texture),
    ("mesh"        , Builtin_Extra BuildMesh),
    ("draw"        , Builtin_Extra Draw),
-                   
+   ("uniform"     , Builtin_Extra Uniform),
+   ("defuniform"     , Builtin_Extra DefUniform),
+   ("norm"        , Builtin_Extra Norm),
+   ("recip"        , Builtin_Extra Recip),
+    
    ("def"        , Builtin_Def         ),
    ("$"          , Builtin_DeRef       ),
    ("lookup"     , Builtin_Lookup      ),
@@ -160,6 +169,14 @@ runLogos MCompose = runStackState $ modify $ \case
   StackFloat f:StackMat m:st -> StackMat (map2 (f*) m):st
   StackMat m:StackFloat f:st -> StackMat (map2 (f*) m):st
   st -> st
+runLogos Norm = runStackState $ modify $ \case
+  StackVect v:st -> StackExtra (Opaque (F (sqrt $ scalProd v v))):st
+  StackFloat v:st -> StackExtra (Opaque (F (abs v))):st
+  st -> st
+runLogos Recip = runStackState $ modify $ \case
+  StackFloat f:st -> StackExtra (Opaque $ F $ recip f):st
+  st -> st
+  
 runLogos Format = do
   st <- runStackState get
   case st of
@@ -192,6 +209,28 @@ runLogos OpenWindow = do
         success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 8] GLFW.Window
         if not success then throw $ SomeException GLFWWindowOpenException else (initGL >> initShaders)
     _ -> unit
+runLogos Uniform = do
+  st <- runStackState get
+  case st of
+    StackSymbol name:st' -> do
+      i <- liftIO $ do
+        Just p <- SV.get GL.currentProgram
+        SV.get (GL.uniformLocation p name)
+      runStackState $ put (StackExtra (Opaque (Uni i)):st')
+    _ -> unit
+runLogos DefUniform = do
+  st <- runStackState get
+  case st of
+    x:StackExtra (Opaque (Uni u)):st' -> do
+      runStackState $ put st'
+      case x of
+        StackVect (V4 x y z w) -> liftIO $ GL.uniform u $= GL.Vector4 x y z w
+        StackMat (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) -> liftIO $ do
+          m <- GL.newMatrix GL.ColumnMajor [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p]
+          GL.uniform u $= (m :: GL.GLmatrix GL.GLfloat)
+        _ -> unit
+    _ -> unit
+      
 runLogos Texture = do
   st <- runStackState get
   case st of
@@ -211,7 +250,7 @@ runLogos Texture = do
             GL.generateMipmap' GL.Texture2D
             Just prog <- SV.get GL.currentProgram
             ul <- GL.uniformLocation prog name
-            GL.uniform (debug ul) $= GL.TextureUnit texi
+            GL.uniform ul $= GL.TextureUnit texi
             return $ Just tex
           Left err -> do
             putStrLn err
@@ -240,14 +279,16 @@ runLogos BuildMesh = do
               GL.bindBuffer GL.ArrayBuffer $= Just vb
               V.unsafeWith vs $ \p -> do
                 GL.bufferData GL.ArrayBuffer $= (fromIntegral (V.length vs * sizeOf (vs V.! 0)),p,GL.StaticDraw)
-
+        Just prog <- SV.get GL.currentProgram
         vecs <- sequence (zap [let run = case n of
                                      1 -> newVec (\(V4 x _ _ _) -> V1 x)
                                      2 -> newVec (\(V4 x y _ _) -> V2 x y)
                                      3 -> newVec (\(V4 x y z _) -> V3 x y z)
                                      4 -> newVec id
                                      _ -> error $ "Invalid attribute size "+show n+" (must be between 1 and 4)"
-                               in \l -> run l <&> (s,n,)
+                               in \l -> do
+                                  loc <- SV.get (GL.attribLocation prog s)
+                                  run l <&> (loc,n,)
                               | StackList [StackSymbol s,StackInt n] <- attribs] fullVertices)
         return (Mesh mode (length (head fullVertices)) vecs)
       runStackState $ put (StackExtra (Opaque m):st')
@@ -259,18 +300,10 @@ runLogos Draw = do
     StackExtra (Opaque (Mesh mode size vecs)):st' -> do
       runStackState $ put st'
       liftIO $ do
-        Just prog <- SV.get GL.currentProgram
-        m <- GL.newMatrix GL.ColumnMajor [1,0,0,0 , 0,1,0,0 , 0,0,1,0 , 0,0,0,1]
-        vpu <- GL.uniformLocation prog "viewMat"
-        GL.uniform vpu $= (m :: GL.GLmatrix GL.GLfloat)
-        SV.get (GL.activeUniforms prog) >>= print
-
-        let withAttrib (name,sz,vec) go = do
-              l <- SV.get (GL.attribLocation prog name)
-              between (GL.vertexAttribArray l $= GL.Enabled) (GL.vertexAttribArray l $= GL.Disabled) $ do
-                GL.bindBuffer GL.ArrayBuffer $= Just vec
-                GL.vertexAttribPointer l $= (GL.ToFloat, GL.VertexArrayDescriptor (fromIntegral sz) GL.Float 0 nullPtr)
-                go
+        let withAttrib (l,sz,vec) go = between (GL.vertexAttribArray l $= GL.Enabled) (GL.vertexAttribArray l $= GL.Disabled) $ do
+              GL.bindBuffer GL.ArrayBuffer $= Just vec
+              GL.vertexAttribPointer l $= (GL.ToFloat, GL.VertexArrayDescriptor (fromIntegral sz) GL.Float 0 nullPtr)
+              go
 
         GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
         
@@ -316,19 +349,32 @@ initGL = do
   GL.texture GL.Texture2D $= GL.Enabled
   GL.textureFunction      $= GL.Blend
 
-main = do
-  putStrLn "Initializing graphical environment..."
-  between (void GLFW.initialize) GLFW.terminate $ do
-    args <- getArgs
-    prelude <- fold <$> for args readString
-    text <- readHString stdin
-    let go (w:ws) = do
-          execSymbol runLogos (\_ -> unit) w
-          r <- runExtraState $ getl running
-          if r then go ws else unit
-        go [] = unit
-    (go (stringWords (prelude + " " + text))^..stateT.concatT) (defaultState dict (LogosState True))
-        
+main = between (void GLFW.initialize) GLFW.terminate $ do
+  isTerm <- hIsTerminalDevice stdin
+  args <- getArgs
+  prelude <- fold <$> for args readString
+  symList <- newIORef (keys (c'map dict))
+  let getAll = unsafeInterleaveIO $ do
+        ln <- readline "Logos> " 
+        lns <- getAll
+        case ln of
+          Just x -> do addHistory x; return $ x + " .\n" + lns
+          Nothing -> putStr "\n" >> return ""
+  setCompletionEntryFunction $ Just $ \line -> do
+    sl <- readIORef symList
+    case reverse (words (line+"?")) of
+      "?":_ -> return sl
+      wp:_ -> let wps = length wp-1; wp' = init wp in return [w | w <- sl, take wps w==wp']
+      _ -> return []
+  text <- if isTerm then getAll else readHString stdin
+
+  let go (w:ws) = do
+        execSymbol runLogos (\_ -> unit) w
+        runDictState get >>= \d -> liftIO (writeIORef symList (keys d))
+        r <- runExtraState $ getl running
+        if r then go ws else unit
+      go [] = unit
+  (go (stringWords (prelude + " " + text))^..stateT.concatT) (defaultState dict (LogosState True))
 
 instance Storable (Vec Zero a) where
   sizeOf _ = zero
