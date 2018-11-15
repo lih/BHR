@@ -224,9 +224,10 @@ runLogos Texture = do
 
 runLogos BuildMesh = do
   st <- runStackState get
-  case debug st of
+  case st of
     StackSymbol s:StackList attribs:StackList props:st' -> do
       m <- liftIO $ do
+        putStrLn "Meshing"
         let mode = case s of
               "lines" -> GL.Lines
               "triangles" -> GL.Triangles
