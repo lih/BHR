@@ -64,6 +64,7 @@ running :: Lens' LogosState Bool
 running = lens _running (\x y -> x { _running = y })
 
 dict = fromAList $
+  (".",StackProg []):
   map (second StackBuiltin)
   [("wait"        , Builtin_Extra Wait  ),
    ("quit"        , Builtin_Extra Quit  ),
