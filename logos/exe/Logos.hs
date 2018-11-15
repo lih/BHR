@@ -224,7 +224,7 @@ runLogos Texture = do
 
 runLogos BuildMesh = do
   st <- runStackState get
-  case st of
+  case debug st of
     StackSymbol s:StackList attribs:StackList props:st' -> do
       m <- liftIO $ do
         let mode = case s of
