@@ -82,6 +82,7 @@ dict = fromAList $
    ("mesh"        , Builtin_Extra BuildMesh),
    ("draw"        , Builtin_Extra Draw),
    ("uniform"     , Builtin_Extra Uniform),
+   ("defuniform"     , Builtin_Extra DefUniform),
     
    ("def"        , Builtin_Def         ),
    ("$"          , Builtin_DeRef       ),
