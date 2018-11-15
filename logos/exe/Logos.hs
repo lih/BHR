@@ -2,7 +2,7 @@
 module Main where
 
 import Algebra.Monad.Concatenative
-import Codec.Picture
+import Codec.Picture hiding (Uniform)
 import Console.Readline (readline,addHistory,setCompletionEntryFunction)
 import Control.Concurrent (threadDelay)
 import Control.Exception (SomeException(..),Exception)
@@ -38,7 +38,7 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
   
-data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw
+data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw | Uniform
                   | VCons | MCons | Rotation | Translation | Skew | Ejection | MCompose | MAdd
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
@@ -50,12 +50,11 @@ pattern StackFloat f <- (toFloat -> Just f)
 pattern StackVect v = StackExtra (Opaque (V v))
 pattern StackMat m = StackExtra (Opaque (M m))
 
-
-
 data LogosData = F GL.GLfloat
                | V (V4 GL.GLfloat)
                | M (Mat Four Four GL.GLfloat)
                | Mesh GL.PrimitiveMode Int [(String,Int,GL.BufferObject)]
+               | Uni GL.UniformLocation
                | TI GL.TextureObject
                deriving Show
 data LogosState = LogosState {
@@ -82,7 +81,8 @@ dict = fromAList $
    ("texture"     , Builtin_Extra Texture),
    ("mesh"        , Builtin_Extra BuildMesh),
    ("draw"        , Builtin_Extra Draw),
-                   
+   ("uniform"     , Builtin_Extra Uniform),
+    
    ("def"        , Builtin_Def         ),
    ("$"          , Builtin_DeRef       ),
    ("lookup"     , Builtin_Lookup      ),
@@ -196,6 +196,15 @@ runLogos OpenWindow = do
  
         success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 8] GLFW.Window
         if not success then throw $ SomeException GLFWWindowOpenException else (initGL >> initShaders)
+    _ -> unit
+runLogos Uniform = do
+  st <- runStackState get
+  case st of
+    StackSymbol name:st' -> do
+      i <- liftIO $ do
+        Just p <- SV.get GL.currentProgram
+        SV.get (GL.uniformLocation p name)
+      runStackState $ put (StackExtra (Opaque (Uni i)):st')
     _ -> unit
 runLogos Texture = do
   st <- runStackState get
