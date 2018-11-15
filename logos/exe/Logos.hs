@@ -38,7 +38,7 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
   
-data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw | Uniform
+data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw | Uniform | DefUniform
                   | VCons | MCons | Rotation | Translation | Skew | Ejection | MCompose | MAdd
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
@@ -206,6 +206,19 @@ runLogos Uniform = do
         SV.get (GL.uniformLocation p name)
       runStackState $ put (StackExtra (Opaque (Uni i)):st')
     _ -> unit
+runLogos DefUniform = do
+  st <- runStackState get
+  case st of
+    x:StackExtra (Opaque (Uni u)):st' -> do
+      runStackState $ put st'
+      case x of
+        StackVect (V4 x y z w) -> liftIO $ GL.uniform u $= GL.Vector4 x y z w
+        StackMat (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) -> liftIO $ do
+          m <- GL.newMatrix GL.RowMajor [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p]
+          GL.uniform u $= (m :: GL.GLmatrix GL.GLfloat)
+        _ -> unit
+    _ -> unit
+      
 runLogos Texture = do
   st <- runStackState get
   case st of
