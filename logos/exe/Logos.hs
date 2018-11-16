@@ -215,6 +215,7 @@ runLogos OpenWindow = do
         if not success then throw $ SomeException GLFWWindowOpenException else do
           initGL >> initShaders
           GLFW.keyCallback $= \k ev -> do
+            putStrLn $ "Key : "+show (k,ev)
             writeChan wc $ "'"+show k
             writeChan wc $ "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
             writeChan wc $ "onkey"
