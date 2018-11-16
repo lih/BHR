@@ -24,6 +24,10 @@ import qualified Data.Vector.Storable as V
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 
+setUniformMat u (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) = do
+  m <- GL.newMatrix GL.ColumnMajor [a,e,i,m, b,f,j,n, c,g,k,o, d,h,l,p]
+  GL.uniform u $= (m :: GL.GLmatrix GL.GLfloat)
+
 stringWords :: String -> [String]
 stringWords = map fromString . fromBlank
   where fromBlank (c:t) | c `elem` [' ', '\t', '\r', '\n'] = fromBlank t
@@ -40,7 +44,7 @@ stringWords = map fromString . fromBlank
         fromWChar k "" = [k ""]
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw | Uniform | DefUniform
-                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | MAdd | Recip
+                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | Transpose | MAdd | Recip
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
 toFloat (StackSymbol s) = matches Just readable s
@@ -79,6 +83,7 @@ dict = fromAList $
    ("translation" , Builtin_Extra Translation),
    ("**"          , Builtin_Extra MCompose),
    ("++"          , Builtin_Extra MAdd),
+   ("transpose"   , Builtin_Extra Transpose),
    ("skew"        , Builtin_Extra Skew),
    ("ejection"    , Builtin_Extra Ejection),
    ("print"       , Builtin_Extra Print),
@@ -147,7 +152,7 @@ runLogos MCons = runStackState $ modify $ \case
   StackVect w:StackVect z:StackVect y:StackVect x:st -> StackMat (V4 x y z w):st
   st -> st
 runLogos Rotation = runStackState $ modify $ \case
-  StackVect u:StackVect v:st -> StackMat (rotation v u):st
+  StackVect u:StackVect v:st -> StackMat (rotation u v):st
   st -> st
 runLogos Translation = runStackState $ modify $ \case
   StackVect (V4 x y z _):st -> StackMat (translation (V3 x y z)):st
@@ -172,6 +177,10 @@ runLogos MCompose = runStackState $ modify $ \case
   StackVect v:StackFloat f:st -> StackVect (pure f * v):st
   StackFloat f:StackMat m:st -> StackMat (map2 (f*) m):st
   StackMat m:StackFloat f:st -> StackMat (map2 (f*) m):st
+  StackFloat f:StackFloat f':st -> StackExtra (Opaque $ F $ f*f'):st
+  st -> st
+runLogos Transpose = runStackState $ modify $ \case
+  StackMat m:st -> StackMat (transpose m):st
   st -> st
 runLogos Norm = runStackState $ modify $ \case
   StackVect v:st -> StackExtra (Opaque (F (sqrt $ scalProd v v))):st
@@ -190,6 +199,7 @@ runLogos Format = do
           format _ st' = (st',"")
           showV (StackExtra (Opaque x)) = show x
           showV (StackList l) = "["+intercalate "," (map showV l)+"]"
+          showV (StackSymbol s) = s
           showV x = show x
           (st'',msg) = format str st'
       runStackState $ put (StackSymbol msg:st'')
@@ -238,9 +248,7 @@ runLogos DefUniform = do
       runStackState $ put st'
       case x of
         StackVect (V4 x y z w) -> liftIO $ GL.uniform u $= GL.Vector4 x y z w
-        StackMat (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) -> liftIO $ do
-          m <- GL.newMatrix GL.ColumnMajor [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p]
-          GL.uniform u $= (m :: GL.GLmatrix GL.GLfloat)
+        StackMat m -> liftIO $ setUniformMat u m
         _ -> unit
     _ -> unit
       
@@ -309,21 +317,23 @@ runLogos BuildMesh = do
       
 runLogos Draw = do
   st <- runStackState get
-  case st of
-    StackExtra (Opaque (Mesh mode size vecs)):st' -> do
-      runStackState $ put st'
-      liftIO $ do
-        let withAttrib (l,sz,vec) go = between (GL.vertexAttribArray l $= GL.Enabled) (GL.vertexAttribArray l $= GL.Disabled) $ do
-              GL.bindBuffer GL.ArrayBuffer $= Just vec
-              GL.vertexAttribPointer l $= (GL.ToFloat, GL.VertexArrayDescriptor (fromIntegral sz) GL.Float 0 nullPtr)
-              go
+  let withAttrib (l,sz,vec) go = between (GL.vertexAttribArray l $= GL.Enabled) (GL.vertexAttribArray l $= GL.Disabled) $ do
+        GL.bindBuffer GL.ArrayBuffer $= Just vec
+        GL.vertexAttribPointer l $= (GL.ToFloat, GL.VertexArrayDescriptor (fromIntegral sz) GL.Float 0 nullPtr)
+        go
+      drawElt (StackExtra (Opaque (Mesh mode size vecs))) = drawMesh mode size vecs
+      drawElt (StackList [StackExtra (Opaque (Uni u)), StackMat m]) = setUniformMat u m
+      drawElt (StackList l) = for_ l drawElt
+      drawElt _ = unit
 
-        GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
+      drawMesh mode size vecs = composing withAttrib vecs $ do
+        GL.drawArrays mode 0 (fromIntegral size)
+      doDraw go = do
+        runStackState (modify $ drop 1)
+        liftIO $ between (GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]) GLFW.swapBuffers go
         
-        composing withAttrib vecs $ do
-          GL.drawArrays mode 0 (fromIntegral size)
-
-        GLFW.swapBuffers
+  case st of
+    x:_ -> doDraw (drawElt x)
     _ -> unit
 
 data GLSLCompileException = GLSLShaderCompileError String | GLSLProgramLinkError String
