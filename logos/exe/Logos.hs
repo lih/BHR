@@ -4,7 +4,7 @@ module Main where
 import Algebra.Monad.Concatenative
 import Codec.Picture hiding (Uniform)
 import Console.Readline (readline,addHistory,setCompletionEntryFunction)
-import Control.Concurrent (threadDelay)
+import Control.Concurrent (threadDelay, forkIO, killThread)
 import Control.Exception (SomeException(..),Exception)
 import Data.IORef
 import Data.Matricial
@@ -17,6 +17,7 @@ import Language.Parser
 import System.Environment (getArgs)
 import System.IO (hIsTerminalDevice)
 import System.IO.Unsafe (unsafeInterleaveIO)
+import Control.Concurrent.Chan
 
 import qualified Data.StateVar as SV
 import qualified Data.Vector.Storable as V
@@ -58,10 +59,13 @@ data LogosData = F GL.GLfloat
                | TI GL.TextureObject
                deriving Show
 data LogosState = LogosState {
-  _running :: Bool
+  _running :: Bool,
+  _wordChannel :: Chan String
   }
 running :: Lens' LogosState Bool
 running = lens _running (\x y -> x { _running = y })
+wordChannel :: Lens' LogosState (Chan String)
+wordChannel = lens _wordChannel (\x y -> x { _wordChannel = y })
 
 dict = fromAList $
   (".",StackProg []):
@@ -200,6 +204,7 @@ runLogos OpenWindow = do
   case st of
     StackInt h:StackInt w:st' -> do
       runStackState $ put st'
+      wc <- runExtraState $ getl wordChannel
       void $ liftIO $ do
         GLFW.openWindowHint GLFW.FSAASamples 4
         GLFW.openWindowHint GLFW.OpenGLVersionMajor 3
@@ -207,7 +212,15 @@ runLogos OpenWindow = do
         GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
  
         success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 8] GLFW.Window
-        if not success then throw $ SomeException GLFWWindowOpenException else (initGL >> initShaders)
+        if not success then throw $ SomeException GLFWWindowOpenException else do
+          initGL >> initShaders
+          forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
+          GLFW.keyCallback $= \k ev -> do
+            putStrLn $ "Key : "+show (k,ev)
+            writeChan wc $ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
+            writeChan wc $ "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
+            writeChan wc $ "onkey"
+
     _ -> unit
 runLogos Uniform = do
   st <- runStackState get
@@ -354,27 +367,33 @@ main = between (void GLFW.initialize) GLFW.terminate $ do
   args <- getArgs
   prelude <- fold <$> for args readString
   symList <- newIORef (keys (c'map dict))
-  let getAll = unsafeInterleaveIO $ do
-        ln <- readline "Logos> " 
-        lns <- getAll
-        case ln of
-          Just x -> do addHistory x; return $ x + " .\n" + lns
-          Nothing -> putStr "\n" >> return ""
-  setCompletionEntryFunction $ Just $ \line -> do
-    sl <- readIORef symList
-    case reverse (words (line+"?")) of
-      "?":_ -> return sl
-      wp:_ -> let wps = length wp-1; wp' = init wp in return [w | w <- sl, take wps w==wp']
-      _ -> return []
-  text <- if isTerm then getAll else readHString stdin
-
-  let go (w:ws) = do
+  wordChan <- newChan
+  
+  tid <- forkIO $ do
+    let getAll = unsafeInterleaveIO $ do
+          ln <- readline "Logos> " 
+          lns <- getAll
+          case ln of
+            Just x -> do addHistory x; return $ x + " .\n" + lns
+            Nothing -> putStr "\n" >> return ""
+    setCompletionEntryFunction $ Just $ \line -> do
+      sl <- readIORef symList
+      case reverse (words (line+"?")) of
+        "?":_ -> return sl
+        wp:_ -> let wps = length wp-1; wp' = init wp in return [w | w <- sl, take wps w==wp']
+        _ -> return []
+  
+    text <- if isTerm then getAll else unsafeInterleaveIO $ readHString stdin
+    for_ (stringWords (prelude + " " + text)) (writeChan wordChan)
+    
+  let go = do
+        w <- liftIO $ readChan wordChan
         execSymbol runLogos (\_ -> unit) w
         runDictState get >>= \d -> liftIO (writeIORef symList (keys d))
         r <- runExtraState $ getl running
-        if r then go ws else unit
-      go [] = unit
-  (go (stringWords (prelude + " " + text))^..stateT.concatT) (defaultState dict (LogosState True))
+        if r then go else unit
+  (go^..stateT.concatT) (defaultState dict (LogosState True wordChan))
+  killThread tid
 
 instance Storable (Vec Zero a) where
   sizeOf _ = zero
