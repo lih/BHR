@@ -64,11 +64,11 @@ data LogosData = F GL.GLfloat
                deriving Show
 data LogosState = LogosState {
   _running :: Bool,
-  _wordChannel :: Chan String
+  _wordChannel :: Chan [String]
   }
 running :: Lens' LogosState Bool
 running = lens _running (\x y -> x { _running = y })
-wordChannel :: Lens' LogosState (Chan String)
+wordChannel :: Lens' LogosState (Chan [String])
 wordChannel = lens _wordChannel (\x y -> x { _wordChannel = y })
 
 dict = fromAList $
@@ -227,9 +227,9 @@ runLogos OpenWindow = do
           forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
           GLFW.keyCallback $= \k ev -> do
             putStrLn $ "Key : "+show (k,ev)
-            writeChan wc $ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
-            writeChan wc $ "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
-            writeChan wc $ "onkey"
+            writeChan wc [ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
+                         , "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
+                         , "onkey"]
 
     _ -> unit
 runLogos Uniform = do
@@ -394,14 +394,14 @@ main = between (void GLFW.initialize) GLFW.terminate $ do
         _ -> return []
   
     text <- if isTerm then getAll else unsafeInterleaveIO $ readHString stdin
-    for_ (stringWords (prelude + " " + text)) (writeChan wordChan)
+    for_ (stringWords (prelude + " " + text)) (writeChan wordChan . pure)
     
-  let go = do
-        w <- liftIO $ readChan wordChan
-        execSymbol runLogos (\_ -> unit) w
+  let go = while $ do
+        ws <- liftIO (readChan wordChan)
+        for_ ws $ execSymbol runLogos (\_ -> unit)
         runDictState get >>= \d -> liftIO (writeIORef symList (keys d))
-        r <- runExtraState $ getl running
-        if r then go else unit
+        runExtraState $ getl running
+        
   (go^..stateT.concatT) (defaultState dict (LogosState True wordChan))
   killThread tid
 
