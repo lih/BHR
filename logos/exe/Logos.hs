@@ -231,6 +231,7 @@ runLogos OpenWindow = do
         if not success then throw $ SomeException GLFWWindowOpenException else do
           initGL >> initShaders
           forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
+          GLFW.windowRefreshCallback $= writeChan wc ["refresh"]
           GLFW.windowSizeCallback $= \(GL.Size w h) -> do
             let m = max w h
             GL.viewport $= (GL.Position ((w-m)`div`2) ((h-m)`div`2),GL.Size m m)
@@ -238,7 +239,7 @@ runLogos OpenWindow = do
             putStrLn $ "Key : "+show (k,ev)
             writeChan wc [ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
                          , "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
-                         , "onkey"]
+                         , "key"]
 
     _ -> unit
 runLogos Uniform = do
