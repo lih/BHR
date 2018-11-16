@@ -165,7 +165,7 @@ runLogos MAdd = runStackState $ modify $ \case
   StackFloat f:StackFloat f':st -> StackExtra (Opaque $ F $ f+f'):st
   st -> st
 runLogos MCompose = runStackState $ modify $ \case
-  StackMat m':StackMat m:st -> StackMat (m$*m'):st
+  StackMat m':StackMat m:st -> StackMat (m'$*m):st
   StackMat m:StackVect v:st -> StackVect (v & from scalar %~ ($*m)):st
   StackVect v:StackMat m:st -> StackVect (v & from scalar %~ ($*m)):st
   StackVect v:StackVect v':st -> StackExtra (Opaque $ F $ scalProd v v'):st
