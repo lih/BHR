@@ -214,6 +214,7 @@ runLogos OpenWindow = do
         success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 8] GLFW.Window
         if not success then throw $ SomeException GLFWWindowOpenException else do
           initGL >> initShaders
+          forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
           GLFW.keyCallback $= \k ev -> do
             putStrLn $ "Key : "+show (k,ev)
             writeChan wc $ "'"+show k
