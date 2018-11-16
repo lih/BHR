@@ -23,6 +23,12 @@ import qualified Data.StateVar as SV
 import qualified Data.Vector.Storable as V
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
+import qualified Prelude
+
+instance Semigroup GL.GLsizei where (+) = (Prelude.+)
+instance Monoid GL.GLsizei where zero = 0
+instance Disjonctive GL.GLsizei where negate x = Prelude.negate x
+
 
 setUniformMat u (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) = do
   m <- GL.newMatrix GL.ColumnMajor [a,e,i,m, b,f,j,n, c,g,k,o, d,h,l,p]
@@ -44,7 +50,7 @@ stringWords = map fromString . fromBlank
         fromWChar k "" = [k ""]
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw | Uniform | DefUniform
-                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | Transpose | MAdd | Recip
+                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | Transpose | MAdd | Recip | Delay
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
 toFloat (StackSymbol s) = matches Just readable s
@@ -95,6 +101,7 @@ dict = fromAList $
    ("defuniform"     , Builtin_Extra DefUniform),
    ("norm"        , Builtin_Extra Norm),
    ("recip"        , Builtin_Extra Recip),
+   ("delay"        , Builtin_Extra Delay),
     
    ("def"        , Builtin_Def         ),
    ("$"          , Builtin_DeRef       ),
@@ -144,6 +151,13 @@ runLogos Wait = do
       liftIO $ threadDelay n
       runStackState $ put st'
     _ -> unit
+runLogos Delay = do
+  wc <- runExtraState $ getl wordChannel
+  st <- runStackState get
+  case st of
+    StackInt ms:StackProg p:st' -> runStackState (put st') >> liftIO (void $ forkIO $ threadDelay ms >> writeChan wc p)
+    _ -> unit
+  
 runLogos Quit = runExtraState $ do running =- False
 runLogos VCons = runStackState $ modify $ \case
   StackFloat w:StackFloat z:StackFloat y:StackFloat x:st -> StackVect (V4 x y z w):st
@@ -170,8 +184,8 @@ runLogos MAdd = runStackState $ modify $ \case
   st -> st
 runLogos MCompose = runStackState $ modify $ \case
   StackMat m':StackMat m:st -> StackMat (m'$*m):st
-  StackMat m:StackVect v:st -> StackVect (v & from scalar %~ ($*m)):st
-  StackVect v:StackMat m:st -> StackVect (v & from scalar %~ ($*m)):st
+  StackMat m:StackVect v:st -> StackVect (v & from scalar %~ ($*transpose m)):st
+  StackVect v:StackMat m:st -> StackVect (v & from scalar %~ ($*transpose m)):st
   StackVect v:StackVect v':st -> StackExtra (Opaque $ F $ scalProd v v'):st
   StackFloat f:StackVect v:st -> StackVect (pure f * v):st
   StackVect v:StackFloat f:st -> StackVect (pure f * v):st
@@ -225,11 +239,16 @@ runLogos OpenWindow = do
         if not success then throw $ SomeException GLFWWindowOpenException else do
           initGL >> initShaders
           forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
+          GLFW.swapInterval $= 1
+          GLFW.windowRefreshCallback $= writeChan wc ["refresh"]
+          GLFW.windowSizeCallback $= \(GL.Size w h) -> do
+            let m = max w h
+            GL.viewport $= (GL.Position ((w-m)`div`2) ((h-m)`div`2),GL.Size m m)
+            writeChan wc [ show (fromIntegral (min w h) / fromIntegral m :: Float) , "resize" ]
           GLFW.keyCallback $= \k ev -> do
-            putStrLn $ "Key : "+show (k,ev)
             writeChan wc [ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
                          , "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
-                         , "onkey"]
+                         , "key" ]
 
     _ -> unit
 runLogos Uniform = do
@@ -248,7 +267,7 @@ runLogos DefUniform = do
       runStackState $ put st'
       case x of
         StackVect (V4 x y z w) -> liftIO $ GL.uniform u $= GL.Vector4 x y z w
-        StackMat m -> liftIO $ setUniformMat u m
+        StackMat m             -> liftIO $ setUniformMat u m
         _ -> unit
     _ -> unit
       
