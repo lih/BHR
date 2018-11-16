@@ -24,6 +24,10 @@ import qualified Data.Vector.Storable as V
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 
+setUniformMat u (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) = do
+  m <- GL.newMatrix GL.ColumnMajor [a,e,i,m, b,f,j,n, c,g,k,o, d,h,l,p]
+  GL.uniform u $= (m :: GL.GLmatrix GL.GLfloat)
+
 stringWords :: String -> [String]
 stringWords = map fromString . fromBlank
   where fromBlank (c:t) | c `elem` [' ', '\t', '\r', '\n'] = fromBlank t
@@ -243,9 +247,7 @@ runLogos DefUniform = do
       runStackState $ put st'
       case x of
         StackVect (V4 x y z w) -> liftIO $ GL.uniform u $= GL.Vector4 x y z w
-        StackMat (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) -> liftIO $ do
-          m <- GL.newMatrix GL.ColumnMajor [a,e,i,m, b,f,j,n, c,g,k,o, d,h,l,p]
-          GL.uniform u $= (m :: GL.GLmatrix GL.GLfloat)
+        StackMat m -> liftIO $ setUniformMat u m
         _ -> unit
     _ -> unit
       
@@ -318,6 +320,11 @@ runLogos Draw = do
         GL.bindBuffer GL.ArrayBuffer $= Just vec
         GL.vertexAttribPointer l $= (GL.ToFloat, GL.VertexArrayDescriptor (fromIntegral sz) GL.Float 0 nullPtr)
         go
+      drawElt (StackExtra (Opaque (Mesh mode size vecs))) = drawMesh mode size vecs
+      drawElt (StackList [StackExtra (Opaque (Uni u)), StackMat m]) = setUniformMat u m
+      drawElt (StackList l) = for_ l drawElt
+      drawElt _ = unit
+
       drawMesh mode size vecs = composing withAttrib vecs $ do
         GL.drawArrays mode 0 (fromIntegral size)
       doDraw go = do
@@ -325,7 +332,7 @@ runLogos Draw = do
         liftIO $ between (GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]) GLFW.swapBuffers go
         
   case st of
-    StackExtra (Opaque (Mesh mode size vecs)):st' -> doDraw (drawMesh mode size vecs)
+    x:_ -> doDraw (drawElt x)
     _ -> unit
 
 data GLSLCompileException = GLSLShaderCompileError String | GLSLProgramLinkError String
