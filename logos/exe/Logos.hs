@@ -39,7 +39,7 @@ stringWords = map fromString . fromBlank
         fromWChar k "" = [k ""]
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw | Uniform | DefUniform
-                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | MAdd
+                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | MAdd | Recip
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
 toFloat (StackSymbol s) = matches Just readable s
@@ -85,6 +85,7 @@ dict = fromAList $
    ("uniform"     , Builtin_Extra Uniform),
    ("defuniform"     , Builtin_Extra DefUniform),
    ("norm"        , Builtin_Extra Norm),
+   ("recip"        , Builtin_Extra Recip),
     
    ("def"        , Builtin_Def         ),
    ("$"          , Builtin_DeRef       ),
@@ -171,6 +172,9 @@ runLogos MCompose = runStackState $ modify $ \case
 runLogos Norm = runStackState $ modify $ \case
   StackVect v:st -> StackExtra (Opaque (F (sqrt $ scalProd v v))):st
   StackFloat v:st -> StackExtra (Opaque (F (abs v))):st
+  st -> st
+runLogos Recip = runStackState $ modify $ \case
+  StackFloat f:st -> StackExtra (Opaque $ F $ recip f):st
   st -> st
   
 runLogos Format = do
