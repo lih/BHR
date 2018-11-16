@@ -233,7 +233,7 @@ runLogos OpenWindow = do
           forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
           GLFW.windowRefreshCallback $= writeChan wc ["refresh"]
           GLFW.windowSizeCallback $= \(GL.Size w h) -> do
-            let m = max w h
+            let m = min w h
             GL.viewport $= (GL.Position ((w-m)`div`2) ((h-m)`div`2),GL.Size m m)
           GLFW.keyCallback $= \k ev -> do
             putStrLn $ "Key : "+show (k,ev)
