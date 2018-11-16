@@ -217,7 +217,7 @@ runLogos OpenWindow = do
           forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
           GLFW.keyCallback $= \k ev -> do
             putStrLn $ "Key : "+show (k,ev)
-            writeChan wc $ "'"+show k
+            writeChan wc $ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
             writeChan wc $ "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
             writeChan wc $ "onkey"
 
