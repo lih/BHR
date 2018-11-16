@@ -236,7 +236,6 @@ runLogos OpenWindow = do
             let m = min w h
             GL.viewport $= (GL.Position ((w-m)`div`2) ((h-m)`div`2),GL.Size m m)
           GLFW.keyCallback $= \k ev -> do
-            putStrLn $ "Key : "+show (k,ev)
             writeChan wc [ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
                          , "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
                          , "key"]
