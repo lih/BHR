@@ -314,21 +314,18 @@ runLogos BuildMesh = do
       
 runLogos Draw = do
   st <- runStackState get
-  case st of
-    StackExtra (Opaque (Mesh mode size vecs)):st' -> do
-      runStackState $ put st'
-      liftIO $ do
-        let withAttrib (l,sz,vec) go = between (GL.vertexAttribArray l $= GL.Enabled) (GL.vertexAttribArray l $= GL.Disabled) $ do
-              GL.bindBuffer GL.ArrayBuffer $= Just vec
-              GL.vertexAttribPointer l $= (GL.ToFloat, GL.VertexArrayDescriptor (fromIntegral sz) GL.Float 0 nullPtr)
-              go
-
-        GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]
+  let withAttrib (l,sz,vec) go = between (GL.vertexAttribArray l $= GL.Enabled) (GL.vertexAttribArray l $= GL.Disabled) $ do
+        GL.bindBuffer GL.ArrayBuffer $= Just vec
+        GL.vertexAttribPointer l $= (GL.ToFloat, GL.VertexArrayDescriptor (fromIntegral sz) GL.Float 0 nullPtr)
+        go
+      drawMesh mode size vecs = composing withAttrib vecs $ do
+        GL.drawArrays mode 0 (fromIntegral size)
+      doDraw go = do
+        runStackState (modify $ drop 1)
+        liftIO $ between (GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]) GLFW.swapBuffers go
         
-        composing withAttrib vecs $ do
-          GL.drawArrays mode 0 (fromIntegral size)
-
-        GLFW.swapBuffers
+  case st of
+    StackExtra (Opaque (Mesh mode size vecs)):st' -> doDraw (drawMesh mode size vecs)
     _ -> unit
 
 data GLSLCompileException = GLSLShaderCompileError String | GLSLProgramLinkError String
