@@ -356,28 +356,35 @@ main = between (void GLFW.initialize) GLFW.terminate $ do
   prelude <- fold <$> for args readString
   symList <- newIORef (keys (c'map dict))
   wordChan <- newChan
-  let getAll = unsafeInterleaveIO $ do
-        ln <- readline "Logos> " 
-        lns <- getAll
-        case ln of
-          Just x -> do addHistory x; return $ x + " .\n" + lns
-          Nothing -> putStr "\n" >> return ""
-  setCompletionEntryFunction $ Just $ \line -> do
-    sl <- readIORef symList
-    case reverse (words (line+"?")) of
-      "?":_ -> return sl
-      wp:_ -> let wps = length wp-1; wp' = init wp in return [w | w <- sl, take wps w==wp']
-      _ -> return []
   
+  tid <- forkIO $ do
+    let getAll = unsafeInterleaveIO $ do
+          ln <- readline "Logos> " 
+          lns <- getAll
+          case ln of
+            Just x -> do addHistory x; return $ x + " .\n" + lns
+            Nothing -> putStr "\n" >> return ""
+    setCompletionEntryFunction $ Just $ \line -> do
+      sl <- readIORef symList
+      case reverse (words (line+"?")) of
+        "?":_ -> return sl
+        wp:_ -> let wps = length wp-1; wp' = init wp in return [w | w <- sl, take wps w==wp']
+        _ -> return []
+  
+    text <- if isTerm then getAll else unsafeInterleaveIO $ readHString stdin
+    for_ (stringWords (prelude + " " + text)) (writeChan wordChan)
+
+  GLFW.keyCallback $= \k ev -> do
+    writeChan wordChan $ "'"+show k
+    writeChan wordChan $ "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
+    writeChan wordChan $ "onkey"
+    
   let go = do
         w <- liftIO $ readChan wordChan
         execSymbol runLogos (\_ -> unit) w
         runDictState get >>= \d -> liftIO (writeIORef symList (keys d))
         r <- runExtraState $ getl running
         if r then go else unit
-  tid <- forkIO $ do
-    text <- if isTerm then getAll else unsafeInterleaveIO $ readHString stdin
-    for_ (stringWords (prelude + " " + text)) (writeChan wordChan)
   (go^..stateT.concatT) (defaultState dict (LogosState True))
   killThread tid
 
