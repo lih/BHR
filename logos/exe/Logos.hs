@@ -23,6 +23,12 @@ import qualified Data.StateVar as SV
 import qualified Data.Vector.Storable as V
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
+import qualified Prelude
+
+instance Semigroup GL.GLsizei where (+) = (Prelude.+)
+instance Monoid GL.GLsizei where zero = 0
+instance Disjonctive GL.GLsizei where negate x = Prelude.negate x
+
 
 setUniformMat u (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) = do
   m <- GL.newMatrix GL.ColumnMajor [a,e,i,m, b,f,j,n, c,g,k,o, d,h,l,p]
@@ -225,6 +231,9 @@ runLogos OpenWindow = do
         if not success then throw $ SomeException GLFWWindowOpenException else do
           initGL >> initShaders
           forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
+          GLFW.windowSizeCallback $= \(GL.Size w h) -> do
+            let m = max w h
+            GL.viewport $= (GL.Position ((w-m)`div`2) ((h-m)`div`2),GL.Size m m)
           GLFW.keyCallback $= \k ev -> do
             putStrLn $ "Key : "+show (k,ev)
             writeChan wc [ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
