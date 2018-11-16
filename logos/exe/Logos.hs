@@ -258,7 +258,7 @@ runLogos DefUniform = do
       runStackState $ put st'
       case x of
         StackVect (V4 x y z w) -> liftIO $ GL.uniform u $= GL.Vector4 x y z w
-        StackMat m -> liftIO $ setUniformMat u m
+        StackMat m             -> liftIO $ setUniformMat u m
         _ -> unit
     _ -> unit
       
