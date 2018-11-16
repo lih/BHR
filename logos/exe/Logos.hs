@@ -40,7 +40,7 @@ stringWords = map fromString . fromBlank
         fromWChar k "" = [k ""]
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw | Uniform | DefUniform
-                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | MAdd | Recip
+                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | Transpose | MAdd | Recip
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
 toFloat (StackSymbol s) = matches Just readable s
@@ -79,6 +79,7 @@ dict = fromAList $
    ("translation" , Builtin_Extra Translation),
    ("**"          , Builtin_Extra MCompose),
    ("++"          , Builtin_Extra MAdd),
+   ("transpose"   , Builtin_Extra Transpose),
    ("skew"        , Builtin_Extra Skew),
    ("ejection"    , Builtin_Extra Ejection),
    ("print"       , Builtin_Extra Print),
@@ -172,6 +173,9 @@ runLogos MCompose = runStackState $ modify $ \case
   StackVect v:StackFloat f:st -> StackVect (pure f * v):st
   StackFloat f:StackMat m:st -> StackMat (map2 (f*) m):st
   StackMat m:StackFloat f:st -> StackMat (map2 (f*) m):st
+  st -> st
+runLogos Transpose = runStackState $ modify $ \case
+  StackMat m:st -> StackMat (transpose m):st
   st -> st
 runLogos Norm = runStackState $ modify $ \case
   StackVect v:st -> StackExtra (Opaque (F (sqrt $ scalProd v v))):st
