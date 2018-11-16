@@ -4,7 +4,7 @@ module Main where
 import Algebra.Monad.Concatenative
 import Codec.Picture hiding (Uniform)
 import Console.Readline (readline,addHistory,setCompletionEntryFunction)
-import Control.Concurrent (threadDelay)
+import Control.Concurrent (threadDelay, forkIO)
 import Control.Exception (SomeException(..),Exception)
 import Data.IORef
 import Data.Matricial
@@ -17,6 +17,7 @@ import Language.Parser
 import System.Environment (getArgs)
 import System.IO (hIsTerminalDevice)
 import System.IO.Unsafe (unsafeInterleaveIO)
+import Control.Concurrent.Chan
 
 import qualified Data.StateVar as SV
 import qualified Data.Vector.Storable as V
@@ -354,6 +355,7 @@ main = between (void GLFW.initialize) GLFW.terminate $ do
   args <- getArgs
   prelude <- fold <$> for args readString
   symList <- newIORef (keys (c'map dict))
+  wordChan <- newChan
   let getAll = unsafeInterleaveIO $ do
         ln <- readline "Logos> " 
         lns <- getAll
@@ -368,13 +370,14 @@ main = between (void GLFW.initialize) GLFW.terminate $ do
       _ -> return []
   text <- if isTerm then getAll else readHString stdin
 
-  let go (w:ws) = do
+  let go = do
+        w <- liftIO $ readChan wordChan
         execSymbol runLogos (\_ -> unit) w
         runDictState get >>= \d -> liftIO (writeIORef symList (keys d))
         r <- runExtraState $ getl running
-        if r then go ws else unit
-      go [] = unit
-  (go (stringWords (prelude + " " + text))^..stateT.concatT) (defaultState dict (LogosState True))
+        if r then go else unit
+  _ <- forkIO $ for_ (stringWords (prelude + " " + text)) (writeChan wordChan)
+  (go^..stateT.concatT) (defaultState dict (LogosState True))
 
 instance Storable (Vec Zero a) where
   sizeOf _ = zero
