@@ -231,7 +231,7 @@ runLogos OpenWindow = do
         if not success then throw $ SomeException GLFWWindowOpenException else do
           initGL >> initShaders
           forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
-          GLFW.swapInterval $= 5
+          GLFW.swapInterval $= 1
           GLFW.windowRefreshCallback $= writeChan wc ["refresh"]
           GLFW.windowSizeCallback $= \(GL.Size w h) -> do
             let m = min w h
