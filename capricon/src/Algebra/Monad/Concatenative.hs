@@ -95,10 +95,10 @@ execBuiltin runExtra onComment = go
       (val:StackSymbol var:tl) -> do dict =~ insert var val ; stack =- tl
       _ -> return ()
     go Builtin_ListBegin = stack =~ (StackBuiltin Builtin_ListBegin:)
-    go Builtin_ListEnd = stack =~ \st -> let (h,_:t) = break (\x -> case x of
-                                                                               StackBuiltin Builtin_ListBegin -> True
-                                                                               _ -> False) st
-                                                  in StackList (reverse h):t
+    go Builtin_ListEnd = stack =~ \st -> let ex acc (StackBuiltin Builtin_ListBegin:t) = (acc,t)
+                                             ex acc (h:t) = ex (h:acc) t
+                                             ex acc [] = (acc,[])
+                                         in let (h,t) = ex [] st in StackList h:t
     go Builtin_Stack = stack =~ \x -> StackList x:x
     go Builtin_Clear = stack =- []
     go Builtin_Pick = stack =~ \st -> case st of StackInt i:StackInt n:t | i<n, x:t' <- drop i t -> x:drop (n-i-1) t'
