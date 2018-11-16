@@ -59,10 +59,13 @@ data LogosData = F GL.GLfloat
                | TI GL.TextureObject
                deriving Show
 data LogosState = LogosState {
-  _running :: Bool
+  _running :: Bool,
+  _wordChannel :: Chan String
   }
 running :: Lens' LogosState Bool
 running = lens _running (\x y -> x { _running = y })
+wordChannel :: Lens' LogosState (Chan String)
+wordChannel = lens _wordChannel (\x y -> x { _wordChannel = y })
 
 dict = fromAList $
   (".",StackProg []):
@@ -201,6 +204,7 @@ runLogos OpenWindow = do
   case st of
     StackInt h:StackInt w:st' -> do
       runStackState $ put st'
+      wc <- runExtraState $ getl wordChannel
       void $ liftIO $ do
         GLFW.openWindowHint GLFW.FSAASamples 4
         GLFW.openWindowHint GLFW.OpenGLVersionMajor 3
@@ -208,7 +212,13 @@ runLogos OpenWindow = do
         GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
  
         success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 8] GLFW.Window
-        if not success then throw $ SomeException GLFWWindowOpenException else (initGL >> initShaders)
+        if not success then throw $ SomeException GLFWWindowOpenException else do
+          initGL >> initShaders
+          GLFW.keyCallback $= \k ev -> do
+            writeChan wc $ "'"+show k
+            writeChan wc $ "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
+            writeChan wc $ "onkey"
+
     _ -> unit
 runLogos Uniform = do
   st <- runStackState get
@@ -373,11 +383,6 @@ main = between (void GLFW.initialize) GLFW.terminate $ do
   
     text <- if isTerm then getAll else unsafeInterleaveIO $ readHString stdin
     for_ (stringWords (prelude + " " + text)) (writeChan wordChan)
-
-  GLFW.keyCallback $= \k ev -> do
-    writeChan wordChan $ "'"+show k
-    writeChan wordChan $ "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
-    writeChan wordChan $ "onkey"
     
   let go = do
         w <- liftIO $ readChan wordChan
@@ -385,7 +390,7 @@ main = between (void GLFW.initialize) GLFW.terminate $ do
         runDictState get >>= \d -> liftIO (writeIORef symList (keys d))
         r <- runExtraState $ getl running
         if r then go else unit
-  (go^..stateT.concatT) (defaultState dict (LogosState True))
+  (go^..stateT.concatT) (defaultState dict (LogosState True wordChan))
   killThread tid
 
 instance Storable (Vec Zero a) where
