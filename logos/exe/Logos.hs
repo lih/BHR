@@ -148,7 +148,7 @@ runLogos MCons = runStackState $ modify $ \case
   StackVect w:StackVect z:StackVect y:StackVect x:st -> StackMat (V4 x y z w):st
   st -> st
 runLogos Rotation = runStackState $ modify $ \case
-  StackVect u:StackVect v:st -> StackMat (rotation v u):st
+  StackVect u:StackVect v:st -> StackMat (rotation u v):st
   st -> st
 runLogos Translation = runStackState $ modify $ \case
   StackVect (V4 x y z _):st -> StackMat (translation (V3 x y z)):st
