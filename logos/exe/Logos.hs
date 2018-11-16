@@ -4,7 +4,7 @@ module Main where
 import Algebra.Monad.Concatenative
 import Codec.Picture hiding (Uniform)
 import Console.Readline (readline,addHistory,setCompletionEntryFunction)
-import Control.Concurrent (threadDelay, forkIO)
+import Control.Concurrent (threadDelay, forkIO, killThread)
 import Control.Exception (SomeException(..),Exception)
 import Data.IORef
 import Data.Matricial
@@ -368,16 +368,18 @@ main = between (void GLFW.initialize) GLFW.terminate $ do
       "?":_ -> return sl
       wp:_ -> let wps = length wp-1; wp' = init wp in return [w | w <- sl, take wps w==wp']
       _ -> return []
-  text <- if isTerm then getAll else readHString stdin
-
+  
   let go = do
         w <- liftIO $ readChan wordChan
         execSymbol runLogos (\_ -> unit) w
         runDictState get >>= \d -> liftIO (writeIORef symList (keys d))
         r <- runExtraState $ getl running
         if r then go else unit
-  _ <- forkIO $ for_ (stringWords (prelude + " " + text)) (writeChan wordChan)
+  tid <- forkIO $ do
+    text <- if isTerm then getAll else unsafeInterleaveIO $ readHString stdin
+    for_ (stringWords (prelude + " " + text)) (writeChan wordChan)
   (go^..stateT.concatT) (defaultState dict (LogosState True))
+  killThread tid
 
 instance Storable (Vec Zero a) where
   sizeOf _ = zero
