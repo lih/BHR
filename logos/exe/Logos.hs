@@ -177,6 +177,7 @@ runLogos MCompose = runStackState $ modify $ \case
   StackVect v:StackFloat f:st -> StackVect (pure f * v):st
   StackFloat f:StackMat m:st -> StackMat (map2 (f*) m):st
   StackMat m:StackFloat f:st -> StackMat (map2 (f*) m):st
+  StackFloat f:StackFloat f':st -> StackExtra (Opaque $ F $ f*f'):st
   st -> st
 runLogos Transpose = runStackState $ modify $ \case
   StackMat m:st -> StackMat (transpose m):st
