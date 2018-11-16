@@ -96,7 +96,7 @@ execBuiltin runExtra onComment = go
       _ -> return ()
     go Builtin_ListBegin = stack =~ (StackBuiltin Builtin_ListBegin:)
     go Builtin_ListEnd = stack =~ \st -> let ex acc (StackBuiltin Builtin_ListBegin:t) = (acc [],t)
-                                             ex acc (h:t) = ex (acc . (h:)) t
+                                             ex acc (h:t) = ex ((h:) . acc) t
                                              ex acc [] = (acc [],[])
                                          in let (h,t) = ex (\x -> x) st in StackList h:t
     go Builtin_Stack = stack =~ \x -> StackList x:x
