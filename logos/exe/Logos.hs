@@ -234,7 +234,7 @@ runLogos OpenWindow = do
           GLFW.swapInterval $= 1
           GLFW.windowRefreshCallback $= writeChan wc ["refresh"]
           GLFW.windowSizeCallback $= \(GL.Size w h) -> do
-            let m = min w h
+            let m = max w h
             GL.viewport $= (GL.Position ((w-m)`div`2) ((h-m)`div`2),GL.Size m m)
           GLFW.keyCallback $= \k ev -> do
             writeChan wc [ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
