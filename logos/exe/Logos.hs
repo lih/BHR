@@ -240,7 +240,7 @@ runLogos OpenWindow = do
           GLFW.keyCallback $= \k ev -> do
             writeChan wc [ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
                          , "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
-                         , "key"]
+                         , "key" ]
 
     _ -> unit
 runLogos Uniform = do
