@@ -50,7 +50,7 @@ stringWords = map fromString . fromBlank
         fromWChar k "" = [k ""]
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw | Uniform | DefUniform
-                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | Transpose | MAdd | Recip
+                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | Transpose | MAdd | Recip | Fork
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
 toFloat (StackSymbol s) = matches Just readable s
@@ -101,6 +101,7 @@ dict = fromAList $
    ("defuniform"     , Builtin_Extra DefUniform),
    ("norm"        , Builtin_Extra Norm),
    ("recip"        , Builtin_Extra Recip),
+   ("fork"        , Builtin_Extra Fork),
     
    ("def"        , Builtin_Def         ),
    ("$"          , Builtin_DeRef       ),
@@ -150,6 +151,13 @@ runLogos Wait = do
       liftIO $ threadDelay n
       runStackState $ put st'
     _ -> unit
+runLogos Fork = do
+  wc <- runExtraState $ getl wordChannel
+  st <- runStackState get
+  case st of
+    StackProg p:st' -> runStackState (put st') >> liftIO (writeChan wc p)
+    _ -> unit
+  
 runLogos Quit = runExtraState $ do running =- False
 runLogos VCons = runStackState $ modify $ \case
   StackFloat w:StackFloat z:StackFloat y:StackFloat x:st -> StackVect (V4 x y z w):st
