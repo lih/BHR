@@ -236,6 +236,7 @@ runLogos OpenWindow = do
           GLFW.windowSizeCallback $= \(GL.Size w h) -> do
             let m = max w h
             GL.viewport $= (GL.Position ((w-m)`div`2) ((h-m)`div`2),GL.Size m m)
+            writeChan wc [ show (fromIntegral (min w h) / fromIntegral m :: Float) , "resize" ]
           GLFW.keyCallback $= \k ev -> do
             writeChan wc [ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
                          , "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
