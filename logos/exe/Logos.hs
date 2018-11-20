@@ -39,7 +39,7 @@ setUniformMat u (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) = do
   m <- GL.newMatrix GL.ColumnMajor [a,e,i,m, b,f,j,n, c,g,k,o, d,h,l,p]
   GL.uniform u $= (m :: GL.GLmatrix GL.GLfloat)
 
-genTexture (conv,gltype,glpformat,glpbase) file = do
+loadTexture (conv,gltype,glpformat,glpbase) file = do
   imgbytes <- readChunk file
   let img = conv <$> decodeImage imgbytes
   tex@(GL.TextureObject texi) <- GL.genObjectName
@@ -299,7 +299,7 @@ runLogos Texture = do
   case st of
     StackSymbol file:st' -> do
       runStackState (put st')
-      textureLoaded <- liftIO $ genTexture (convertRGBA8,GL.RGBA8,GL.RGBA,GL.UnsignedByte) file
+      textureLoaded <- liftIO $ loadTexture (convertRGBA8,GL.RGB8,GL.RGB,GL.UnsignedByte) file
       case textureLoaded of
         Just tex -> runStackState $ modify (StackExtra (Opaque (TI tex)):)
         Nothing -> unit
