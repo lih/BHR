@@ -301,25 +301,7 @@ runLogos Texture = do
   case st of
     StackSymbol file:StackSymbol name:st' -> do
       runStackState (put st')
-      textureLoaded <- liftIO $ do
-        imgbytes <- readChunk file
-        let img = convertRGBA8 <$> decodeImage imgbytes
-        tex@(GL.TextureObject texi) <- GL.genObjectName
-        case img of
-          Right (Image w h imgd) -> do
-            GL.activeTexture $= GL.TextureUnit texi
-            GL.textureBinding GL.Texture2D $= Just tex
-            V.unsafeWith imgd $ \imgp -> do
-              GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.RGB GL.UnsignedByte imgp)
-            GL.textureFilter GL.Texture2D $= ((GL.Linear',Nothing),GL.Linear')
-            GL.generateMipmap' GL.Texture2D
-            Just prog <- SV.get GL.currentProgram
-            ul <- GL.uniformLocation prog name
-            GL.uniform ul $= GL.TextureUnit texi
-            return $ Just tex
-          Left err -> do
-            putStrLn err
-            return Nothing
+      textureLoaded <- liftIO $ genTexture convertRGBA8 name file
       case textureLoaded of
         Just tex -> runStackState $ modify (StackExtra (Opaque (TI tex)):)
         Nothing -> unit
