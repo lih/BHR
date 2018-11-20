@@ -299,7 +299,7 @@ runLogos Texture = do
   case st of
     StackSymbol file:st' -> do
       runStackState (put st')
-      textureLoaded <- liftIO $ genTexture (convertRGBA8,GL.RGBA8,GL.RGB,GL.UnsignedByte) file
+      textureLoaded <- liftIO $ genTexture (convertRGBA8,GL.RGBA8,GL.RGBA,GL.UnsignedByte) file
       case textureLoaded of
         Just tex -> runStackState $ modify (StackExtra (Opaque (TI tex)):)
         Nothing -> unit
