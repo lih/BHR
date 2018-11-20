@@ -39,7 +39,7 @@ setUniformMat u (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) = do
   m <- GL.newMatrix GL.ColumnMajor [a,e,i,m, b,f,j,n, c,g,k,o, d,h,l,p]
   GL.uniform u $= (m :: GL.GLmatrix GL.GLfloat)
 
-genTexture conv name file = do
+genTexture (conv,gltype,glpformat,glpbase) name file = do
   imgbytes <- readChunk file
   let img = conv <$> decodeImage imgbytes
   tex@(GL.TextureObject texi) <- GL.genObjectName
@@ -48,7 +48,7 @@ genTexture conv name file = do
       GL.activeTexture $= GL.TextureUnit texi
       GL.textureBinding GL.Texture2D $= Just tex
       V.unsafeWith imgd $ \imgp -> do
-        GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.RGB GL.UnsignedByte imgp)
+        GL.texImage2D GL.Texture2D GL.NoProxy 0 gltype (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData glpformat glpbase imgp)
       GL.textureFilter GL.Texture2D $= ((GL.Linear',Nothing),GL.Linear')
       GL.generateMipmap' GL.Texture2D
       Just prog <- SV.get GL.currentProgram
@@ -301,7 +301,7 @@ runLogos Texture = do
   case st of
     StackSymbol file:StackSymbol name:st' -> do
       runStackState (put st')
-      textureLoaded <- liftIO $ genTexture convertRGBA8 name file
+      textureLoaded <- liftIO $ genTexture (convertRGBA8,GL.RGBA8,GL.RGB,GL.UnsignedByte) name file
       case textureLoaded of
         Just tex -> runStackState $ modify (StackExtra (Opaque (TI tex)):)
         Nothing -> unit
