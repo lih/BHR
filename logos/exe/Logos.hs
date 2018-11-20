@@ -71,7 +71,7 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
   
-data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw | Uniform | DefUniform
+data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture Bool | BuildMesh | Draw | Uniform | DefUniform
                   | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | Transpose | MAdd | Recip | Delay
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
@@ -116,7 +116,8 @@ dict = fromAList $
    ("ejection"    , Builtin_Extra Ejection),
    ("print"       , Builtin_Extra Print),
    ("window"      , Builtin_Extra OpenWindow),
-   ("texture"     , Builtin_Extra Texture),
+   ("image"       , Builtin_Extra (Texture False)),
+   ("texture"     , Builtin_Extra (Texture True)),
    ("mesh"        , Builtin_Extra BuildMesh),
    ("draw"        , Builtin_Extra Draw),
    ("uniform"     , Builtin_Extra Uniform),
@@ -294,12 +295,22 @@ runLogos DefUniform = do
         _ -> unit
     _ -> unit
       
-runLogos Texture = do
+runLogos (Texture False) = do
   st <- runStackState get
   case st of
     StackSymbol file:st' -> do
       runStackState (put st')
       textureLoaded <- liftIO $ loadTexture (convertRGBA8,GL.RGBA8,GL.RGBA,GL.UnsignedByte) file
+      case textureLoaded of
+        Just tex -> runStackState $ modify (StackExtra (Opaque (TI tex)):)
+        Nothing -> unit
+    _ -> unit
+runLogos (Texture True) = do
+  st <- runStackState get
+  case st of
+    StackSymbol file:st' -> do
+      runStackState (put st')
+      textureLoaded <- liftIO $ loadTexture (convertRGBF,GL.RGB32F,GL.RGB,GL.Float) file
       case textureLoaded of
         Just tex -> runStackState $ modify (StackExtra (Opaque (TI tex)):)
         Nothing -> unit
