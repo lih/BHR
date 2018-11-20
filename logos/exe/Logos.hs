@@ -18,6 +18,7 @@ import System.Environment (getArgs)
 import System.IO (hIsTerminalDevice)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Control.Concurrent.Chan
+import Codec.Picture.Types (promoteImage)
 
 import qualified Data.StateVar as SV
 import qualified Data.Vector.Storable as V
@@ -29,6 +30,10 @@ instance Semigroup GL.GLsizei where (+) = (Prelude.+)
 instance Monoid GL.GLsizei where zero = 0
 instance Disjonctive GL.GLsizei where negate x = Prelude.negate x
 
+convertRGBF :: DynamicImage -> Image PixelRGBF
+convertRGBF (ImageYF i) = promoteImage i
+convertRGBF (ImageRGB8 i) = promoteImage i
+convertRGBF (ImageRGBF i) = i
 
 setUniformMat u (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) = do
   m <- GL.newMatrix GL.ColumnMajor [a,e,i,m, b,f,j,n, c,g,k,o, d,h,l,p]
