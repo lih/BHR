@@ -295,22 +295,14 @@ runLogos DefUniform = do
         _ -> unit
     _ -> unit
       
-runLogos (Texture False) = do
+runLogos (Texture isFloat) = do
   st <- runStackState get
   case st of
     StackSymbol file:st' -> do
       runStackState (put st')
-      textureLoaded <- liftIO $ loadTexture (convertRGBA8,GL.RGBA8,GL.RGBA,GL.UnsignedByte) file
-      case textureLoaded of
-        Just tex -> runStackState $ modify (StackExtra (Opaque (TI tex)):)
-        Nothing -> unit
-    _ -> unit
-runLogos (Texture True) = do
-  st <- runStackState get
-  case st of
-    StackSymbol file:st' -> do
-      runStackState (put st')
-      textureLoaded <- liftIO $ loadTexture (convertRGBF,GL.RGB32F,GL.RGB,GL.Float) file
+      textureLoaded <- liftIO $ if isFloat
+        then loadTexture (convertRGBF,GL.RGB32F,GL.RGB,GL.Float) file
+        else loadTexture (convertRGBA8,GL.RGBA8,GL.RGBA,GL.UnsignedByte) file
       case textureLoaded of
         Just tex -> runStackState $ modify (StackExtra (Opaque (TI tex)):)
         Nothing -> unit
