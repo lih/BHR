@@ -18,6 +18,7 @@ import System.Environment (getArgs)
 import System.IO (hIsTerminalDevice)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Control.Concurrent.Chan
+import Codec.Picture.Types (promoteImage)
 
 import qualified Data.StateVar as SV
 import qualified Data.Vector.Storable as V
@@ -29,10 +30,31 @@ instance Semigroup GL.GLsizei where (+) = (Prelude.+)
 instance Monoid GL.GLsizei where zero = 0
 instance Disjonctive GL.GLsizei where negate x = Prelude.negate x
 
+convertRGBF :: DynamicImage -> Image PixelRGBF
+convertRGBF (ImageYF i) = promoteImage i
+convertRGBF (ImageRGB8 i) = promoteImage i
+convertRGBF (ImageRGBF i) = i
 
 setUniformMat u (V4 (V4 a b c d) (V4 e f g h) (V4 i j k l) (V4 m n o p)) = do
   m <- GL.newMatrix GL.ColumnMajor [a,e,i,m, b,f,j,n, c,g,k,o, d,h,l,p]
   GL.uniform u $= (m :: GL.GLmatrix GL.GLfloat)
+
+loadTexture (conv,gltype,glpformat,glpbase) file = do
+  imgbytes <- readChunk file
+  let img = conv <$> decodeImage imgbytes
+  tex@(GL.TextureObject texi) <- GL.genObjectName
+  case img of
+    Right (Image w h imgd) -> do
+      GL.activeTexture $= GL.TextureUnit texi
+      GL.textureBinding GL.Texture2D $= Just tex
+      V.unsafeWith imgd $ \imgp -> do
+        GL.texImage2D GL.Texture2D GL.NoProxy 0 gltype (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData glpformat glpbase imgp)
+      GL.textureFilter GL.Texture2D $= ((GL.Linear',Nothing),GL.Linear')
+      GL.generateMipmap' GL.Texture2D
+      return $ Just tex
+    Left err -> do
+      putStrLn err
+      return Nothing
 
 stringWords :: String -> [String]
 stringWords = map fromString . fromBlank
@@ -49,7 +71,7 @@ stringWords = map fromString . fromBlank
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [k ""]
   
-data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture | BuildMesh | Draw | Uniform | DefUniform
+data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture Bool | BuildMesh | Draw | Uniform | DefUniform
                   | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | Transpose | MAdd | Recip | Delay
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
@@ -94,7 +116,8 @@ dict = fromAList $
    ("ejection"    , Builtin_Extra Ejection),
    ("print"       , Builtin_Extra Print),
    ("window"      , Builtin_Extra OpenWindow),
-   ("texture"     , Builtin_Extra Texture),
+   ("image"       , Builtin_Extra (Texture False)),
+   ("texture"     , Builtin_Extra (Texture True)),
    ("mesh"        , Builtin_Extra BuildMesh),
    ("draw"        , Builtin_Extra Draw),
    ("uniform"     , Builtin_Extra Uniform),
@@ -268,37 +291,21 @@ runLogos DefUniform = do
       case x of
         StackVect (V4 x y z w) -> liftIO $ GL.uniform u $= GL.Vector4 x y z w
         StackMat m             -> liftIO $ setUniformMat u m
+        StackExtra (Opaque (TI (GL.TextureObject tex))) -> liftIO $ GL.uniform u $= GL.TextureUnit tex
         _ -> unit
     _ -> unit
       
-runLogos Texture = do
+runLogos (Texture isFloat) = do
   st <- runStackState get
   case st of
-    StackSymbol file:StackSymbol name:st' -> do
+    StackSymbol file:st' -> do
       runStackState (put st')
-      textureLoaded <- liftIO $ do
-        imgbytes <- readChunk file
-        let img = convertRGB8 <$> decodeImage imgbytes
-        tex@(GL.TextureObject texi) <- GL.genObjectName
-        case img of
-          Right (Image w h imgd) -> do
-            GL.activeTexture $= GL.TextureUnit texi
-            GL.textureBinding GL.Texture2D $= Just tex
-            V.unsafeWith imgd $ \imgp -> do
-              GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 (GL.TextureSize2D (fromIntegral w) (fromIntegral h)) 0 (GL.PixelData GL.RGB GL.UnsignedByte imgp)
-            GL.textureFilter GL.Texture2D $= ((GL.Linear',Nothing),GL.Linear')
-            GL.generateMipmap' GL.Texture2D
-            Just prog <- SV.get GL.currentProgram
-            ul <- GL.uniformLocation prog name
-            GL.uniform ul $= GL.TextureUnit texi
-            return $ Just tex
-          Left err -> do
-            putStrLn err
-            return Nothing
+      textureLoaded <- liftIO $ if isFloat
+        then loadTexture (convertRGBF,GL.RGB32F,GL.RGB,GL.Float) file
+        else loadTexture (convertRGBA8,GL.RGBA8,GL.RGBA,GL.UnsignedByte) file
       case textureLoaded of
         Just tex -> runStackState $ modify (StackExtra (Opaque (TI tex)):)
         Nothing -> unit
-
     _ -> unit
 
 runLogos BuildMesh = do
