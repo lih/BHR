@@ -58,7 +58,7 @@ showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
   StackDict d -> "[<"+intercalate "," (map (\(k,v) -> k+": "+go v) (d^.ascList))+">]"
   StackProg p ->
     let showStep (ConstStep x) = go x
-        showStep (ClosureStep c) = showClosure c
+        showStep (ClosureStep b c) = fromString (show b)+":"+showClosure c
         showStep (VerbStep v) = v
         showStep (CommentStep x) = ":"+x
         showSteps p' = intercalate " " (map showStep p')
