@@ -32,7 +32,7 @@ t'ClosureStep _ x = pure x
 
 runClosure execBuiltin' onComment clos = do
   p <- flatten =<< forl (allSteps.t'ClosureStep.subClosure (1::Int)) clos (\c -> StackClosure [] <$> flatten c)
-  stack =~ trace (show (length p)) (StackProg p:)
+  stack =~ (StackProg p:)
   
   where allSteps = from i'StackClosure.(l'1.each.l'1.each .+ l'2.each)
         subClosure 0 = id
@@ -121,7 +121,9 @@ execSymbolImpl execBuiltin' onComment atom = do
     (CloseSplice,StackClosure cs p:StackClosure cs' p':ps) ->
       progStack =- StackClosure (set (t'1.l'2) (StackClosure (reverse cs) (reverse p)) cs') p':ps
 
-    (CloseBrace,StackClosure cs p:ps) -> execStep ps (ClosureStep (StackClosure (reverse cs) (reverse p)))
+    (CloseBrace,StackClosure cs p:ps) -> do
+      progStack =- ps
+      execStep ps (ClosureStep (StackClosure (reverse cs) (reverse p)))
     (CloseBrace,[]) -> unit
     (OpenSplice,[]) -> unit
     (CloseSplice,_) -> unit
