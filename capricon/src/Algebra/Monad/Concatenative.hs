@@ -17,7 +17,7 @@ import GHC.Generics (Generic)
 newtype Opaque a = Opaque a
                  deriving (Generic)
 instance Show (Opaque a) where show _ = "#<opaque>"
-data StackStep s b a = VerbStep s | ConstStep (StackVal s b a) | CommentStep s | ClosureStep (StackClosure s b a)
+data StackStep s b a = VerbStep s | ConstStep (StackVal s b a) | CommentStep s | ClosureStep Bool (StackClosure s b a)
                      deriving (Show,Generic)
 data StackClosure s b a = StackClosure [(StackProgram s b a,StackClosure s b a)] (StackProgram s b a)
                         deriving (Show,Generic)
@@ -27,18 +27,24 @@ i'StackClosure :: Iso' ([(StackProgram s b a,StackClosure s b a)],StackProgram s
 i'StackClosure = iso (\(cs,c) -> StackClosure cs c) (\(StackClosure cs c) -> (cs,c))
 
 t'ClosureStep :: Traversal' (StackStep s b a) (StackClosure s b a)
-t'ClosureStep k (ClosureStep c) = ClosureStep<$>k c
+t'ClosureStep k (ClosureStep b c) = ClosureStep b<$>k c
 t'ClosureStep _ x = pure x
 
+allSteps :: Fold' (StackClosure s b a) (StackStep s b a)
+allSteps = from i'StackClosure.(l'1.each.l'1.each .+ l'2.each)
+subClosure :: Int -> Fold' (StackClosure s b a) (StackClosure s b a)
+subClosure 0 = id
+subClosure n = (allSteps.t'ClosureStep.subClosure (n+1))
+               .+ (from i'StackClosure.l'1.each.l'2.subClosure (n-1))
+
+closureSplices :: Fold' (StackClosure s b a) (StackClosure s b a)
+closureSplices = allSteps.t'ClosureStep.subClosure (1::Int)
+               
 runClosure execBuiltin' onComment clos = do
-  p <- flatten =<< forl (allSteps.t'ClosureStep.subClosure (1::Int)) clos (\c -> StackClosure [] <$> flatten c)
+  p <- flatten =<< forl closureSplices clos (\c -> StackClosure [] <$> flatten c)
   stack =~ (StackProg p:)
   
-  where allSteps = from i'StackClosure.(l'1.each.l'1.each .+ l'2.each)
-        subClosure 0 = id
-        subClosure n = (allSteps.t'ClosureStep.subClosure (n+1))
-                       .+ (from i'StackClosure.l'1.each.l'2.subClosure (n-1))
-        flatten (StackClosure cs c) = do
+  where flatten (StackClosure cs c) = do
           pref <- map fold $ for cs $ \(i,StackClosure _ p) -> (i+) <$> do
             traverse_ (runStep execBuiltin' onComment) p
             stack <~ \(h:t) -> (t,[ConstStep h])
@@ -52,7 +58,8 @@ runStep execBuiltin' onComment (VerbStep s) = getl (dict.at s) >>= \case
         runVal x = stack =~ (x:)
 runStep _ _ (ConstStep v) = stack =~ (v:)
 runStep _ onComment (CommentStep c) = onComment c
-runStep execBuiltin' onComment (ClosureStep c) = runClosure execBuiltin' onComment c
+runStep _ _ (ClosureStep True (StackClosure _ p)) = stack =~ (StackProg p:)
+runStep execBuiltin' onComment (ClosureStep _ c) = runClosure execBuiltin' onComment c
 
 data StackBuiltin b = Builtin_ListBegin | Builtin_ListEnd
                     | Builtin_Clear | Builtin_Stack
@@ -123,7 +130,8 @@ execSymbolImpl execBuiltin' onComment atom = do
 
     (CloseBrace,StackClosure cs p:ps) -> do
       progStack =- ps
-      execStep ps (ClosureStep (StackClosure (reverse cs) (reverse p)))
+      let c = StackClosure (reverse cs) (reverse p)
+      execStep ps (ClosureStep (not $ has closureSplices c) c)
     (CloseBrace,[]) -> unit
     (OpenSplice,[]) -> unit
     (CloseSplice,_) -> unit
