@@ -24,7 +24,11 @@ data COCValue io str = COCExpr (ContextNode str)
                      | COCConvertible (Maybe (Int,Int))
                      | COCDir (NodeDir str ([str],StackVal str (COCBuiltin io str) (COCValue io str)))
                      deriving Generic
+instance (ListSerializable s,ListSerializable b,ListSerializable a) => ListSerializable (StackStep s b a)
+instance (ListSerializable s,ListSerializable b,ListSerializable a) => ListSerializable (StackClosure s b a)
 instance (ListSerializable s,ListSerializable b,ListSerializable a) => ListSerializable (StackVal s b a)
+instance (IsCapriconString s,ListFormat s,ListFormat b,ListFormat a) => ListFormat (StackStep s b a)
+instance (IsCapriconString s,ListFormat s,ListFormat b,ListFormat a) => ListFormat (StackClosure s b a)
 instance (IsCapriconString s,ListFormat s,ListFormat b,ListFormat a) => ListFormat (StackVal s b a)
 instance (ListSerializable b) => ListSerializable (StackBuiltin b)
 instance (ListFormat b) => ListFormat (StackBuiltin b)
@@ -52,7 +56,14 @@ showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
   StackInt n -> fromString $ show n
   StackList l -> "["+intercalate "," (map go l)+"]"
   StackDict d -> "[<"+intercalate "," (map (\(k,v) -> k+": "+go v) (d^.ascList))+">]"
-  StackProg p -> "{ "+intercalate " " p+" }"
+  StackProg p ->
+    let showStep (ConstStep x) = go x
+        showStep (ClosureStep c) = showClosure c
+        showStep (VerbStep v) = v
+        showStep (CommentStep x) = ":"+x
+        showSteps p' = intercalate " " (map showStep p')
+        showClosure (StackClosure cs c) = "{ "+intercalate " " (map (\(i,c') -> showSteps i+" "+showClosure c') cs + map showStep c)+" }"
+    in "{ "+showSteps p+" }"
   _ -> fromString $ show _x
 data COCBuiltin io str = COCB_Print
                        | COCB_Open (ReadImpl io str str) | COCB_ExecModule (WriteImpl io str str)
@@ -155,7 +166,11 @@ modifyCOCEnv (Just (modE,ctx)) = do
   runExtraState (context =- ctx)
   modifyAllExprs modE
 
-runCOCBuiltin :: (MonadSubIO io m,IsCapriconString str, MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m,IOListFormat io str,ListFormat str) => COCBuiltin io str -> m ()
+runCOCBuiltin :: forall str io m.
+                 (MonadSubIO io m,IsCapriconString str,
+                  MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m,
+                  IOListFormat io str,ListFormat str) =>
+                 COCBuiltin io str -> m ()
 runCOCBuiltin COCB_Quit = runExtraState (endState =- True)
 runCOCBuiltin COCB_Print = do
   s <- runStackState get
@@ -178,8 +193,10 @@ runCOCBuiltin (COCB_Open (ReadImpl getResource)) = do
   s <- runStackState get
   case s of
     StackSymbol f:t -> do
+      runStackState $ put t
       xs <- liftSubIO (getResource (f+".md")) >>= maybe undefined return . matches Just literate . maybe "" toString
-      runStackState (put (StackProg xs:t))
+      let ex = execSymbol runCOCBuiltin outputComment
+      ex "{" >> traverse_ ex xs >> ex "}"
     _ -> return ()
                      
 runCOCBuiltin COCB_ToInt = runStackState $ modify $ \case
@@ -245,7 +262,7 @@ runCOCBuiltin (COCB_ExecModule (WriteImpl writeResource)) = do
     StackSymbol f:StackProg p:t -> do
       old <- runDictState get
       oldH <- runExtraState (outputText <~ \x -> (id,x))
-      traverse_ (execSymbol runCOCBuiltin outputComment) p
+      execProgram runCOCBuiltin outputComment p
       new <- runDictState (id <~ (old,))
       newH <- runExtraState (outputText <~ \x -> (oldH,x))
       liftSubIO $ writeResource f (newH "")
@@ -260,7 +277,7 @@ runCOCBuiltin (COCB_Cache (ReadImpl getResource) (WriteImpl writeResource)) = do
       liftSubIO (getResource (f+".blob")) >>= \case
         Just res | Just v <- matches Just datum res -> runStackState $ modify $ (v:)
         _ -> do
-          traverse_ (execSymbol runCOCBuiltin outputComment) p
+          execProgram runCOCBuiltin outputComment p
           st' <- runStackState get
           case st' of
             v:_ -> liftSubIO $ writeResource (f+".blob") (serialize v)

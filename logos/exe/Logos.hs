@@ -90,13 +90,14 @@ data LogosData = F GL.GLfloat
                | Uni GL.UniformLocation
                | TI GL.TextureObject
                deriving Show
+type LogosChan = Chan ([String] :+: [StackStep String LogosBuiltin LogosData])
 data LogosState = LogosState {
   _running :: Bool,
-  _wordChannel :: Chan [String]
+  _wordChannel :: LogosChan
   }
 running :: Lens' LogosState Bool
 running = lens _running (\x y -> x { _running = y })
-wordChannel :: Lens' LogosState (Chan [String])
+wordChannel :: Lens' LogosState LogosChan
 wordChannel = lens _wordChannel (\x y -> x { _wordChannel = y })
 
 dict = fromAList $
@@ -178,7 +179,7 @@ runLogos Delay = do
   wc <- runExtraState $ getl wordChannel
   st <- runStackState get
   case st of
-    StackInt ms:StackProg p:st' -> runStackState (put st') >> liftIO (void $ forkIO $ threadDelay ms >> writeChan wc p)
+    StackInt ms:StackProg p:st' -> runStackState (put st') >> liftIO (void $ forkIO $ threadDelay ms >> writeChan wc (Right p))
     _ -> unit
   
 runLogos Quit = runExtraState $ do running =- False
@@ -263,15 +264,16 @@ runLogos OpenWindow = do
           initGL >> initShaders
           forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
           GLFW.swapInterval $= 1
-          GLFW.windowRefreshCallback $= writeChan wc ["refresh"]
+          GLFW.windowRefreshCallback $= writeChan wc (Right [VerbStep "refresh"])
           GLFW.windowSizeCallback $= \(GL.Size w h) -> do
             let m = max w h
             GL.viewport $= (GL.Position ((w-m)`div`2) ((h-m)`div`2),GL.Size m m)
-            writeChan wc [ show (fromIntegral (min w h) / fromIntegral m :: Float) , "resize" ]
+            writeChan wc $ Right [ ConstStep (StackExtra (Opaque (F $ fromIntegral (min w h) / fromIntegral m)))
+                                 , VerbStep "resize" ]
           GLFW.keyCallback $= \k ev -> do
-            writeChan wc [ "'"+case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
-                         , "'"+case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
-                         , "key" ]
+            writeChan wc $ Right [ ConstStep $ StackSymbol $ case k of GLFW.CharKey c -> [c] ; GLFW.SpecialKey s -> show s
+                                 , ConstStep $ StackSymbol $ case ev of GLFW.Press -> "press" ; GLFW.Release -> "release"
+                                 , VerbStep "key" ]
 
     _ -> unit
 runLogos Uniform = do
@@ -420,11 +422,11 @@ main = between (void GLFW.initialize) GLFW.terminate $ do
         _ -> return []
   
     text <- if isTerm then getAll else unsafeInterleaveIO $ readHString stdin
-    for_ (stringWords (prelude + " " + text)) (writeChan wordChan . pure)
+    for_ (stringWords (prelude + " " + text)) $ writeChan wordChan . Left . pure
     
   let go = while $ do
         ws <- liftIO (readChan wordChan)
-        for_ ws $ execSymbol runLogos (\_ -> unit)
+        (traverse_ (execSymbol runLogos (\_ -> unit)) <|> execProgram runLogos (\_ -> unit)) ws
         runDictState get >>= \d -> liftIO (writeIORef symList (keys d))
         runExtraState $ getl running
         
