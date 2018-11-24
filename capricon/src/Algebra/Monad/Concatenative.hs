@@ -32,7 +32,7 @@ t'ClosureStep _ x = pure x
 
 runClosure execBuiltin' onComment clos = do
   p <- flatten =<< forl (allSteps.t'ClosureStep.subClosure (1::Int)) clos (\c -> StackClosure [] <$> flatten c)
-  stack =~ (StackProg p:)
+  stack =~ trace (show (length p)) (StackProg p:)
   
   where allSteps = from i'StackClosure.(l'1.each.l'1.each .+ l'2.each)
         subClosure 0 = id
