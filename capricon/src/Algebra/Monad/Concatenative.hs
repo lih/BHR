@@ -131,7 +131,7 @@ execSymbolImpl execBuiltin' onComment atom = do
     (CloseBrace,StackClosure cs p:ps) -> do
       progStack =- ps
       let c = StackClosure (reverse cs) (reverse p)
-      execStep ps (ClosureStep (not $ has closureSplices c) c)
+      execStep ps (ClosureStep (not $ has (closureSplices .+ (from i'StackClosure.l'1.each.l'2)) c) c)
     (CloseBrace,[]) -> unit
     (OpenSplice,[]) -> unit
     (CloseSplice,_) -> unit
