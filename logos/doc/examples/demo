@@ -1,0 +1,104 @@
+'message { format pop } def
+'keycallbacks empty def
+'key {
+  dup 2 shaft 1 dupn 2 shaft
+  "%s %s" format keycallbacks swap { exec pop pop } { swap "Unhandled key: %s %s\n" message } lookup } def
+'bind-key { keycallbacks 2 shaft insert 'keycallbacks swap def } def
+
+100 100 window
+
+'components [ [ 'vertexPosition 3 ] [ 'vertexNormal 3 ] [ 'vertexUV 2 ] [ 'vertexColor 4 ] ] def
+'vertexColor 0 0 0 0 vcons def
+'vertexUV 0 0 0 0 vcons def
+'vertexNormal 0 0 0 0 vcons def
+'point { 1 vcons [ 1 shaft vertexNormal vertexUV vertexColor ] } def
+
+'rgba { vcons 'vertexColor swap def } def
+'rgb { 1 rgba } def
+
+'texpoint { 0 0 vcons 'vertexUV swap def } def
+
+'normal { 0 vcons 'vertexNormal swap def } def
+
+'red { 1 0 0 0.5 rgba } def
+'green { 0 1 0 0.5 rgba } def
+'blue { 0 0 1 0.5 rgba } def
+'white { 1 1 1 rgb } def
+'white2 { 1 1 1 0.5 rgba } def
+
+'tile "textures/Gravel-2450.jpg" image def
+"tileTexture" uniform tile defuniform
+
+'rgb-triangle
+  [ blue 1 0 texpoint 1 0 0 point 
+  , red 0 1 texpoint 0 1 0 point
+  , green 0 0 texpoint 0 0 0 point ]
+  components 'TRIANGLES mesh def
+'rgb-square
+  [ 0 0 1 normal blue 1 0 texpoint 1 0 0 point 
+  , green 0 1 texpoint 0 1 0 point
+  , red 0 0 texpoint 0 0 0 point
+  , green 0 1 texpoint 0 1 0 point
+  , blue 1 0 texpoint 1 0 0 point 
+  , white 1 1 texpoint 1 1 0 point ]
+  components 'TRIANGLES mesh def
+'cue
+  [ blue 0 0 0 point 1 0 0 point
+  , red 0 0 0 point 0 1 0 point
+  , green 0 0 0 point 0 0 1 point ]
+  components 'LINES mesh def
+
+'modelMat dup uniform def
+modelMat identity defuniform
+'=> { modelMat swap [ 2 shaft ] } def
+
+'scene [
+  10 range {
+    'i swap def
+    10 range {
+      'j swap def
+      0.125 0.125 0 0 vcons translation , 0.8 scale ,
+      i j 0 0 vcons translate , 0.2 scale => rgb-square 
+    } each
+  } each
+] def
+
+'refresh { [ 1 1 0 0 vcons translation => cue scene ] draw } def
+
+'dxy vx vx 20 ** vy ++ normalize rotation def
+'dyx dxy transpose def
+'dyz vy vy 20 ** vz ++ normalize rotation def
+'dzy dyz transpose def
+
+'view-xy-angle vx def
+'view-zy-angle vz def
+'view-trans -1 -1 0 0 vcons translation def
+'viewMat dup uniform def , viewMat view-trans defuniform
+
+'projMat dup uniform def
+'resize {
+  identity swap scale , vz negate translate , vx vy vz vz negate mcons **
+  projMat swap defuniform } def
+
+'set-camera { viewMat view-trans , vx view-xy-angle rotate , vz view-zy-angle rotate defuniform } def
+
+'ctrl false def
+
+"press LEFT" { 'view-xy-angle { dxy ** } modify set-camera refresh } bind-key
+"press RIGHT" { 'view-xy-angle { dyx ** } modify set-camera refresh } bind-key
+"press UP" { 'view-zy-angle { dyz ** } modify set-camera refresh } bind-key
+"press DOWN" { 'view-zy-angle { dzy ** } modify set-camera refresh } bind-key
+
+"press ESC" { quit } bind-key
+"press Q" { ctrl { quit } { } if } bind-key
+"press LCTRL" { 'ctrl true def } bind-key
+"release LCTRL" { 'ctrl false def } bind-key
+
+1 resize refresh
+
+'keep-looping false def
+'auto-loop { keep-looping { 'LEFT 'press key 'auto-loop $ 20000 delay } { } if } def
+'auto-toggle { 'keep-looping { 1 swap - } modify } def
+
+"press L" { auto-toggle auto-loop } bind-key
+
