@@ -26,8 +26,16 @@
 'white { 1 1 1 rgb } def
 'white2 { 1 1 1 0.5 rgba } def
 
-'tile "textures/Gravel-2450.jpg" image def
-"tileTexture" uniform tile defuniform
+'Uniform { { {@ uniform @} swap defuniform } def } def
+
+'tile "textures/Pebbles_006_COLOR.jpg" image def
+'tileNormals "textures/Pebbles_006_NRM.jpg" image def
+
+'set-texture "tileTexture" Uniform
+'set-normal-texture "tileTextureNormal" Uniform
+'set-light-vector "lightVect" Uniform
+
+tile set-texture , tileNormals set-normal-texture , 0 0 1 0 vcons set-light-vector
 
 'rgb-triangle
   [ blue 1 0 texpoint 1 0 0 point 
@@ -73,6 +81,7 @@ modelMat identity defuniform
 'view-xy-angle vx def
 'view-zy-angle vz def
 'view-trans -1 -1 0 0 vcons translation def
+'view-scale 1 def
 'viewMat dup uniform def , viewMat view-trans defuniform
 
 'projMat dup uniform def
@@ -80,7 +89,7 @@ modelMat identity defuniform
   identity swap scale , vz negate translate , vx vy vz vz negate mcons **
   projMat swap defuniform } def
 
-'set-camera { viewMat view-trans , vx view-xy-angle rotate , vz view-zy-angle rotate defuniform } def
+'set-camera { viewMat view-trans , view-scale scale , vx view-xy-angle rotate , vz view-zy-angle rotate defuniform } def
 
 'ctrl false def
 
@@ -88,6 +97,8 @@ modelMat identity defuniform
 "press RIGHT" { 'view-xy-angle { dyx ** } modify set-camera refresh } bind-key
 "press UP" { 'view-zy-angle { dyz ** } modify set-camera refresh } bind-key
 "press DOWN" { 'view-zy-angle { dzy ** } modify set-camera refresh } bind-key
+"press KP_ADD" { 'view-scale  { 1.1 ** } modify set-camera refresh } bind-key
+"press KP_SUBTRACT" { 'view-scale  { 1.1 recip ** } modify set-camera refresh } bind-key
 
 "press ESC" { quit } bind-key
 "press Q" { ctrl { quit } { } if } bind-key
@@ -97,7 +108,7 @@ modelMat identity defuniform
 1 resize refresh
 
 'keep-looping false def
-'auto-loop { keep-looping { 'LEFT 'press key 'auto-loop $ 20000 delay } { } if } def
+'auto-loop { keep-looping { 'LEFT 'press key 'auto-loop $ 15000 delay } { } if } def
 'auto-toggle { 'keep-looping { 1 swap - } modify } def
 
 "press L" { auto-toggle auto-loop } bind-key
