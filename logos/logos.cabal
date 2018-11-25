@@ -22,6 +22,7 @@ executable logos
   build-depends: base >=4.8 && <4.10, definitive-base >=2.6 && <2.7, capricon, OpenGL, GLFW, StateVar, JuicyPixels, vector, logos, definitive-parser, hreadline
   default-extensions: TypeSynonymInstances, NoMonomorphismRestriction, StandaloneDeriving, GeneralizedNewtypeDeriving, TypeOperators, RebindableSyntax, FlexibleInstances, FlexibleContexts, FunctionalDependencies, TupleSections, MultiParamTypeClasses, Rank2Types, AllowAmbiguousTypes, RoleAnnotations, ViewPatterns, LambdaCase
   hs-source-dirs:      exe
+  ghc-options: -threaded
   main-is: Logos.hs
   default-language:    Haskell2010
   
