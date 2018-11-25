@@ -124,7 +124,7 @@ execSymbolImpl execBuiltin' onComment atom = do
     (OpenBrace,_) -> progStack =~ (StackClosure [] []:)
 
     (OpenSplice,StackClosure cs p:ps) ->
-      progStack =- StackClosure [] []:StackClosure ((p,StackClosure [] []):cs) []:ps
+      progStack =- StackClosure [] []:StackClosure ((reverse p,StackClosure [] []):cs) []:ps
     (CloseSplice,StackClosure cs p:StackClosure cs' p':ps) ->
       progStack =- StackClosure (set (t'1.l'2) (StackClosure (reverse cs) (reverse p)) cs') p':ps
 
