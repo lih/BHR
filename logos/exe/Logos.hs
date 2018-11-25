@@ -259,7 +259,7 @@ runLogos OpenWindow = do
         GLFW.openWindowHint GLFW.OpenGLVersionMinor 3
         GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
  
-        success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 8] GLFW.Window
+        success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayDepthBits 24] GLFW.Window
         if not success then throw $ SomeException GLFWWindowOpenException else do
           initGL >> initShaders
           forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
@@ -291,6 +291,7 @@ runLogos DefUniform = do
     x:StackExtra (Opaque (Uni u)):st' -> do
       runStackState $ put st'
       case x of
+        StackFloat f           -> liftIO $ GL.uniform u $= f
         StackVect (V4 x y z w) -> liftIO $ GL.uniform u $= GL.Vector4 x y z w
         StackMat m             -> liftIO $ setUniformMat u m
         StackExtra (Opaque (TI (GL.TextureObject tex))) -> liftIO $ GL.uniform u $= GL.TextureUnit tex
@@ -393,12 +394,11 @@ initShaders = GL.createProgram <*= \prog -> do
 initGL = do
   vao <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vao
-  
   GL.depthFunc            $= Just GL.Lequal
-  GL.blend                $= GL.Enabled
-  GL.blendFunc            $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
-  GL.texture GL.Texture2D $= GL.Enabled
-  GL.textureFunction      $= GL.Blend
+  -- GL.blend                $= GL.Disabled
+  -- GL.blendFunc            $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
+  -- GL.texture GL.Texture2D $= GL.Enabled
+  -- GL.textureFunction      $= GL.Blend
 
 main = between (void GLFW.initialize) GLFW.terminate $ do
   isTerm <- hIsTerminalDevice stdin

@@ -20,14 +20,11 @@
 
 'normal { 0 vcons 'vertexNormal swap def } def
 
-'red { 1 0 0 0.5 rgba } def
-'green { 0 1 0 0.5 rgba } def
-'blue { 0 0 1 0.5 rgba } def
-'white { 1 1 1 rgb } def
-'white2 { 1 1 1 0.5 rgba } def
-
-'tile "textures/Gravel-2450.jpg" image def
-"tileTexture" uniform tile defuniform
+'red { 1 0 0 0.1 rgba } def
+'green { 0 1 0 0.1 rgba } def
+'blue { 0 0 1 0.1 rgba } def
+'white { 1 1 1 0.1 rgba } def
+'nocolor { 0 0 0 0 rgba } def
 
 'rgb-triangle
   [ blue 1 0 texpoint 1 0 0 point 
@@ -35,12 +32,12 @@
   , green 0 0 texpoint 0 0 0 point ]
   components 'TRIANGLES mesh def
 'rgb-square
-  [ 0 0 1 normal blue 1 0 texpoint 1 0 0 point 
-  , green 0 1 texpoint 0 1 0 point
-  , red 0 0 texpoint 0 0 0 point
-  , green 0 1 texpoint 0 1 0 point
-  , blue 1 0 texpoint 1 0 0 point 
-  , white 1 1 texpoint 1 1 0 point ]
+  [ 0 0 1 normal nocolor 1 0 texpoint 1 0 0 point 
+  , 0 1 texpoint 0 1 0 point
+  , 0 0 texpoint 0 0 0 point
+  , 0 1 texpoint 0 1 0 point
+  , 1 0 texpoint 1 0 0 point 
+  , 1 1 texpoint 1 1 0 point ]
   components 'TRIANGLES mesh def
 'cue
   [ blue 0 0 0 point 1 0 0 point
@@ -48,17 +45,33 @@
   , green 0 0 0 point 0 0 1 point ]
   components 'LINES mesh def
 
-'modelMat dup uniform def
-modelMat identity defuniform
-'=> { modelMat swap [ 2 shaft ] } def
+'Uniform { dup "set-%s" format swap { {@ dup uniform @} 1 dupn defuniform , {@ @} swap def } def } def
+
+'modelMat Uniform
+'viewMat Uniform
+'projMat Uniform
+
+'tile "textures/Pebbles_006_COLOR.jpg" image def
+'tileNormals "textures/Pebbles_006_NRM.jpg" image def
+
+'tileTexture Uniform       , tile set-tileTexture
+'tileTextureNormal Uniform , tileNormals set-tileTextureNormal
+
+'lightVect Uniform , 0 0 1 0 vcons set-lightVect
+'lightColor Uniform , 1 1 1 1 vcons set-lightColor
+'ambiantLuminosity Uniform , 0.6 set-ambiantLuminosity
+
+identity set-modelMat
+'=> { {@ 'modelMat uniform @} swap [ 2 shaft ] } def
 
 'scene [
   10 range {
     'i swap def
     10 range {
       'j swap def
-      0.125 0.125 0 0 vcons translation , 0.8 scale ,
-      i j 0 0 vcons translate , 0.2 scale => rgb-square 
+      -0.5 -0.5 0 0 vcons translation , 0.8 scale ,
+      vz vz vx i 4.5 -- 0.2 ** ** vy j 4.5 -- 0.2 ** ** ++ ++ normalize rotate ,
+      i 0.5 ++ j 0.5 ++ 0 0 vcons translate , 0.2 scale => rgb-square 
     } each
   } each
 ] def
@@ -73,14 +86,15 @@ modelMat identity defuniform
 'view-xy-angle vx def
 'view-zy-angle vz def
 'view-trans -1 -1 0 0 vcons translation def
-'viewMat dup uniform def , viewMat view-trans defuniform
+'view-scale 1 def
 
-'projMat dup uniform def
+view-trans set-viewMat
+
 'resize {
-  identity swap scale , vz negate translate , vx vy vz vz negate mcons **
-  projMat swap defuniform } def
+  identity swap scale , vz negate translate , vx vy vz negate vz negate mcons **
+  set-projMat } def
 
-'set-camera { viewMat view-trans , vx view-xy-angle rotate , vz view-zy-angle rotate defuniform } def
+'set-camera { view-trans , view-scale scale , vx view-xy-angle rotate , vz view-zy-angle rotate set-viewMat } def
 
 'ctrl false def
 
@@ -88,6 +102,8 @@ modelMat identity defuniform
 "press RIGHT" { 'view-xy-angle { dyx ** } modify set-camera refresh } bind-key
 "press UP" { 'view-zy-angle { dyz ** } modify set-camera refresh } bind-key
 "press DOWN" { 'view-zy-angle { dzy ** } modify set-camera refresh } bind-key
+"press KP_ADD" { 'view-scale  { 1.1 ** } modify set-camera refresh } bind-key
+"press KP_SUBTRACT" { 'view-scale  { {@ {@ 1.1 recip @} @} ** } modify set-camera refresh } bind-key
 
 "press ESC" { quit } bind-key
 "press Q" { ctrl { quit } { } if } bind-key
@@ -97,8 +113,12 @@ modelMat identity defuniform
 1 resize refresh
 
 'keep-looping false def
-'auto-loop { keep-looping { 'LEFT 'press key 'auto-loop $ 20000 delay } { } if } def
+'auto-loop { keep-looping { loop-body 'auto-loop $ 40000 delay } { } if } def
 'auto-toggle { 'keep-looping { 1 swap - } modify } def
+'loop-body { 'LEFT 'press key } def
 
 "press L" { auto-toggle auto-loop } bind-key
 
+'loop-body { lightVect east-west { dyz } { dzy } if ** set-lightVect refresh } def
+'east-west true def
+"press E" { 'east-west { 1 swap - } modify } bind-key
