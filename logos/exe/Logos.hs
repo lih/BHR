@@ -397,7 +397,7 @@ initGL = do
   GL.depthFunc            $= Just GL.Gequal
   -- GL.blend                $= GL.Enabled
   -- GL.blendFunc            $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
-  GL.texture GL.Texture2D $= GL.Enabled
+  -- GL.texture GL.Texture2D $= GL.Enabled
   -- GL.textureFunction      $= GL.Blend
 
 main = between (void GLFW.initialize) GLFW.terminate $ do
