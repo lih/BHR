@@ -394,7 +394,7 @@ initGL = do
   vao <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vao
   
-  GL.depthFunc            $= Just GL.Lequal
+  GL.depthFunc            $= Just GL.Gequal
   -- GL.blend                $= GL.Enabled
   -- GL.blendFunc            $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
   GL.texture GL.Texture2D $= GL.Enabled

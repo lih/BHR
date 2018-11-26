@@ -25,7 +25,7 @@ void main() {
   vec3 texNorm_raw = texture(tileTextureNormal,vec2(1) - fragmentUV).xyz;
   vec3 texNorm = reflect(reflect(texNorm_raw,vec3(0,0,1)),vec3(0,0,1)+fragmentNormal);
 
-  vec3 reflLight = (viewMat * vec4(normalize(reflect(lightVect.xyz,texNorm)),0)).xyz;
+  vec3 reflLight = (viewMat * vec4(normalize(reflect(texNorm,lightVect.xyz)),0)).xyz;
   
   // float luminosity = clamp(dot(texNorm,(projMat * viewMat * modelMat * lightVect).xyz),0,1);
   
