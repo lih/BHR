@@ -16,5 +16,5 @@ void main() {
     gl_Position = projMat * viewMat * modelMat * vec4(vertexPosition,1);
     fragmentUV = vertexUV;
     fragmentColor = vertexColor;
-    fragmentNormal = (viewMat * modelMat * vec4(vertexNormal,0)).xyz;
+    fragmentNormal = (projMat * viewMat * modelMat * vec4(vertexNormal,0)).xyz;
 }
