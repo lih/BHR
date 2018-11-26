@@ -358,6 +358,7 @@ runLogos Draw = do
         GL.drawArrays mode 0 (fromIntegral size)
       doDraw go = do
         runStackState (modify $ drop 1)
+        liftIO $ print =<< SV.get GL.depthFunc
         liftIO $ between (GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]) GLFW.swapBuffers go
         
   case st of
