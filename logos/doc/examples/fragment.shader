@@ -7,6 +7,7 @@ in vec3 fragmentNormal;
 uniform sampler2D tileTexture;
 uniform sampler2D tileTextureNormal;
 uniform vec4 lightVect;
+uniform vec4 lightColor;
 
 vec3 reflect(vec3 u,vec3 v) {
   float duv = dot(u,v);

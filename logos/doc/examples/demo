@@ -46,11 +46,11 @@ tileNormals set-tileTextureNormal
   components 'TRIANGLES mesh def
 'rgb-square
   [ 0 0 1 normal nocolor 1 0 texpoint 1 0 0 point 
-  , red 0 1 texpoint 0 1 0 point
-  , green 0 0 texpoint 0 0 0 point
-  , red 0 1 texpoint 0 1 0 point
-  , nocolor 1 0 texpoint 1 0 0 point 
-  , blue 1 1 texpoint 1 1 0 point ]
+  , 0 1 texpoint 0 1 0 point
+  , 0 0 texpoint 0 0 0 point
+  , 0 1 texpoint 0 1 0 point
+  , 1 0 texpoint 1 0 0 point 
+  , 1 1 texpoint 1 1 0 point ]
   components 'TRIANGLES mesh def
 'cue
   [ blue 0 0 0 point 1 0 0 point
@@ -59,9 +59,12 @@ tileNormals set-tileTextureNormal
   components 'LINES mesh def
 
 'modelMat Uniform
+'lightColor Uniform
 
 identity set-modelMat
 '=> { {@ 'modelMat uniform @} swap [ 2 shaft ] } def
+
+1 1 1 1 vcons set-lightColor
 
 'scene [
   10 range {
@@ -90,7 +93,7 @@ identity set-modelMat
 
 'projMat Uniform
 'resize {
-  identity swap scale , vz negate translate , vx vy vz vz negate mcons **
+  identity swap scale , vz negate translate , vx vy vz negate vz negate mcons **
   set-projMat } def
 
 'set-camera { view-trans , view-scale scale , vx view-xy-angle rotate , vz view-zy-angle rotate set-viewMat } def
