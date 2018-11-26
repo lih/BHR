@@ -20,24 +20,23 @@
 
 'normal { 0 vcons 'vertexNormal swap def } def
 
-'red { 1 0 0 rgb } def
-'green { 0 1 0 rgb } def
-'blue { 0 0 1 rgb } def
-'white { 1 1 1 rgb } def
+'red { 1 0 0 0.1 rgba } def
+'green { 0 1 0 0.1 rgba } def
+'blue { 0 0 1 0.1 rgba } def
+'white { 1 1 1 0.1 rgba } def
 'nocolor { 0 0 0 0 rgba } def
 
 'Uniform { dup "set-%s" format swap { {@ dup uniform @} 1 dupn defuniform , {@ @} swap def } def } def
 
-'tileTexture Uniform
-'tileTextureNormal Uniform
-'lightVect Uniform
-
 'tile "textures/Pebbles_006_COLOR.jpg" image def
 'tileNormals "textures/Pebbles_006_NRM.jpg" image def
 
-tile set-tileTexture
-tileNormals set-tileTextureNormal
-0 0 1 0 vcons set-lightVect
+'tileTexture Uniform       , tile set-tileTexture
+'tileTextureNormal Uniform , tileNormals set-tileTextureNormal
+
+'lightVect Uniform , 0 0 1 0 vcons set-lightVect
+'lightColor Uniform , 1 1 1 1 vcons set-lightColor
+'ambiantLuminosity Uniform , 0.6 set-ambiantLuminosity
 
 'rgb-triangle
   [ blue 1 0 texpoint 1 0 0 point 
@@ -45,12 +44,12 @@ tileNormals set-tileTextureNormal
   , green 0 0 texpoint 0 0 0 point ]
   components 'TRIANGLES mesh def
 'rgb-square
-  [ 0 0 1 normal nocolor 1 0 texpoint 1 0 0 point 
-  , 0 1 texpoint 0 1 0 point
-  , 0 0 texpoint 0 0 0 point
-  , 0 1 texpoint 0 1 0 point
-  , 1 0 texpoint 1 0 0 point 
-  , 1 1 texpoint 1 1 0 point ]
+  [ 0 0 1 normal white 1 0 texpoint 1 0 0 point 
+  , red 0 1 texpoint 0 1 0 point
+  , green 0 0 texpoint 0 0 0 point
+  , red 0 1 texpoint 0 1 0 point
+  , white 1 0 texpoint 1 0 0 point 
+  , blue 1 1 texpoint 1 1 0 point ]
   components 'TRIANGLES mesh def
 'cue
   [ blue 0 0 0 point 1 0 0 point
@@ -59,12 +58,11 @@ tileNormals set-tileTextureNormal
   components 'LINES mesh def
 
 'modelMat Uniform
-'lightColor Uniform
+
 
 identity set-modelMat
 '=> { {@ 'modelMat uniform @} swap [ 2 shaft ] } def
 
-1 1 1 1 vcons set-lightColor
 
 'scene [
   10 range {

@@ -8,6 +8,7 @@ uniform sampler2D tileTexture;
 uniform sampler2D tileTextureNormal;
 uniform vec4 lightVect;
 uniform vec4 lightColor;
+uniform float ambiantLuminosity;
 
 vec3 reflect(vec3 u,vec3 v) {
   float duv = dot(u,v);
@@ -23,8 +24,8 @@ void main() {
   vec3 texNorm_raw = texture(tileTextureNormal,fragmentUV).xyz;
   vec3 texNorm = reflect(reflect(texNorm_raw,vec3(0,0,1)),vec3(0,0,1)+fragmentNormal);
 
-  float luminosity = clamp(dot(normalize(texNorm),lightVect.xyz),0,1);
+  float luminosity = clamp(dot(normalize(texNorm),lightVect.xyz),ambiantLuminosity,1);
 
   gl_FragDepth = gl_FragCoord.z / gl_FragCoord.w;
-  gl_FragColor = vec4((fragmentColor.rgb * fragmentColor.a + texCol.rgb * luminosity) / (1+fragmentColor.a),1);
+  gl_FragColor = vec4((fragmentColor.rgb * fragmentColor.a + lightColor.rgb * luminosity) * texCol.rgb / (1+fragmentColor.a),1);
 }
