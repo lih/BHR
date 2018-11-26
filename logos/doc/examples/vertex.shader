@@ -13,7 +13,8 @@ uniform mat4 modelMat;
 uniform mat4 projMat;
 
 void main() {
-    gl_Position = projMat * viewMat * modelMat * vec4(vertexPosition,1);
+    vec4 position = projMat * viewMat * modelMat * vec4(vertexPosition,1);
+    gl_Position = position / position.w;
     fragmentUV = vertexUV;
     fragmentColor = vertexColor;
     fragmentNormal = (modelMat * vec4(vertexNormal,0)).xyz;
