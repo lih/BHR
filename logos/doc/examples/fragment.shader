@@ -4,8 +4,6 @@ in vec4 fragmentColor;
 in vec2 fragmentUV;
 in vec3 fragmentNormal;
 
-out vec3 color;
-
 uniform sampler2D tileTexture;
 uniform sampler2D tileTextureNormal;
 uniform vec4 lightVect;
@@ -31,9 +29,8 @@ void main() {
   
   // float luminosity = clamp(dot(texNorm,(projMat * viewMat * modelMat * lightVect).xyz),0,1);
 
-  float depth = gl_FragCoord.z / gl_FragCoord.w + 1;
-  color = vec3(depth/5);
-  gl_FragDepth = depth;
+  gl_FragDepth = gl_FragCoord.z / gl_FragCoord.w;
+  gl_FragColor = vec4(texNorm,1);
   // gl_FragColor = vec4((fragmentColor.rgb * fragmentColor.a + texCol.rgb) * luminosity / (1+fragmentColor.a),1);
   // gl_FragColor = fragmentColor;
 }

@@ -358,8 +358,6 @@ runLogos Draw = do
         GL.drawArrays mode 0 (fromIntegral size)
       doDraw go = do
         runStackState (modify $ drop 1)
-        liftIO $ print =<< SV.get GL.depthFunc
-        liftIO $ print =<< SV.get GL.blend
         liftIO $ between (GL.clear [ GL.DepthBuffer, GL.ColorBuffer ]) GLFW.swapBuffers go
         
   case st of
@@ -395,9 +393,7 @@ initShaders = GL.createProgram <*= \prog -> do
 initGL = do
   vao <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vao
-  
   GL.depthFunc            $= Just GL.Lequal
-  GL.blend $= GL.Disabled
   -- GL.blend                $= GL.Enabled
   -- GL.blendFunc            $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
   -- GL.texture GL.Texture2D $= GL.Enabled
