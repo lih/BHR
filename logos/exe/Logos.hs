@@ -291,6 +291,7 @@ runLogos DefUniform = do
     x:StackExtra (Opaque (Uni u)):st' -> do
       runStackState $ put st'
       case x of
+        StackFloat f           -> liftIO $ GL.uniform u $= f
         StackVect (V4 x y z w) -> liftIO $ GL.uniform u $= GL.Vector4 x y z w
         StackMat m             -> liftIO $ setUniformMat u m
         StackExtra (Opaque (TI (GL.TextureObject tex))) -> liftIO $ GL.uniform u $= GL.TextureUnit tex
