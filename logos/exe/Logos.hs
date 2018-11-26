@@ -259,7 +259,7 @@ runLogos OpenWindow = do
         GLFW.openWindowHint GLFW.OpenGLVersionMinor 3
         GLFW.openWindowHint GLFW.OpenGLProfile GLFW.OpenGLCoreProfile
  
-        success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 16] GLFW.Window
+        success <- GLFW.openWindow (GL.Size (fromIntegral w) (fromIntegral h)) [GLFW.DisplayRGBBits 8 8 8, GLFW.DisplayAlphaBits 8, GLFW.DisplayDepthBits 24] GLFW.Window
         if not success then throw $ SomeException GLFWWindowOpenException else do
           initGL >> initShaders
           forkIO $ forever $ GLFW.pollEvents >> threadDelay 50000
@@ -394,7 +394,7 @@ initGL = do
   vao <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vao
   
-  GL.depthFunc            $= Just GL.Gequal
+  GL.depthFunc            $= Just GL.Lequal
   -- GL.blend                $= GL.Enabled
   -- GL.blendFunc            $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
   GL.texture GL.Texture2D $= GL.Enabled

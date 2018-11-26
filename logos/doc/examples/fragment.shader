@@ -25,11 +25,11 @@ void main() {
   vec3 texNorm_raw = texture(tileTextureNormal,vec2(1) - fragmentUV).xyz;
   vec3 texNorm = reflect(reflect(texNorm_raw,vec3(0,0,1)),vec3(0,0,1)+fragmentNormal);
 
-  vec3 reflLight = (viewMat * vec4(normalize(reflect(texNorm,lightVect.xyz)),0)).xyz;
+  vec3 reflLight = normalize((projMat * viewMat * vec4(reflect(texNorm,lightVect.xyz),0)).xyz);
   
   // float luminosity = clamp(dot(texNorm,(projMat * viewMat * modelMat * lightVect).xyz),0,1);
   
-  gl_FragColor = vec4(reflLight,1);
+  gl_FragColor = vec4(texNorm,0);
   // gl_FragColor = vec4((fragmentColor.rgb * fragmentColor.a + texCol.rgb) * luminosity / (1+fragmentColor.a),1);
   // gl_FragColor = fragmentColor;
 }
