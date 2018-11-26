@@ -20,9 +20,9 @@
 
 'normal { 0 vcons 'vertexNormal swap def } def
 
-'red { 1 0 0 0.5 rgba } def
-'green { 0 1 0 0.5 rgba } def
-'blue { 0 0 1 0.5 rgba } def
+'red { 1 0 0 rgb } def
+'green { 0 1 0 rgb } def
+'blue { 0 0 1 rgb } def
 'white { 1 1 1 rgb } def
 'nocolor { 0 0 0 0 rgba } def
 
@@ -46,11 +46,11 @@ tileNormals set-tileTextureNormal
   components 'TRIANGLES mesh def
 'rgb-square
   [ 0 0 1 normal nocolor 1 0 texpoint 1 0 0 point 
-  , 0 1 texpoint 0 1 0 point
-  , 0 0 texpoint 0 0 0 point
-  , 0 1 texpoint 0 1 0 point
-  , 1 0 texpoint 1 0 0 point 
-  , 1 1 texpoint 1 1 0 point ]
+  , red 0 1 texpoint 0 1 0 point
+  , green 0 0 texpoint 0 0 0 point
+  , red 0 1 texpoint 0 1 0 point
+  , nocolor 1 0 texpoint 1 0 0 point 
+  , blue 1 1 texpoint 1 1 0 point ]
   components 'TRIANGLES mesh def
 'cue
   [ blue 0 0 0 point 1 0 0 point
@@ -68,9 +68,9 @@ identity set-modelMat
     'i swap def
     10 range {
       'j swap def
-      0.125 0.125 0 0 vcons translation , 0.8 scale ,
-      vz vz vx i 0.2 ** 1 -- ** vy j 0.2 ** 1 -- ** ++ ++ normalize rotate ,
-      i j 0 0 vcons translate , 0.2 scale => rgb-square 
+      -0.5 -0.5 0 0 vcons translation , 0.8 scale ,
+      vz vz vx i 4.5 -- 0.2 ** ** vy j 4.5 -- 0.2 ** ** ++ ++ normalize rotate ,
+      i 0.5 ++ j 0.5 ++ 0 0 vcons translate , 0.2 scale => rgb-square 
     } each
   } each
 ] def
@@ -90,7 +90,7 @@ identity set-modelMat
 
 'projMat Uniform
 'resize {
-  identity swap scale , vz negate translate , vx vy vz negate vz negate mcons **
+  identity swap scale , vz negate translate , vx vy vz vz negate mcons **
   set-projMat } def
 
 'set-camera { view-trans , view-scale scale , vx view-xy-angle rotate , vz view-zy-angle rotate set-viewMat } def
@@ -112,7 +112,8 @@ identity set-modelMat
 1 resize refresh
 
 'keep-looping false def
-'auto-loop { keep-looping { 'LEFT 'press key 'auto-loop $ 40000 delay } { } if } def
+'auto-loop { keep-looping { loop-body 'auto-loop $ 40000 delay } { } if } def
 'auto-toggle { 'keep-looping { 1 swap - } modify } def
+'loop-body { 'LEFT 'press key } def
 
 "press L" { auto-toggle auto-loop } bind-key
