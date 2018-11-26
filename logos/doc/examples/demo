@@ -90,7 +90,7 @@ identity set-modelMat
 
 'projMat Uniform
 'resize {
-  identity swap scale , vz negate translate , vx vy vz vz negate mcons **
+  identity swap scale , vz negate translate , vx vy vz negate vz negate mcons **
   set-projMat } def
 
 'set-camera { view-trans , view-scale scale , vx view-xy-angle rotate , vz view-zy-angle rotate set-viewMat } def
