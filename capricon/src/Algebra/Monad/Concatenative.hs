@@ -1,13 +1,66 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, GeneralizedNewtypeDeriving, LambdaCase, DeriveGeneric #-}
-module Algebra.Monad.Concatenative(StackBuiltin(..),StackVal(..),t'StackDict,StackState,defaultState,StackSymbol(..),AtomClass(..),ConcatT,concatT,MonadStack(..),Opaque(..)) where
+module Algebra.Monad.Concatenative(
+  -- * Extensible stack types
+  StackBuiltin(..),StackSymbol(..),StackVal(..),StackStep(..),StackClosure(..),
+  t'StackDict,
+  -- * The MonadStack class
+  StackState,defaultState,
+  MonadStack(..),
+  AtomClass(..),
+  -- ** A concrete implementation
+  ConcatT,concatT,Opaque(..)) where
 
 import Definitive
 import Language.Parser
-import GHC.Generics
+import GHC.Generics (Generic)
 
 newtype Opaque a = Opaque a
                  deriving (Generic)
 instance Show (Opaque a) where show _ = "#<opaque>"
+data StackStep s b a = VerbStep s | ConstStep (StackVal s b a) | CommentStep s | ClosureStep Bool (StackClosure s b a)
+                     deriving (Show,Generic)
+data StackClosure s b a = StackClosure [(StackProgram s b a,StackClosure s b a)] (StackProgram s b a)
+                        deriving (Show,Generic)
+type StackProgram s b a = [StackStep s b a]
+
+i'StackClosure :: Iso' ([(StackProgram s b a,StackClosure s b a)],StackProgram s b a) (StackClosure s b a)
+i'StackClosure = iso (\(cs,c) -> StackClosure cs c) (\(StackClosure cs c) -> (cs,c))
+
+t'ClosureStep :: Traversal' (StackStep s b a) (StackClosure s b a)
+t'ClosureStep k (ClosureStep b c) = ClosureStep b<$>k c
+t'ClosureStep _ x = pure x
+
+allSteps :: Fold' (StackClosure s b a) (StackStep s b a)
+allSteps = from i'StackClosure.(l'1.each.l'1.each .+ l'2.each)
+subClosure :: Int -> Fold' (StackClosure s b a) (StackClosure s b a)
+subClosure 0 = id
+subClosure n = (allSteps.t'ClosureStep.subClosure (n+1))
+               .+ (from i'StackClosure.l'1.each.l'2.subClosure (n-1))
+
+closureSplices :: Fold' (StackClosure s b a) (StackClosure s b a)
+closureSplices = allSteps.t'ClosureStep.subClosure (1::Int)
+               
+runClosure execBuiltin' onComment clos = do
+  p <- flatten =<< forl closureSplices clos (\c -> StackClosure [] <$> flatten c)
+  stack =~ (StackProg p:)
+  
+  where flatten (StackClosure cs c) = do
+          pref <- map fold $ for cs $ \(i,StackClosure _ p) -> (i+) <$> do
+            traverse_ (runStep execBuiltin' onComment) p
+            stack <~ \(h:t) -> (t,[ConstStep h])
+          return (pref + c)
+          
+runStep execBuiltin' onComment (VerbStep s) = getl (dict.at s) >>= \case
+  Just v -> runVal v
+  Nothing -> stack =~ (StackSymbol s:)
+  where runVal (StackBuiltin b) = execBuiltin' b
+        runVal (StackProg p) = traverse_ (runStep execBuiltin' onComment) p
+        runVal x = stack =~ (x:)
+runStep _ _ (ConstStep v) = stack =~ (v:)
+runStep _ onComment (CommentStep c) = onComment c
+runStep _ _ (ClosureStep True (StackClosure _ p)) = stack =~ (StackProg p:)
+runStep execBuiltin' onComment (ClosureStep _ c) = runClosure execBuiltin' onComment c
+
 data StackBuiltin b = Builtin_ListBegin | Builtin_ListEnd
                     | Builtin_Clear | Builtin_Stack
                     | Builtin_Pick | Builtin_Shift | Builtin_Shaft
@@ -27,7 +80,7 @@ data StackVal s b a = StackBuiltin (StackBuiltin b)
                     | StackSymbol s
                     | StackList [StackVal s b a]
                     | StackDict (Map s (StackVal s b a))
-                    | StackProg [s]
+                    | StackProg (StackProgram s b a)
                     | StackExtra (Opaque a)
                     deriving (Show,Generic)
 
@@ -37,8 +90,7 @@ t'StackDict _ x = return x
 
 data StackState st s b a = StackState {
   _stack :: [StackVal s b a],
-  _progStack :: [s],
-  _depth :: Int,
+  _progStack :: [StackClosure s b a],
   _dict :: Map s (StackVal s b a),
   _extraState :: st
   }
@@ -46,20 +98,20 @@ data StackState st s b a = StackState {
 
 stack :: Lens' (StackState st s b a) [StackVal s b a]
 stack = lens _stack (\x y -> x { _stack = y })
-progStack :: Lens' (StackState st s b a) [s]
+progStack :: Lens' (StackState st s b a) [StackClosure s b a]
 progStack = lens _progStack (\x y -> x { _progStack = y })
-depth :: Lens' (StackState st s b a) Int
-depth = lens _depth (\x y -> x { _depth = y })
 dict :: Lens' (StackState st s b a) (Map s (StackVal s b a))
 dict = lens _dict (\x y -> x { _dict = y })
 extraState :: Lens st st' (StackState st s b a) (StackState st' s b a)
 extraState = lens _extraState (\x y -> x { _extraState = y })
 
-data AtomClass s = OpenBrace | CloseBrace | Number Int | Quoted s | Comment s | Other s
+data AtomClass s = OpenBrace | CloseBrace | OpenSplice | CloseSplice | Number Int | Quoted s | Comment s | Other s
 class Ord s => StackSymbol s where atomClass :: s -> AtomClass s
 instance StackSymbol String where
   atomClass "{" = OpenBrace
+  atomClass "{@" = OpenSplice
   atomClass "}" = CloseBrace
+  atomClass "@}" = CloseSplice
   atomClass ('\'':t) = Quoted t
   atomClass ('"':t) = Quoted (init t)
   atomClass (':':t) = Comment t
@@ -68,25 +120,28 @@ instance StackSymbol String where
 execSymbolImpl :: (StackSymbol s, MonadState (StackState st s b a) m) => (StackBuiltin b -> m ()) -> (s -> m ()) -> s -> m ()
 execSymbolImpl execBuiltin' onComment atom = do
   st <- get
-  case atomClass atom of
-    OpenBrace -> do depth =~ (+1) ; when (st^.depth > 0) (progStack =~ (atom:))
-    CloseBrace -> do
-      depth =~ subtract 1
-      if st^.depth == 1 then do
-        stack =~ (StackProg (reverse $ st^.progStack):)
-        progStack =- []
-        else progStack =~ (atom:)
-    Quoted a | st^.depth==0 -> stack =~ (StackSymbol a:)
-    Comment a -> onComment a
-    Number n | st^.depth==0 -> stack =~ (StackInt n:)
-    _ -> case st^.depth of
-           0 -> case st^.dict.at atom of
-             Just v -> exec v
-             Nothing -> stack =~ (StackSymbol atom:)
-           _ -> progStack =~ (atom:)
-  where exec (StackBuiltin b) = execBuiltin' b
-        exec (StackProg p) = traverse_ (execSymbolImpl execBuiltin' onComment) p
-        exec x = stack =~ (x:)
+  case (atomClass atom,st^.progStack) of
+    (OpenBrace,_) -> progStack =~ (StackClosure [] []:)
+
+    (OpenSplice,StackClosure cs p:ps) ->
+      progStack =- StackClosure [] []:StackClosure ((reverse p,StackClosure [] []):cs) []:ps
+    (CloseSplice,StackClosure cs p:StackClosure cs' p':ps) ->
+      progStack =- StackClosure (set (t'1.l'2) (StackClosure (reverse cs) (reverse p)) cs') p':ps
+
+    (CloseBrace,StackClosure cs p:ps) -> do
+      progStack =- ps
+      let c = StackClosure (reverse cs) (reverse p)
+      execStep ps (ClosureStep (not $ has (closureSplices .+ (from i'StackClosure.l'1.each.l'2)) c) c)
+    (CloseBrace,[]) -> unit
+    (OpenSplice,[]) -> unit
+    (CloseSplice,_) -> unit
+
+    (Quoted a,ps) -> execStep ps (ConstStep (StackSymbol a))
+    (Comment a,ps) -> execStep ps (CommentStep a)
+    (Number n,ps) -> execStep ps (ConstStep (StackInt n))
+    (Other s,ps) -> execStep ps (VerbStep s)
+  where execStep [] stp = runStep execBuiltin' onComment stp
+        execStep (StackClosure cs p:ps) stp = progStack =- (StackClosure cs (stp:p):ps)
 
 execBuiltin :: (StackSymbol s, MonadState (StackState st s b a) m) => (b -> m ()) -> (s -> m ()) -> StackBuiltin b -> m ()
 execBuiltin runExtra onComment = go
@@ -95,10 +150,10 @@ execBuiltin runExtra onComment = go
       (val:StackSymbol var:tl) -> do dict =~ insert var val ; stack =- tl
       _ -> return ()
     go Builtin_ListBegin = stack =~ (StackBuiltin Builtin_ListBegin:)
-    go Builtin_ListEnd = stack =~ \st -> let (h,_:t) = break (\x -> case x of
-                                                                               StackBuiltin Builtin_ListBegin -> True
-                                                                               _ -> False) st
-                                                  in StackList (reverse h):t
+    go Builtin_ListEnd = stack =~ \st -> let ex acc (StackBuiltin Builtin_ListBegin:t) = (acc,t)
+                                             ex acc (h:t) = ex (h:acc) t
+                                             ex acc [] = (acc,[])
+                                         in let (h,t) = ex [] st in StackList h:t
     go Builtin_Stack = stack =~ \x -> StackList x:x
     go Builtin_Clear = stack =- []
     go Builtin_Pick = stack =~ \st -> case st of StackInt i:StackInt n:t | i<n, x:t' <- drop i t -> x:drop (n-i-1) t'
@@ -169,17 +224,18 @@ execBuiltin runExtra onComment = go
         StackBuiltin p:t -> do stack =- t ; execVal (StackBuiltin p)
         _ -> return ()
     go Builtin_Quote = stack =~ \case
-      StackList l:t -> StackProg [s | StackSymbol s <- l]:t
+      StackList l:t -> StackProg (map ConstStep l):t
       st -> st
       
     go (Builtin_Extra x) = runExtra x
 
-    execVal (StackProg p) = traverse_ (execSymbolImpl go onComment) p
+    execVal (StackProg p) = traverse_ (runStep go onComment) p
     execVal (StackBuiltin b) = go b
     execVal _ = return ()
 
 class (StackSymbol s,Monad m) => MonadStack st s b a m | m -> st s b a where
   execSymbol :: (b -> m ()) -> (s -> m ()) -> s -> m ()
+  execProgram :: (b -> m ()) -> (s -> m ()) -> StackProgram s b a -> m ()
   runStackState :: State [StackVal s b a] x -> m x
   runExtraState :: State st x -> m x
   runDictState :: State (Map s (StackVal s b a)) x -> m x
@@ -189,11 +245,12 @@ newtype ConcatT st b o s m a = ConcatT { _concatT :: StateT (StackState st s b o
 instance Monad m => Monad (ConcatT st b o s m) where join = coerceJoin ConcatT
 instance (StackSymbol s,Monad m) => MonadStack st s b a (ConcatT st b a s m) where
   execSymbol x y z = ConcatT $ execSymbolImpl (execBuiltin (map _concatT x) (map _concatT y)) (map _concatT y) z
+  execProgram x y p = ConcatT $ traverse_ (runStep (execBuiltin (map _concatT x) (map _concatT y)) (map _concatT y)) p
   runStackState st = ConcatT $ (\x -> return (swap $ stack (map swap (st^..state)) x))^.stateT
   runExtraState st = ConcatT $ (\x -> return (swap $ extraState (map swap (st^..state)) x))^.stateT
   runDictState st = ConcatT $ (\x -> return (swap $ dict (map swap (st^..state)) x))^.stateT
 
-defaultState = StackState [] [] 0
+defaultState = StackState [] []
 
 concatT :: Iso (ConcatT st b o s m a) (ConcatT st' b' o' s' m' a') (StateT (StackState st s b o) m a) (StateT (StackState st' s' b' o') m' a')
 concatT = iso ConcatT (\(ConcatT x) -> x)

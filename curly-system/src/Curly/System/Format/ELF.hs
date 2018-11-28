@@ -5,7 +5,7 @@ import qualified Prelude as P
 import Language.Format
 import Data.Bits
 
-class (Format Word8 Builder Bytes (Elf16 sys),Format Word8 Builder Bytes (Elf32 sys),Format Word8 Builder Bytes (Elf64 sys),Format Word8 Builder Bytes (ElfN sys)) => ElfSystem sys where
+class (Format Bytes (Elf16 sys),Format Bytes (Elf32 sys),Format Bytes (Elf64 sys),Format Bytes (ElfN sys)) => ElfSystem sys where
   data Elf16 sys :: *
   data Elf32 sys :: *
   data Elf64 sys :: *
@@ -42,21 +42,21 @@ instance ElfSystem Linux_X86 where
   e_n = Linux_X86_ElfN
   e_fromN (Linux_X86_ElfN x) = x
   e_abi _ = (EM_X86,EABI_Linux,EB_32,EO_LSB)
-instance Serializable Word8 Builder Bytes (Elf16 Linux_X86) where
+instance Serializable Bytes (Elf16 Linux_X86) where
   encode p (Linux_X86_Elf16 w) = encode p (LittleEndian w)
-instance Format Word8 Builder Bytes (Elf16 Linux_X86) where
+instance Format Bytes (Elf16 Linux_X86) where
   datum = datum <&> \(LittleEndian w) -> Linux_X86_Elf16 w
-instance Serializable Word8 Builder Bytes (Elf32 Linux_X86) where
+instance Serializable Bytes (Elf32 Linux_X86) where
   encode p (Linux_X86_Elf32 w) = encode p (LittleEndian w)
-instance Format Word8 Builder Bytes (Elf32 Linux_X86) where
+instance Format Bytes (Elf32 Linux_X86) where
   datum = datum <&> \(LittleEndian w) -> Linux_X86_Elf32 w
-instance Serializable Word8 Builder Bytes (Elf64 Linux_X86) where
+instance Serializable Bytes (Elf64 Linux_X86) where
   encode p (Linux_X86_Elf64 w) = encode p (LittleEndian w)
-instance Format Word8 Builder Bytes (Elf64 Linux_X86) where
+instance Format Bytes (Elf64 Linux_X86) where
   datum = datum <&> \(LittleEndian w) -> Linux_X86_Elf64 w
-instance Serializable Word8 Builder Bytes (ElfN Linux_X86) where
+instance Serializable Bytes (ElfN Linux_X86) where
   encode p (Linux_X86_ElfN w) = encode p (LittleEndian w)
-instance Format Word8 Builder Bytes (ElfN Linux_X86) where
+instance Format Bytes (ElfN Linux_X86) where
   datum = datum <&> \(LittleEndian w) -> Linux_X86_ElfN w
 instance Show (ElfN Linux_X86) where
   show (Linux_X86_ElfN x) = show x
@@ -79,21 +79,21 @@ instance ElfSystem Linux_X86_64 where
   e_n = Linux_X86_64_ElfN . fromIntegral
   e_fromN (Linux_X86_64_ElfN x) = fromIntegral x
   e_abi _ = (EM_X86_64,EABI_Linux,EB_64,EO_LSB)
-instance Serializable Word8 Builder Bytes (Elf16 Linux_X86_64) where
+instance Serializable Bytes (Elf16 Linux_X86_64) where
   encode p (Linux_X86_64_Elf16 w) = encode p (LittleEndian w)
-instance Format Word8 Builder Bytes (Elf16 Linux_X86_64) where
+instance Format Bytes (Elf16 Linux_X86_64) where
   datum = datum <&> \(LittleEndian w) -> Linux_X86_64_Elf16 w
-instance Serializable Word8 Builder Bytes (Elf32 Linux_X86_64) where
+instance Serializable Bytes (Elf32 Linux_X86_64) where
   encode p (Linux_X86_64_Elf32 w) = encode p (LittleEndian w)
-instance Format Word8 Builder Bytes (Elf32 Linux_X86_64) where
+instance Format Bytes (Elf32 Linux_X86_64) where
   datum = datum <&> \(LittleEndian w) -> Linux_X86_64_Elf32 w
-instance Serializable Word8 Builder Bytes (Elf64 Linux_X86_64) where
+instance Serializable Bytes (Elf64 Linux_X86_64) where
   encode p (Linux_X86_64_Elf64 w) = encode p (LittleEndian w)
-instance Format Word8 Builder Bytes (Elf64 Linux_X86_64) where
+instance Format Bytes (Elf64 Linux_X86_64) where
   datum = datum <&> \(LittleEndian w) -> Linux_X86_64_Elf64 w
-instance Serializable Word8 Builder Bytes (ElfN Linux_X86_64) where
+instance Serializable Bytes (ElfN Linux_X86_64) where
   encode p (Linux_X86_64_ElfN w) = encode p (LittleEndian w)
-instance Format Word8 Builder Bytes (ElfN Linux_X86_64) where
+instance Format Bytes (ElfN Linux_X86_64) where
   datum = datum <&> \(LittleEndian w) -> Linux_X86_64_ElfN w
 instance Show (ElfN Linux_X86_64) where
   show (Linux_X86_64_ElfN x) = show x
@@ -116,21 +116,21 @@ instance ElfSystem Linux_ARM where
   e_n = Linux_ARM_ElfN
   e_fromN (Linux_ARM_ElfN x) = x
   e_abi _ = (EM_ARM,EABI_Linux,EB_32,EO_MSB)
-instance Serializable Word8 Builder Bytes (Elf16 Linux_ARM) where
+instance Serializable Bytes (Elf16 Linux_ARM) where
   encode p (Linux_ARM_Elf16 w) = encode p w
-instance Format Word8 Builder Bytes (Elf16 Linux_ARM) where
+instance Format Bytes (Elf16 Linux_ARM) where
   datum = datum <&> \w -> Linux_ARM_Elf16 w
-instance Serializable Word8 Builder Bytes (Elf32 Linux_ARM) where
+instance Serializable Bytes (Elf32 Linux_ARM) where
   encode p (Linux_ARM_Elf32 w) = encode p w
-instance Format Word8 Builder Bytes (Elf32 Linux_ARM) where
+instance Format Bytes (Elf32 Linux_ARM) where
   datum = datum <&> \w -> Linux_ARM_Elf32 w
-instance Serializable Word8 Builder Bytes (Elf64 Linux_ARM) where
+instance Serializable Bytes (Elf64 Linux_ARM) where
   encode p (Linux_ARM_Elf64 w) = encode p w
-instance Format Word8 Builder Bytes (Elf64 Linux_ARM) where
+instance Format Bytes (Elf64 Linux_ARM) where
   datum = datum <&> \w -> Linux_ARM_Elf64 w
-instance Serializable Word8 Builder Bytes (ElfN Linux_ARM) where
+instance Serializable Bytes (ElfN Linux_ARM) where
   encode p (Linux_ARM_ElfN w) = encode p w
-instance Format Word8 Builder Bytes (ElfN Linux_ARM) where
+instance Format Bytes (ElfN Linux_ARM) where
   datum = datum <&> \w -> Linux_ARM_ElfN w
 instance Show (ElfN Linux_ARM) where
   show (Linux_ARM_ElfN x) = show x
@@ -173,9 +173,9 @@ instance ElfSystem sys => HasFlagOps (ElfN sys) where
   nullFlag = e_n 0
   addFlags x y = e_n (e_fromN x .|. e_fromN y)
   hasFlags x y = (e_fromN x .&. e_fromN y) == e_fromN y
-instance (ElfEnum flags u,HasFlagOps u,Serializable Word8 Builder Bytes u) => Serializable Word8 Builder Bytes (ElfFlags flags) where
+instance (ElfEnum flags u,HasFlagOps u,Serializable Bytes u) => Serializable Bytes (ElfFlags flags) where
   encode p (ElfFlags fs) = encode p (foldr addFlags nullFlag (map fromElfEnum fs))
-instance (ElfEnum flags u,Ord flags,HasFlagOps u,Format Word8 Builder Bytes u) => Format Word8 Builder Bytes (ElfFlags flags) where
+instance (ElfEnum flags u,Ord flags,HasFlagOps u,Format Bytes u) => Format Bytes (ElfFlags flags) where
   datum = datum <&> \x -> ElfFlags $ compose [touch f | f <- [minBound..maxBound], hasFlags x (fromElfEnum f)] zero
 
 toElfEnum_default :: (Eq u,Enum t,Bounded t,ElfEnum t u) => u -> Maybe t
@@ -210,9 +210,9 @@ deriving instance ElfShow sys => Show (ElfSection sys)
 deriving instance ElfShow sys => Show (ElfSectionContents sys)
 deriving instance ElfShow sys => Show (Elf sys)
 
-enumEncode :: (ElfEnum t u, Serializable Word8 Builder Bytes u) => t -> Builder
+enumEncode :: (ElfEnum t u, Serializable Bytes u) => t -> Builder
 enumEncode x = encode (Proxy :: Proxy Bytes) (fromElfEnum x)
-enumDatum :: (ElfEnum t u, Format Word8 Builder Bytes u) => Parser Bytes t
+enumDatum :: (ElfEnum t u, Format Bytes u) => Parser Bytes t
 enumDatum = datum >>= \x -> case toElfEnum x of
   Just a -> return a
   _ -> noParse
@@ -223,24 +223,24 @@ data ElfABI = EABI_Linux
 instance ElfEnum ElfABI Word8 where
   fromElfEnum EABI_SysV = 0
   fromElfEnum EABI_Linux = 3
-instance Serializable Word8 Builder Bytes ElfABI where encode _ = enumEncode
-instance Format Word8 Builder Bytes ElfABI       where datum = enumDatum
+instance Serializable Bytes ElfABI where encode _ = enumEncode
+instance Format Bytes ElfABI       where datum = enumDatum
 
 data ElfBits = EB_32 | EB_64
              deriving (Eq,Ord,Bounded,Enum,Show)
 instance ElfEnum ElfBits Word8 where
   fromElfEnum EB_32 = 1
   fromElfEnum EB_64 = 2
-instance Serializable Word8 Builder Bytes ElfBits where encode _ = enumEncode
-instance Format Word8 Builder Bytes ElfBits       where datum = enumDatum
+instance Serializable Bytes ElfBits where encode _ = enumEncode
+instance Format Bytes ElfBits       where datum = enumDatum
 
 data ElfOrder = EO_LSB | EO_MSB
               deriving (Eq,Ord,Bounded,Enum,Show)
 instance ElfEnum ElfOrder Word8 where
   fromElfEnum EO_LSB = 1
   fromElfEnum EO_MSB = 2
-instance Serializable Word8 Builder Bytes ElfOrder where encode _ = enumEncode
-instance Format Word8 Builder Bytes ElfOrder       where datum = enumDatum
+instance Serializable Bytes ElfOrder where encode _ = enumEncode
+instance Format Bytes ElfOrder       where datum = enumDatum
  
 data ElfType sys = ET_Exec
                | ET_Rel
@@ -250,8 +250,8 @@ instance ElfSystem sys => ElfEnum (ElfType sys) (Elf16 sys) where
   fromElfEnum ET_Rel  = e_16 1
   fromElfEnum ET_Exec = e_16 2
   fromElfEnum ET_Dyn  = e_16 3
-instance ElfSystem sys => Serializable Word8 Builder Bytes (ElfType sys) where encode _ = enumEncode
-instance ElfSystem sys => Format Word8 Builder Bytes (ElfType sys) where datum = enumDatum
+instance ElfSystem sys => Serializable Bytes (ElfType sys) where encode _ = enumEncode
+instance ElfSystem sys => Format Bytes (ElfType sys) where datum = enumDatum
  
 data ElfMachine sys = EM_X86 | EM_X86_64 | EM_ARM
                   deriving (Eq,Ord,Bounded,Enum,Show)
@@ -259,8 +259,8 @@ instance ElfSystem sys => ElfEnum (ElfMachine sys) (Elf16 sys) where
   fromElfEnum EM_X86 = e_16 3
   fromElfEnum EM_X86_64 = e_16 62
   fromElfEnum EM_ARM = e_16 40
-instance ElfSystem sys => Serializable Word8 Builder Bytes (ElfMachine sys) where encode _ = enumEncode
-instance ElfSystem sys => Format Word8 Builder Bytes (ElfMachine sys) where datum = enumDatum
+instance ElfSystem sys => Serializable Bytes (ElfMachine sys) where encode _ = enumEncode
+instance ElfSystem sys => Format Bytes (ElfMachine sys) where datum = enumDatum
  
 natSize :: (ElfSystem sys,Num n) => sys -> n
 natSize sys = case b of EB_32 -> 4 ; EB_64 -> 8
@@ -292,8 +292,8 @@ data ElfIdent = ElfIdent {
   ei_identPad :: (Word8,Word16,Word32) -- all null
   }
               deriving (Generic,Show)
-instance Serializable Word8 Builder Bytes ElfIdent
-instance Format Word8 Builder Bytes ElfIdent
+instance Serializable Bytes ElfIdent
+instance Format Bytes ElfIdent
 
 data ElfHeader sys = ElfHeader {
   -- ident
@@ -307,8 +307,8 @@ data ElfHeader sys = ElfHeader {
   }
                  deriving Generic
 deriving instance ElfShow sys => Show (ElfHeader sys)
-instance ElfSystem sys => Serializable Word8 Builder Bytes (ElfHeader sys)
-instance ElfSystem sys => Format Word8 Builder Bytes (ElfHeader sys)
+instance ElfSystem sys => Serializable Bytes (ElfHeader sys)
+instance ElfSystem sys => Format Bytes (ElfHeader sys)
 
 data ElfPHType sys = PHT_Load
                  | PHT_Dynamic
@@ -326,8 +326,8 @@ instance ElfSystem sys => ElfEnum (ElfPHType sys) (Elf32 sys) where
   fromElfEnum PHT_GNU_EH_Frame  = e_32 0x6474e550
   fromElfEnum PHT_GNU_Stack     = e_32 0x6474e551
   fromElfEnum PHT_GNU_RelRO     = e_32 0x6474e552
-instance ElfSystem sys => Serializable Word8 Builder Bytes (ElfPHType sys) where encode _ = enumEncode
-instance ElfSystem sys => Format Word8 Builder Bytes (ElfPHType sys) where datum = enumDatum
+instance ElfSystem sys => Serializable Bytes (ElfPHType sys) where encode _ = enumEncode
+instance ElfSystem sys => Format Bytes (ElfPHType sys) where datum = enumDatum
 
 data ElfProgramHeaderFlag sys = EPH_Read | EPH_Write | EPH_Exec
                               deriving (Eq,Ord,Enum,Bounded,Show)
@@ -342,12 +342,12 @@ data ElfProgramHeader sys = ElfProgramHeader {
   eph_filesz, eph_memsz, eph_align :: ElfN sys
   }
 deriving instance ElfShow sys => Show (ElfProgramHeader sys)
-instance ElfSystem sys => Serializable Word8 Builder Bytes (ElfProgramHeader sys) where
+instance ElfSystem sys => Serializable Bytes (ElfProgramHeader sys) where
   encode p (ElfProgramHeader t f o va pa fs ms al) = case bits of
     EB_32 -> encode p (t,o,va,pa,fs,ms,f,al)
     EB_64 -> encode p (t,f,o,va,pa,fs,ms,al)
     where (_,_,bits,_) = e_abi (undefined :: sys)
-instance ElfSystem sys => Format Word8 Builder Bytes (ElfProgramHeader sys) where
+instance ElfSystem sys => Format Bytes (ElfProgramHeader sys) where
   datum = case bits of
     EB_32 -> datum <&> \(t,o,va,pa,fs,ms,f,al) -> ElfProgramHeader t f o va pa fs ms al
     EB_64 -> datum <&> \(t,f,o,va,pa,fs,ms,al) -> ElfProgramHeader t f o va pa fs ms al
@@ -388,8 +388,8 @@ instance ElfSystem sys => ElfEnum (ElfSHType sys) (Elf32 sys) where
   fromElfEnum SHT_GNU_VerSym     = e_32 0x6fffffff
   fromElfEnum SHT_GNU_VerNeeded  = e_32 0x6ffffffe
   
-instance ElfSystem sys => Serializable Word8 Builder Bytes (ElfSHType sys) where encode p = enumEncode
-instance ElfSystem sys => Format Word8 Builder Bytes (ElfSHType sys) where datum = enumDatum
+instance ElfSystem sys => Serializable Bytes (ElfSHType sys) where encode p = enumEncode
+instance ElfSystem sys => Format Bytes (ElfSHType sys) where datum = enumDatum
 
 data ElfSectionHeaderFlag sys = SHF_Write | SHF_Alloc | SHF_ExecInstr | SHF_MaskProc
                             deriving (Eq,Ord,Enum,Bounded,Show)
@@ -409,8 +409,8 @@ data ElfSectionHeader sys = ElfSectionHeader {
   }
                         deriving Generic
 deriving instance ElfShow sys => Show (ElfSectionHeader sys)
-instance ElfSystem sys => Serializable Word8 Builder Bytes (ElfSectionHeader sys)
-instance ElfSystem sys => Format Word8 Builder Bytes (ElfSectionHeader sys)
+instance ElfSystem sys => Serializable Bytes (ElfSectionHeader sys)
+instance ElfSystem sys => Format Bytes (ElfSectionHeader sys)
 nullSectionHeader :: ElfSystem sys => ElfSectionHeader sys
 nullSectionHeader = ElfSectionHeader (e_32 0) SHT_Null (ElfFlags zero) (e_n 0) (e_n 0) (e_n 0) (e_32 0) (e_32 0) (e_n 0) (e_n 0)
 
@@ -443,9 +443,9 @@ data ElfSymInfo = ElfSymInfo {
   esyi_bind :: ElfSymBind
   }
                    deriving Show
-instance Serializable Word8 Builder Bytes ElfSymInfo where
+instance Serializable Bytes ElfSymInfo where
   encode p (ElfSymInfo t b) = encode p (fromElfEnum t .|. (fromElfEnum b `shiftL` 4))
-instance Format Word8 Builder Bytes ElfSymInfo where
+instance Format Bytes ElfSymInfo where
   datum = datum >>= \x -> case (toElfEnum (x .&. 0xf), toElfEnum (x`shiftR`4)) of
     (Just t,Just b) -> return (ElfSymInfo t b)
     _ -> noParse
@@ -457,8 +457,8 @@ instance ElfEnum ElfSymVisibility Word8 where
   fromElfEnum ESV_Internal   = 1
   fromElfEnum ESV_Hidden     = 2
   fromElfEnum ESV_Protected  = 3
-instance Serializable Word8 Builder Bytes ElfSymVisibility where encode p = enumEncode
-instance Format Word8 Builder Bytes ElfSymVisibility       where datum = enumDatum
+instance Serializable Bytes ElfSymVisibility where encode p = enumEncode
+instance Format Bytes ElfSymVisibility       where datum = enumDatum
 data ElfSym sys = ElfSym {
   esy_name :: Elf32 sys,
   esy_info :: ElfSymInfo,
@@ -468,12 +468,12 @@ data ElfSym sys = ElfSym {
   }
               deriving Generic
 deriving instance ElfShow sys => Show (ElfSym sys)
-instance ElfSystem sys => Serializable Word8 Builder Bytes (ElfSym sys) where
+instance ElfSystem sys => Serializable Bytes (ElfSym sys) where
   encode p (ElfSym n i o ndx v sz) = case bits of
     EB_32 -> encode p (n,v,sz,i,o,ndx)
     EB_64 -> encode p (n,i,o,ndx,v,sz)
     where (_,_,bits,_) = e_abi (undefined :: sys)
-instance ElfSystem sys => Format Word8 Builder Bytes (ElfSym sys) where
+instance ElfSystem sys => Format Bytes (ElfSym sys) where
   datum = case bits of
     EB_32 -> datum <&> \(n,v,sz,i,o,ndx) -> ElfSym n i o ndx v sz
     EB_64 -> datum <&> \(n,i,o,ndx,v,sz) -> ElfSym n i o ndx v sz
@@ -526,12 +526,12 @@ data ElfRelInfo sys = ElfRelInfo {
   eri_type :: ElfRelType sys
   }
                   deriving Show
-instance ElfSystem sys => Serializable Word8 Builder Bytes (ElfRelInfo sys) where
+instance ElfSystem sys => Serializable Bytes (ElfRelInfo sys) where
   encode p (ElfRelInfo s t) = case bits of
     EB_32 -> encode p (e_32 $ (e_from32 s`shiftL`8) .&. fromIntegral (fromElfEnum t) :: Elf32 sys)
     EB_64 -> encode p (e_64 $ (fromIntegral (e_from32 s)`shiftL`32) .&. fromIntegral (fromElfEnum t) :: Elf64 sys)
     where (_,_,bits,_) = e_abi (undefined :: sys)
-instance ElfSystem sys => Format Word8 Builder Bytes (ElfRelInfo sys) where
+instance ElfSystem sys => Format Bytes (ElfRelInfo sys) where
   datum = case bits of
     EB_32 -> datum >>= \x -> case toElfEnum (fromIntegral (e_from32 x)) of
       Just t -> return $ ElfRelInfo (e_32 (e_from32 (x :: Elf32 sys)`shiftR`8)) t
@@ -546,8 +546,8 @@ data ElfRel sys = ElfRel {
   }
               deriving Generic
 deriving instance (ElfShow sys, ElfSystem sys) => Show (ElfRel sys)
-instance ElfSystem sys => Serializable Word8 Builder Bytes (ElfRel sys)
-instance ElfSystem sys => Format Word8 Builder Bytes (ElfRel sys)
+instance ElfSystem sys => Serializable Bytes (ElfRel sys)
+instance ElfSystem sys => Format Bytes (ElfRel sys)
 data ElfRela sys = ElfRela {
   era_offset :: ElfN sys,
   era_info :: ElfRelInfo sys,
@@ -555,10 +555,10 @@ data ElfRela sys = ElfRela {
   }
                deriving Generic
 deriving instance (ElfShow sys,ElfSystem sys) => Show (ElfRela sys)
-instance ElfSystem sys => Serializable Word8 Builder Bytes (ElfRela sys)
-instance ElfSystem sys => Format Word8 Builder Bytes (ElfRela sys)
+instance ElfSystem sys => Serializable Bytes (ElfRela sys)
+instance ElfSystem sys => Format Bytes (ElfRela sys)
 
-instance forall sys. ElfSystem sys => Serializable Word8 Builder Bytes (Elf sys) where
+instance forall sys. ElfSystem sys => Serializable Bytes (Elf sys) where
   encode p (Elf t entry progs) = ehdr + fold [by bytesBuilder dat
                                            | ElfSection { es_contents = ElfProgbits { esc_data = dat } } <- progs]
                                + fold pHdrs + fold sHdrs + by bytesBuilder strTable
@@ -706,7 +706,7 @@ instance ElfSystem sys => Integral (ElfN sys) where
 
 sHN_ABS :: Num n => n
 sHN_ABS = 65521
-instance forall sys. (ElfShow sys, ElfSystem sys) => Format Word8 Builder Bytes (Elf sys) where
+instance forall sys. (ElfShow sys, ElfSystem sys) => Format Bytes (Elf sys) where
   datum = do
     file <- remaining
     elfH <- datum

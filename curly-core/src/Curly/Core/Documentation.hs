@@ -26,8 +26,10 @@ import System.Environment (lookupEnv)
 -- | A documentation node (similar to a HTML node, but simpler)
 data DocNode a = DocTag String [(String,String)] [a]
                deriving (Eq,Ord,Show,Generic)
-instance Serializable Word8 Builder Bytes a => Serializable Word8 Builder Bytes (DocNode a)
-instance Format Word8 Builder Bytes a => Format Word8 Builder Bytes (DocNode a)
+instance Serializable Bytes a => Serializable Bytes (DocNode a)
+instance Serializable Bytes a => Serializable Bytes (Free DocNode a) where encode = encodeFree
+instance Format Bytes a => Format Bytes (DocNode a)
+instance Format Bytes a => Format Bytes (Free DocNode a) where datum = datumFree
 instance Functor DocNode where map f (DocTag t a xs) = DocTag t a (map f xs)
 instance Foldable DocNode where fold (DocTag _ _ l) = fold l
 instance Traversable DocNode where sequence (DocTag t as l) = DocTag t as<$>sequence l
@@ -51,10 +53,10 @@ instance Documented Int where
   document n = docTag' "int" [Pure (show n)]
 
 newtype Metadata = Metadata (Forest (Map String) String)
-                 deriving (Semigroup,Monoid,Serializable Word8 Builder Bytes)
+                 deriving (Semigroup,Monoid,Serializable Bytes)
 i'Metadata :: Iso' (Forest (Map String) String) Metadata
 i'Metadata = iso Metadata (\(Metadata m) -> m)
-instance Format Word8 Builder Bytes Metadata where datum = coerceDatum Metadata
+instance Format Bytes Metadata where datum = coerceDatum Metadata
 instance DataMap Metadata String (Free (Map String) String) where 
   at i = from i'Metadata.at i
 instance Show Metadata where
@@ -155,15 +157,15 @@ mkDoc :: String    -- ^ The root tag name
          -> String -- ^ Documentation in textual format
          -> Documentation
 mkDoc t d = Join . DocTag t [] $ fromMaybe [] $ matches Just (between spc spc (sepBy' docAtom spc)) d
-spc :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => ParserT s m ()
+spc :: (ParseStream s, StreamChar s ~ Char,Monad m) => ParserT s m ()
 spc = skipMany' (oneOf " \t\n")
 
-docAtom :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => ParserT s m Documentation
-docFormat :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) => String -> [Char] -> ParserT s m Documentation
+docAtom :: (ParseStream s, StreamChar s ~ Char,Monad m) => ParserT s m Documentation
+docFormat :: (ParseStream s, StreamChar s ~ Char,Monad m) => String -> [Char] -> ParserT s m Documentation
 docAtom = fst docAtom'
 docFormat = snd docAtom'
 
-docAtom' :: (ParseStream c s, ParseToken c, TokenPayload c ~ Char,Monad m) =>
+docAtom' :: (ParseStream s, StreamChar s ~ Char,Monad m) =>
            (ParserT s m Documentation,String -> [Char] -> ParserT s m Documentation)
 docAtom' = (tag <+? txt,strSplice)
   where letter p = token >>= \case
@@ -193,7 +195,7 @@ docAtom' = (tag <+? txt,strSplice)
                           <+? single '\\' >> token
 
 
-docLine :: (ParseToken c, ParseStream c s, TokenPayload c ~ Char, Monad m)
+docLine :: (ParseStream s, StreamChar s ~ Char, Monad m)
            => String -> [(String,String)] -> ParserT s m Documentation
 docLine n as = Join . DocTag n as <$> many1' (skipMany' (oneOf " \t") >> docAtom)
 showRawDoc :: Documentation -> String

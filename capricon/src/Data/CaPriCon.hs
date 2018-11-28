@@ -1,16 +1,14 @@
 {-# LANGUAGE UndecidableInstances, OverloadedStrings, NoMonomorphismRestriction, DeriveGeneric, ConstraintKinds #-}
 module Data.CaPriCon(
   -- * Expression nodes
-  IsCapriconString(..),BindType(..),Node(..),ApHead(..),Application(..),
+  IsCapriconString(..),BindType(..),Node(..),ApHead(..),Application(..),ContextNode(..),Env,COCExpression(..),
   -- ** Managing De Bruijin indices
   adjust_depth,adjust_telescope_depth,inc_depth,free_vars,is_free_in,
-  -- ** General term substitution and type inference
-  subst,substn,type_of,mu_type,
   -- ** Expression directories
   StringPattern,NodeDir(..),AHDir(..),ApDir,
   findPattern,freshContext,
   -- * Showing nodes
-  NodeDoc(..),doc2raw,doc2latex,showNode,showNode'
+  ListBuilder(..),NodeDoc(..),doc2raw,doc2latex,showNode,showNode'
   ) where
 
 import Definitive
@@ -39,26 +37,33 @@ instance IsCapriconString String where
   toString = id
 
 type ListStream = [Word8]
-type ListBuilder = ListStream -> ListStream
-instance SerialStream Word8 ListBuilder ListStream where
-  encodeByte _ b = (b:)
-  toSerialStream k = k []
+newtype ListBuilder = ListBuilder (ListStream -> ListStream)
+instance Semigroup ListBuilder where ListBuilder a + ListBuilder b = ListBuilder (a . b)
+instance Monoid ListBuilder where zero = ListBuilder id
+instance SerialStreamType ListStream where
+  type StreamBuilder ListStream = ListBuilder
+instance SerialStream ListStream where
+  encodeByte _ b = ListBuilder (b:)
+  toSerialStream (ListBuilder k) = k []
 
 -- | Inductive types
+type UniverseSize = Int
+type SymbolRef = Int
 data BindType = Lambda | Prod
               deriving (Show,Eq,Ord,Generic)
-data Node str = Bind BindType str (Node str) (Node str)
+data Node str = Bind BindType str (NodeType str) (Node str)
               | Cons (Application str)
-              | Universe Int
+              | Universe UniverseSize
           deriving (Show,Generic)
-data ApHead str = Sym Int | Mu [(str,Node str,Node str)] [Node str] (Application str)
+type NodeType str = Node str
+data ApHead str = Sym SymbolRef | Mu [(str,Node str,Node str)] [Node str] (Application str)
             deriving (Show,Generic)
 data Application str = Ap (ApHead str) [Node str]
                  deriving (Show,Generic) 
-type Env str = [Node str]
+type Env str = [(str,NodeType str)]
 
-type ListSerializable a = (Serializable Word8 ListBuilder ListStream a)
-type ListFormat a = (Format Word8 ListBuilder ListStream a)
+type ListSerializable a = (Serializable ListStream a)
+type ListFormat a = (Format ListStream a)
 instance ListSerializable BindType
 instance ListFormat BindType
 instance ListSerializable str => ListSerializable (Node str)
@@ -67,6 +72,99 @@ instance ListSerializable str => ListSerializable (ApHead str)
 instance ListFormat str => ListFormat (ApHead str)
 instance ListSerializable str => ListSerializable (Application str)
 instance ListFormat str => ListFormat (Application str)
+
+class Monad m => COCExpression str m e | e -> str where
+  mkUniverse :: UniverseSize -> m e
+  mkVariable :: str -> m e
+  mkBind :: BindType -> e -> m e
+  mkApply :: e -> e -> m e
+  mkMu :: e -> m e
+  checkType :: e -> m e
+  conversionDelta :: e -> e -> m (UniverseSize,UniverseSize)
+
+  substHyp :: str -> e -> m (e -> e,Env str)
+  pullTerm :: e -> m e
+  insertHypBefore :: Maybe str -> str -> e -> m (e -> e,Env str)
+instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression str (MaybeT m) (Node str) where
+  mkUniverse = pure . Universe
+  mkVariable v = hypIndex v <&> \i -> Cons (Ap (Sym i) [])
+  mkBind b e = ask >>= \case
+    (x,tx):_ -> pure $ Bind b x tx e
+    _ -> zero
+  mkApply f x = return (subst f (Cons (Ap (Sym 0) [inc_depth 1 x])))
+  mkMu e = do
+    te <- checkType e
+    mte <- mu_type te^.maybeT
+    let args (Bind Prod _ tx e') = tx:args e'
+        args _ = []
+    return (subst e (Cons (Ap (Mu [] (args mte) (Ap (Sym 0) [])) [])))
+  checkType e = type_of e^.maybeT
+  conversionDelta a b = return (convertible a b)^.maybeT
+
+  substHyp h x = do
+    i <- hypIndex h
+    lift $ do
+      ctx <- ask
+      return (substn x i,let (ch,ct) = splitAt i ctx in zipWith (\j -> second $ substn (inc_depth (negate (1+j)) x) (i-j-1)) [0..] ch+drop 1 ct)
+  pullTerm = return
+  insertHypBefore Nothing h th = lift $ do
+    ctx <- ask
+    return (inc_depth 1,(h,th):ctx)
+  insertHypBefore (Just h) h' th' = do
+    hi <- hypIndex h
+    lift $ do
+      ctx <- ask
+      let adj i j = if i+j>=hi then j+1 else j
+      return (
+        adjust_depth (adj (-1)),
+        foldr (\x k i -> case compare hi i of
+                           LT -> x:k (i+1)
+                           EQ -> second (adjust_depth (adj i)) x:(h',inc_depth (negate (hi+1)) th'):k (i+1)
+                           GT -> second (adjust_depth (adj i)) x:k (i+1))
+          (\_ -> []) ctx 0)
+
+hypIndex :: (IsCapriconString str,MonadReader (Env str) m) => str -> MaybeT m Int
+hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
+  i:_ -> return i
+  _ -> zero
+    
+data ContextNode str = ContextNode SymbolRef (Node str)
+                     deriving (Show,Generic)
+instance ListSerializable str => ListSerializable (ContextNode str)
+instance ListFormat str => ListFormat (ContextNode str)
+restrictEnv :: SymbolRef -> Env str -> Env str
+restrictEnv n e = drop (length e-n) e
+
+instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression str (MaybeT m) (ContextNode str) where
+  mkUniverse u = ask >>= \ctx -> ContextNode (length ctx)<$>mkUniverse u
+  mkVariable i = local (dropWhile ((/=i) . fst)) (ask >>= \ctx -> ContextNode (length ctx)<$>mkVariable i)
+  mkBind t ce@(ContextNode de e) | de>0 = ContextNode (de-1) <$> local (restrictEnv de) (mkBind t e)
+                                 | otherwise = return ce
+  mkApply (ContextNode df f) (ContextNode dx x) = do
+    let dm = max df dx
+    ContextNode dm <$> mkApply (inc_depth (dm-df) f) (inc_depth (dm-dx) x)
+  mkMu (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (mkMu e)
+  checkType (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (checkType e)
+  conversionDelta (ContextNode da a) (ContextNode db b) =
+    let dm = max da db in
+      local (restrictEnv dm)
+      $ conversionDelta (inc_depth (dm-da) a) (inc_depth (dm-db) b)
+  
+  pullTerm (ContextNode d e) = ask <&> \l -> ContextNode (length l) (inc_depth (length l-d) e)
+  substHyp h vh = do
+    hi <- hypIndex h
+    ContextNode dm vh' <- pullTerm vh
+    first (\f cv@(ContextNode d v) ->
+             if d+hi <= dm then cv
+             else ContextNode (d-1) (inc_depth (d-dm) $ f $ inc_depth (dm-d) v)) <$>
+      substHyp h vh'
+  insertHypBefore h h' cth' = do
+    ContextNode dh th' <- pullTerm cth'
+    hi <- maybe (return (-1)) hypIndex h
+    first (\f cx@(ContextNode d x) ->
+             if d+hi < dh then cx
+             else ContextNode (d+1) (inc_depth (d-dh) $ f $ inc_depth (dh-d) x))
+            <$> insertHypBefore h h' th'
 
 data NodeDir str a = NodeDir
   (Map BindType (NodeDir str (NodeDir str a)))
@@ -79,7 +177,10 @@ instance Foldable (NodeDir str) where
   fold (NodeDir a b c) = (fold.map fold.map2 fold) a + (fold.map fold.map2 fold) b + fold c
 instance Traversable (NodeDir str) where
   sequence (NodeDir a b c) = NodeDir<$>sequence3 a<*>sequence3 b<*>sequence c
+
+instance (Serializable ListStream str,Serializable ListStream a) => Serializable ListStream (Cofree (NodeDir str) a) where encode = encodeCofree
 instance (ListSerializable str, ListSerializable a) => ListSerializable (NodeDir str a)
+instance (Format ListStream str,Format ListStream a) => Format ListStream (Cofree (NodeDir str) a) where datum = datumCofree
 instance (ListFormat str, ListFormat a) => ListFormat (NodeDir str a)
 
 i'NodeDir :: Iso (NodeDir str a) (NodeDir str' a')
@@ -204,14 +305,14 @@ is_free_in = map2 not go
         go_a v (Ap (Sym v') subs) = v/=v' && all (go v) subs
         go_a v (Ap (Mu env _ a) subs) = go_a (v+length env) a && all (go v) subs
 
-subst :: (IsCapriconString str, MonadReader (Env str) m) => Node str -> Node str -> m (Node str)
+subst :: Show str => Node str -> Node str -> Node str
 subst = flip substn 0
-substn :: (IsCapriconString str, MonadReader (Env str) m) => Node str -> Int -> Node str -> m (Node str)
-substn val n | n>=0 = go n
+substn :: Show str => Node str -> Int -> Node str -> Node str
+substn val n | n>=0 = getId . go n
              | otherwise = error "'subst' should not be called with a negative index"
   where go d (Bind t x tx e) = do
           tx' <- go d tx
-          Bind t x tx' <$> local (tx':) (go (d+1) e)
+          Bind t x tx' <$> go (d+1) e
         go _ (Universe u) = pure (Universe u)
         go d (Cons a) = go_a d a
 
@@ -238,17 +339,17 @@ substn val n | n>=0 = go n
               a' <- Cons . Ap (Sym i) <$>
                 sequence (fold [if nonempty (free_vars x - fromKList [0..envS-1])
                                 then [ return $ inc_depth envS $ foldl' (\e (x',tx,_) -> Bind Lambda x' tx e) x env
-                                     , subst x (Cons (Ap (Mu [] muEnv (Ap (Sym 0) [])) [Cons (Ap (Sym j) []) | j <- reverse [1..envS]]))]
+                                     , return $ subst x (Cons (Ap (Mu [] muEnv (Ap (Sym 0) [])) [Cons (Ap (Sym j) []) | j <- reverse [1..envS]]))]
                                 else [return x]
                                | x <- xs])
               return $ foldl' (\e (x,_,tx) -> Bind Lambda x tx e) a' env
         go_mu _ e t (Cons a) = return $ Cons (Ap (Mu e t a) [])
-        go_mu _ _ _ x' = error $ fromString "Cannot produce an induction principle for a term : "+fromString (show x')
+        go_mu _ _ _ x' = error $ "Cannot produce an induction principle for a term : "+show x'
 
-        rec_subst (y:t) (Bind Lambda _ _ e) = rec_subst t =<< subst y e
+        rec_subst (y:t) (Bind Lambda _ _ e) = rec_subst t (subst y e)
         rec_subst xs (Cons (Ap h hxs)) = return (Cons (Ap h (hxs+xs)))
         rec_subst [] x = return x
-        rec_subst _ x = error $ fromString "Invalid substitution of non-lambda expression : "+fromString (show x)
+        rec_subst _ x = error $ "Invalid substitution of non-lambda expression : "+show x
 
 fresh env v = head $ select (not . (`elem` env)) (v:[v+fromString (show i) | i <- [0..]])
 freshContext = go []
@@ -336,10 +437,10 @@ showNode' dir = go 0
 
 type_of :: (IsCapriconString str,MonadReader (Env str) m) => Node str -> m (Maybe (Node str))
 type_of = yb maybeT . go
-  where go (Bind Lambda x tx e) = Bind Prod x tx <$> local (tx:) (go e)
-        go (Bind Prod _ tx e) = do
+  where go (Bind Lambda x tx e) = Bind Prod x tx <$> local ((x,tx):) (go e)
+        go (Bind Prod x tx e) = do
           a <- go tx
-          b <- local (tx:) $ go e
+          b <- local ((x,tx):) $ go e
           case (a,b) of
             (Universe ua,Universe ub) -> return (Universe (max ua ub))
             _ -> zero
@@ -348,14 +449,14 @@ type_of = yb maybeT . go
           where go' (Ap (Sym i) subs) = do
                   e <- ask
                   case drop i e of
-                    ti:_ -> rec_subst subs (inc_depth (i+1) ti)
+                    (_,ti):_ -> rec_subst subs (inc_depth (i+1) ti)
                     _ -> zero
                 go' (Ap (Mu env _ a') subs) = do
-                  ta <- local (map (by l'2) env +) (go' a')
+                  ta <- local (map (\(x,tx,_) -> (x,tx)) env +) (go' a')
                   preret <- maybeT $^ mu_type $ foldl' (\e (x,tx,_) -> Bind Prod x tx e) ta env
-                  rec_subst subs =<< subst (Cons a') preret
+                  rec_subst subs (subst (Cons a') preret)
                       
-                rec_subst (y:t) (Bind Prod _ _ e) = rec_subst t =<< subst y e
+                rec_subst (y:t) (Bind Prod _ _ e) = rec_subst t (subst y e)
                 rec_subst [] x = return x
                 rec_subst _ _ = zero
 
@@ -371,7 +472,7 @@ mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
 
     go d (Bind Prod x tx e) = do
       tx' <- go_col d x tx
-      e' <- local (tx:) (go (d+1) e)
+      e' <- local ((x,tx):) (go (d+1) e)
       return (Bind Prod x tx' e')
     go _ (Cons (Ap (Sym i) args)) = return $ Cons (Ap (Sym i) $ args + [Cons (Ap (Sym nargs) [])])
     go _ _ = zero
@@ -382,10 +483,10 @@ mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
                   let tx' = bind Prod (adjust_telescope_depth second (+(d+d')) root_args)
                             (adjust_depth (\i' -> if constr_ind d d' i' then (i'-d')+(nargs-d) else i'+nargs) tx)
                       tIx = Cons $ Ap (Sym (i+1)) $ map (inc_depth 1) subs + [Cons (Ap (Sym 0) [])]
-                  e' <- local ((tx:) . (undefined:)) (go_col' (d'+2) (touch (1 :: Int) (map (+2) recs))
-                                                      (adjust_depth (\j -> if j==0 then j else j+1) e))
+                  e' <- local (((x,tx):) . (undefined:)) (go_col' (d'+2) (touch (1 :: Int) (map (+2) recs))
+                                                          (adjust_depth (\j -> if j==0 then j else j+1) e))
                   return $ Bind Prod x tx' (Bind Prod x tIx e')
-            go_col' d' recs (Bind Prod x tx e) = Bind Prod x tx <$> local (tx:) (go_col' (d'+1) (map (+1) recs) e)
+            go_col' d' recs (Bind Prod x tx e) = Bind Prod x tx <$> local ((x,tx):) (go_col' (d'+1) (map (+1) recs) e)
             go_col' d' recs (Cons (Ap (Sym i) xs))
               | constr_ind d d' i = do
                   let args = reverse $ select (not . (`isKeyIn`recs)) [0..d'-1]
@@ -403,3 +504,20 @@ mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
                   ihRoot = Cons (Ap (Sym (nargs-d-1)) [Cons (Ap (Sym (j+nargs)) []) | j <- reverse [0..d'-1]])
               return $ Bind Prod xn tIH (Universe (u+1))
             go_col' _ _ _ = zero
+
+convertible :: Node str -> Node str -> Maybe (Int,Int)
+convertible = \x y -> map ((getMax<#>getMax) . fst) ((tell (Max 0,Max 0) >> go False x y)^..writerT)
+  where go inv (Bind b _ tx e) (Bind b' _ tx' e') = guard (b==b') >> go (not inv) tx tx' >> go inv e e'
+        go inv (Cons ax) (Cons ay) = go_a inv ax ay
+        go inv (Universe u) (Universe v) | u>v = tellInv inv (Max (u-v),zero)
+                                         | otherwise = return ()
+        go _ _ _ = lift Nothing
+        
+        go_a inv (Ap hi ai) (Ap hj aj) = go_ah inv hi hj >> sequence_ (zipWith (go inv) ai aj)
+  
+        go_ah _ (Sym i) (Sym j) | i==j = return ()
+        go_ah inv (Mu _ _ x) (Mu _ _ y) = go_a inv x y
+        go_ah _ _ _ = lift Nothing
+        
+        tellInv True (x,y) = tell (y,x)
+        tellInv False (x,y) = tell (x,y)

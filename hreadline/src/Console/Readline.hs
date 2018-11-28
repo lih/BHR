@@ -7,6 +7,7 @@ import System.IO (hSetEcho,hSetBuffering,BufferMode(..),openFile,IOMode(..))
 import Data.IORef
 import qualified System.Console.Terminal.Size as TSize
 import Control.DeepSeq (($!!))
+import Control.Exception (bracket_)
 
 tty = (openFile "/dev/tty" ReadWriteMode <*= \h -> hSetBuffering h NoBuffering)^.thunk
 
@@ -34,7 +35,7 @@ pattern CUD n = CSI n 'B'
 pattern CUF n = CSI n 'C'
 pattern CUB n = CSI n 'D'
 
-cseq :: (ParseStream c s, MonadParser s m p, TokenPayload c ~ Char) => p ControlSequence
+cseq :: (ParseStream s, MonadParser s m p, StreamChar s ~ Char) => p ControlSequence
 cseq = esc <+? map RawChar token
   where esc = do
           single '\ESC'
@@ -61,7 +62,7 @@ rlFuture = lens _rlFuture (\x y -> x { _rlFuture = y })
 rl_stateref = (readHString tty >>= \s -> newIORef (s,[],\_ -> return []))^.thunk
 
 readline :: String -> IO (Maybe String)
-readline prompt = between (hSetEcho tty False) (hSetEcho tty True) $ do
+readline prompt = bracket_ (hSetEcho tty False) (hSetEcho tty True) $ do
   writeHString tty prompt
   (inp,hist,complete) <- readIORef rl_stateref
   (st',l) <- ((axiom complete^..parserT) inp^..stateT) (RLState zero zero hist zero)

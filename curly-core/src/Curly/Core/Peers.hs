@@ -17,12 +17,12 @@ data PeerPacket = DeclareInstance InstanceName (Proxy (Either PeerErrorMessage P
                 deriving Generic
 
 newtype PeerPort = PeerPort { getPeerPortNumber :: PortNumber }
-instance Serializable Word8 Builder Bytes PeerPort where
+instance Serializable Bytes PeerPort where
   encode p = encode p . c'int . fromIntegral . getPeerPortNumber
-instance Format Word8 Builder Bytes PeerPort where
+instance Format Bytes PeerPort where
   datum = PeerPort . fromIntegral . c'int <$> datum
-instance Serializable Word8 Builder Bytes PeerPacket
-instance Format Word8 Builder Bytes PeerPacket
+instance Serializable Bytes PeerPacket
+instance Format Bytes PeerPacket
 
 processInstances :: IORef (Set InstanceName)
 processInstances = newIORef zero^.thunk

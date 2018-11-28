@@ -12,13 +12,14 @@ import Data.IORef
 import System.Directory (getXdgDirectory, XdgDirectory(..))
 import System.FilePath ((</>))
 import CaPriCon.Run
+import Data.CaPriCon (ListBuilder(..))
 
-instance Serializable Word8 ([Word8] -> [Word8]) [Word8] Char where encode _ c = (fromIntegral (fromEnum c):)
-instance Format Word8 ([Word8] -> [Word8]) [Word8] Char where datum = datum <&> \x -> toEnum (fromEnum (x::Word8))
-instance Format Word8 ([Word8] -> [Word8]) [Word8] (ReadImpl IO String String) where datum = return (ReadImpl f_readString)
-instance Format Word8 ([Word8] -> [Word8]) [Word8] (ReadImpl IO String [Word8]) where datum = return (ReadImpl f_readBytes)
-instance Format Word8 ([Word8] -> [Word8]) [Word8] (WriteImpl IO String String) where datum = return (WriteImpl writeString)
-instance Format Word8 ([Word8] -> [Word8]) [Word8] (WriteImpl IO String [Word8]) where datum = return (WriteImpl (\x -> writeBytes x . pack))
+instance Serializable [Word8] Char where encode _ c = ListBuilder (fromIntegral (fromEnum c):)
+instance Format [Word8] Char where datum = datum <&> \x -> toEnum (fromEnum (x::Word8))
+instance Format [Word8] (ReadImpl IO String String) where datum = return (ReadImpl f_readString)
+instance Format [Word8] (ReadImpl IO String [Word8]) where datum = return (ReadImpl f_readBytes)
+instance Format [Word8] (WriteImpl IO String String) where datum = return (WriteImpl writeString)
+instance Format [Word8] (WriteImpl IO String [Word8]) where datum = return (WriteImpl (\x -> writeBytes x . pack))
 
 f_readString = (\x -> try (return Nothing) (Just<$>readString x))
 f_readBytes = (\x -> try (return Nothing) (Just . unpack<$>readBytes x))

@@ -1,9 +1,9 @@
 -- |A module providing simple Parser combinator functionality. Useful
 -- for small parsing tasks such as identifier parsing or command-line
 -- argument parsing
-{-# LANGUAGE UndecidableInstances, TypeFamilies #-}
+{-# LANGUAGE TypeFamilies, ScopedTypeVariables, AllowAmbiguousTypes, UndecidableInstances #-}
 module Language.Parser (
-  module Definitive,
+  module Definitive,Proxy(..),
   -- * The ParserT Type
   ParserT(..),Parser,ParserA(..),i'ParserA,
 
@@ -14,7 +14,7 @@ module Language.Parser (
   parserT,parser,ioParser,matchesT,matches,readsParser,lookingAt,notLookingAt,
 
   -- * The MonadParser class
-  MonadParser(..),ParseToken(..),ParseStream(..),
+  MonadParser(..),ParseStreamType(..),ParseStream(..),
   
   -- * Basic combinators
   (>*>),(<*<),
@@ -36,21 +36,37 @@ import Definitive hiding (take)
 
 import Data.Char
 
-class (ParseToken c,Stream c s) => ParseStream c s | s -> c where
-  acceptToken :: TokenPayload c -> s -> s
+-- | A proxy type to specify response types
+data Proxy a = Proxy
+             deriving (Show,Eq,Ord)
+
+class ParseStreamType s where
+  type StreamToken s :: *
+  type StreamChar s :: *
+instance ParseStreamType [a] where
+  type StreamToken [a] = a
+  type StreamChar [a] = a
+  
+class (ParseStreamType s, Stream (StreamToken s) s) => ParseStream s where
+  completeBefore :: Proxy s -> StreamToken s -> Bool
+  completeBefore _ _ = False
+  tokenPayload :: Proxy s -> StreamToken s -> StreamChar s
+  acceptToken :: StreamChar s -> s -> s
   acceptToken _ s = s
-instance ParseToken c => ParseStream c [c]
+instance ParseStream [c] where
+  tokenPayload _ c = c
+
 class (MonadLogic m p,Monoid (p ()),Monad p,Monad m) => MonadParser s m p | p -> m s where
   runStreamState :: State s a -> p a
-  tokenParser :: ParseStream c s => (c -> Either [TokenPayload c] Bool) -> p (TokenPayload c)
+  tokenParser :: ParseStream s => (StreamToken s -> Either [StreamChar s] Bool) -> p (StreamChar s)
   tokenParser p = do
     (x,comp) <- runStreamState $ do
       x <- get
       let accept y = y <*= runStreamState . modify . acceptToken
-      case uncons x of
+      case (uncons :: s -> Maybe (StreamToken s,s)) x of
         Just (c,t) -> case p c of
           Left l -> return (l,accept)
-          Right success -> put t >> return (if success then [tokenPayload c] else [],id)
+          Right success -> put t >> return (if success then [tokenPayload (Proxy :: Proxy s) c] else [],id)
         Nothing -> return ([],id)
     comp (logicChoose x)
   noParse :: p a
@@ -66,18 +82,11 @@ instance (MonadParser s m p,Monoid (p ((),Void,Void))) => MonadParser s (ReaderT
   noParse = lift noParse
   (<+?) = by (readerT<.>readerT<.>readerT) (\a b s -> a s <+? b s)
   (<+>) = by (readerT<.>readerT<.>readerT) (\a b s -> a s <+> b s)
-class ParseToken c where
-  type TokenPayload c :: *
-  type TokenPayload c = c
-  completeBefore :: c -> Bool
-  completeBefore _ = False
-  tokenPayload :: c -> TokenPayload c
-instance ParseToken Char where tokenPayload c = c
 
 newtype ParserT s m a = ParserT (StateT s (LogicT m) a)
                       deriving (Unit,Functor,Semigroup,Monoid,SemiApplicative,Applicative,
                                 MonadFix,MonadError Void)
-instance (Monad m,ParseStream c s, TokenPayload c ~ Char) => IsString (ParserT s m a) where
+instance (Monad m,ParseStream s, StreamChar s ~ Char) => IsString (ParserT s m a) where
   fromString s = undefined <$ several s
 instance Monad (ParserT s m) where join = coerceJoin ParserT
 type Parser c a = ParserT c Id a
@@ -149,9 +158,9 @@ instance Monad m => Arrow (ParserA m) where
 remaining :: MonadParser s m p => p s
 remaining = runStreamState get
 -- |Consume a token from the Stream
-token :: (ParseStream c s,MonadParser s m p) => p (TokenPayload c)
+token :: (ParseStream s,MonadParser s m p) => p (StreamChar s)
 token = tokenParser (const (Right True))
-following :: (ParseStream c s,MonadParser s m p) => p c
+following :: (ParseStream s,MonadParser s m p) => p (StreamToken s)
 following = runStreamState get >>= \s -> case uncons s of
   Nothing -> noParse
   Just (c,_) -> return c
@@ -182,23 +191,24 @@ skipMany1' :: MonadParser s m p => p a -> p ()
 skipMany1' p = p >> skipMany' p
 
 -- |Consume a token and succeed if it verifies a predicate
-satisfy :: (MonadParser s m p,ParseStream c s) => (TokenPayload c -> Bool) -> p (TokenPayload c)
-satisfy p = tokenParser (\c -> Right $ p (tokenPayload c))
+satisfy :: forall s m p. (MonadParser s m p,ParseStream s) => (StreamChar s -> Bool) -> p (StreamChar s)
+satisfy p = tokenParser (\c -> Right $ p (tokenPayload (Proxy :: Proxy s) c))
 -- |Consume a single fixed token or fail.
-single :: (MonadParser s m p, Eq (TokenPayload c), ParseStream c s) => TokenPayload c -> p ()
-single c = void $ tokenParser (\c' -> if c==tokenPayload c' then Right True else if completeBefore c' then Left [c] else Right False)
+single :: forall s m p. (MonadParser s m p, Eq (StreamChar s), ParseStream s) => StreamChar s -> p ()
+single c = void $ tokenParser (\c' -> if c==tokenPayload (Proxy :: Proxy s) c' then Right True else
+                                  if completeBefore (Proxy :: Proxy s) c' then Left [c] else Right False)
 
 -- |Consume a structure of characters or fail
-several :: (Eq (TokenPayload c), Foldable t, MonadParser s m p, ParseStream c s) => t (TokenPayload c) -> p ()
+several :: (Eq (StreamChar s), Foldable t, MonadParser s m p, ParseStream s) => t (StreamChar s) -> p ()
 several l = traverse_ single l
 -- |Consume a structure of characters or fail
-like :: (Eq (TokenPayload c), MonadParser s m p, ParseStream c s) => [TokenPayload c] -> p ()
+like :: (Eq (StreamChar s), MonadParser s m p, ParseStream s) => [StreamChar s] -> p ()
 like [] = return ()
 like (c:t) = single c >> like' t
   where like' [] = return ()
         like' (c':t') = (single c' <+? unit) >> like' t'
 -- |Consume a structure of characters or fail
-keyword :: (Eq (TokenPayload c), MonadParser s m p, Foldable t, ParseStream c s, ParseToken c) => a -> t (TokenPayload c) -> p a
+keyword :: (Eq (StreamChar s), MonadParser s m p, Foldable t, ParseStream s) => a -> t (StreamChar s) -> p a
 keyword a l = a <$ traverse_ single l
 
 -- |Try to consume a parser. Return a default value when it fails.
@@ -211,10 +221,10 @@ optionMaybe p = option Nothing (map Just p)
 optionMaybe' p = option' Nothing (map Just p)
 
 -- |Succeed only at the End Of Input.
-eoi :: (MonadParser s m p, ParseStream c s) => p ()
+eoi :: (MonadParser s m p, ParseStream s) => p ()
 eoi = remaining >>= guard.emptyStream
 -- |The end of a line
-eol :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p ()
+eol :: (MonadParser s m p,ParseStream s, StreamChar s ~ Char) => p ()
 eol = single '\n'
 
 -- |Parse one or more successive occurences of a parser separated by
@@ -235,26 +245,26 @@ sepBy' :: MonadParser s m p => p a -> p b -> p [a]
 sepBy' p sep = option' [] (sepBy1' p sep)
 
 -- |Parse a member of a set of values
-oneOf :: (Eq (TokenPayload c),Foldable t,ParseStream c s,MonadParser s m p,ParseToken c) => t (TokenPayload c) -> p (TokenPayload c)
-oneOf s = tokenParser (\c -> if tokenPayload c`elem`s then Right True else if completeBefore c then Left (toList s) else Right False)
-oneOfSet :: (Ord (TokenPayload c),ParseStream c s,MonadParser s m p,ParseToken c) => Set (TokenPayload c) -> p (TokenPayload c)
-oneOfSet s = tokenParser (\c -> if tokenPayload c`isKeyIn`s then Right True else if completeBefore c then Left (keys s) else Right False)
+oneOf :: forall s t m p. (Eq (StreamChar s),Foldable t,ParseStream s,MonadParser s m p) => t (StreamChar s) -> p (StreamChar s)
+oneOf s = tokenParser (\c -> if tokenPayload (Proxy :: Proxy s) c`elem`s then Right True else if completeBefore (Proxy :: Proxy s) c then Left (toList s) else Right False)
+oneOfSet :: forall s m p. (Ord (StreamChar s),ParseStream s,MonadParser s m p) => Set (StreamChar s) -> p (StreamChar s)
+oneOfSet s = tokenParser (\c -> if tokenPayload (Proxy :: Proxy s) c`isKeyIn`s then Right True else if completeBefore (Proxy :: Proxy s) c then Left (keys s) else Right False)
 -- |Parse anything but a member of a set
-noneOf :: (Eq (TokenPayload c),Foldable t,ParseStream c s,MonadParser s m p) => t (TokenPayload c) -> p (TokenPayload c)
+noneOf :: (Eq (StreamChar s),Foldable t,ParseStream s,MonadParser s m p) => t (StreamChar s) -> p (StreamChar s)
 noneOf t = satisfy (\e -> not (e`elem`t))
 
 -- |Parse a litteral decimal number
-number :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char,Num n) => p n
+number :: (MonadParser s m p,ParseStream s, StreamChar s ~ Char,Num n) => p n
 number = fromInteger.read <$> many1' digit
 -- |Parse a single decimal digit
-digit :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p Char
+digit :: (MonadParser s m p,ParseStream s, StreamChar s ~ Char) => p Char
 digit = satisfy isDigit
-alNum :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p Char
+alNum :: (MonadParser s m p,ParseStream s, StreamChar s ~ Char) => p Char
 alNum = satisfy isAlphaNum
-letter :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p Char
+letter :: (MonadParser s m p,ParseStream s, StreamChar s ~ Char) => p Char
 letter = satisfy isAlpha
 -- |Parse a delimited string, using '\\' as the quoting character
-quotedString :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => Char -> p String
+quotedString :: (MonadParser s m p,ParseStream s, StreamChar s ~ Char) => Char -> p String
 quotedString d = between (single d) (single d) (many ch)
   where ch = single '\\' >> unquote<$>token
              <+> noneOf (d:"\\")
@@ -262,16 +272,16 @@ quotedString d = between (single d) (single d) (many ch)
         unquote 't' = '\t'
         unquote c = c
 -- | Zero or more spaces
-space :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p ()
+space :: (MonadParser s m p,ParseStream s, StreamChar s ~ Char) => p ()
 space = option' () nbspace
 -- | One or more spaces
-nbspace :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p ()
+nbspace :: (MonadParser s m p,ParseStream s, StreamChar s ~ Char) => p ()
 nbspace = skipMany1' (satisfy (\x -> x==' ' || x=='\t' || x=='\n'))
 -- | Zero or more horizontal spaces (no newlines)
-hspace :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p ()
+hspace :: (MonadParser s m p,ParseStream s, StreamChar s ~ Char) => p ()
 hspace = option' () nbhspace
 -- | One or more horizontal spaces (no newlines)
-nbhspace :: (MonadParser s m p,ParseStream c s, TokenPayload c ~ Char) => p ()
+nbhspace :: (MonadParser s m p,ParseStream s, StreamChar s ~ Char) => p ()
 nbhspace = skipMany1' (satisfy (\x -> x==' ' || x=='\t'))
 
 infixl 1 `sepBy`,`sepBy1`

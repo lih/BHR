@@ -76,19 +76,20 @@ instance Stream OpChar OpStream where
                                                         (case c of OC_Char cc -> cc ; _ -> '\0')))
   uncons (OpStream _ []) = Nothing
   uncons (OpStream h ((c,_):l)) = Just (c,OpStream (case c of OC_Char c' -> c':h ; _ -> h) l)
-instance ParseToken OpChar where
-  type TokenPayload OpChar = Char
-  completeBefore (OC_CompleteChar _) = True
-  completeBefore _ = False
-  tokenPayload (OC_Char c) = c
-  tokenPayload (OC_CompleteChar c) = c
-instance ParseStream OpChar OpStream where
+instance ParseStreamType OpStream where
+  type StreamToken OpStream = OpChar
+  type StreamChar OpStream = Char
+instance ParseStream OpStream where
+  completeBefore _ (OC_CompleteChar _) = True
+  completeBefore _ _ = False
+  tokenPayload _ (OC_Char c) = c
+  tokenPayload _ (OC_CompleteChar c) = c
   acceptToken c (OpStream h t) = OpStream (c:h) t
 
-mkStream :: (ParseToken c, Stream c s, TokenPayload c ~ Char) => s -> OpStream
+mkStream :: forall s. (ParseStream s, StreamChar s ~ Char) => s -> OpStream
 mkStream = OpStream "" . mk ('\0',0,0,0)
   where mk (p,n,ln,cl) s = case uncons s of
-          Just (c,s') -> nextChar (tokenPayload c) s'
+          Just (c,s') -> nextChar (tokenPayload (Proxy :: Proxy s) c) s'
           Nothing -> []
           where nextChar '\n' s' = (OC_Char '\n',(p,n,ln,cl)):mk ('\n',n+1,ln+1,0) s'
                 nextChar c    s' = (OC_Char c,(p,n,ln,cl)):mk (c,n+1,ln,cl+1) s'
@@ -100,14 +101,14 @@ i'OpMap = iso OpMap getOpMap
 type OpParser m = ParserT OpStream (RWST Void [Warning] (Int,OpMap,(Map String (NameExpr GlobalID),Library)) m)
 data Spaces = HorizSpaces | AnySpaces
 
-class (MonadParser s m p, ParseStream c s, TokenPayload c ~ Char) => MonadCharParser c s m p
+class (MonadParser s m p, ParseStream s, StreamChar s ~ Char) => MonadCharParser s m p
 
-instance (Monad m, ParseStream c s, TokenPayload c ~ Char) => MonadCharParser c s (StateT s m) (ParserT s m)
+instance (Monad m,ParseStream s, StreamChar s ~ Char) => MonadCharParser s (StateT s m) (ParserT s m)
          
-parseSpaces :: MonadCharParser c s m p => Spaces -> p ()
+parseSpaces :: MonadCharParser s m p => Spaces -> p ()
 parseSpaces HorizSpaces = hspc
 parseSpaces AnySpaces = spc
-parseNBSpaces :: MonadCharParser c s m p => Spaces -> p ()
+parseNBSpaces :: MonadCharParser s m p => Spaces -> p ()
 parseNBSpaces HorizSpaces = nbhsp
 parseNBSpaces AnySpaces = nbsp
 
@@ -161,7 +162,7 @@ l'library = l'3.l'2
 l'typeMap :: Lens a b (x,y,(a,z)) (x,y,(b,z))
 l'typeMap = l'3.l'1
 
-parseCurly :: (ParseStream c s, TokenPayload c ~ Char,Monad m) => s -> OpParser m a -> m ([Warning]:+:a)
+parseCurly :: (ParseStream s, StreamChar s ~ Char,Monad m) => s -> OpParser m a -> m ([Warning]:+:a)
 parseCurly s p = (deduce p^..mapping i'RWST.stateT) (mkStream s) zero <&> \((_,ma),_,ws) -> case ma of
   Just (a,_) -> Right a
   Nothing -> Left ws
@@ -175,7 +176,7 @@ mkLet (Right t) = \e -> foldl1' mkApply (t+[e])
 
 
 space, spc, hspc, nbsp, nbhsp, hspace 
-  :: MonadCharParser c s m p => p ()
+  :: MonadCharParser s m p => p ()
 space = hspace + (eol >> skipMany' (single '#' >> skipMany' (satisfy (/='\n')) >> eol))
 hspace = void $ oneOf [' ', '\t']
 spc = skipMany' space
@@ -384,7 +385,7 @@ curlyFile = do
             defSymbol "value" (mkRange pre post) Nothing False e,
             setExports (Pure "value")]
 
-raw :: (ParseStream c s, TokenPayload c ~ Char,MonadParser s m p) => String -> p ()
+raw :: (ParseStream s, StreamChar s ~ Char,MonadParser s m p) => String -> p ()
 raw = several
 
 curlyLine :: (Monad m, ?mountain :: Mountain) => OpParser m ()
