@@ -37,11 +37,12 @@ resolver: lts-9.10
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - ./curly
+- ./capricon
+- ./curly-gateway
+- ./logos
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-- ./capricon
-- ./curly-gateway
 - AES-0.2.9
 - kademlia-1.1.0.0
 - GLFW-0.5.2.5
@@ -49,7 +50,6 @@ extra-deps:
 - ./definitive-parser
 - ./definitive-network
 - ./definitive-filesystem
-- ./logos
 - ./hreadline
 - ./curly-kademlia
 - ./curly-core
