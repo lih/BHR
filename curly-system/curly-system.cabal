@@ -33,7 +33,7 @@ library
                        GeneralizedNewtypeDeriving
                        RankNTypes
   other-extensions:    UndecidableInstances, RecursiveDo, ScopedTypeVariables, NoMonomorphismRestriction, PatternSynonyms, CPP, TypeFamilies, StandaloneDeriving
-  build-depends: base >=4.9 && <4.10,curly-core >=0.7 && <0.8,definitive-base >=2.6 && <2.7,definitive-filesystem >=2.1 && <2.2,definitive-parser >=3.1 && <3.2
+  build-depends: base,curly-core,definitive-base,definitive-filesystem,definitive-parser
   hs-source-dirs:      src
   if flag(paranoid)
     ghc-options:         -Werror
