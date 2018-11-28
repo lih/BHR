@@ -33,7 +33,7 @@ library
                       AllowAmbiguousTypes,
                       RoleAnnotations
   other-extensions:    ImplicitParams, StandaloneDeriving, MultiParamTypeClasses, RankNTypes, DefaultSignatures, TupleSections, Rank2Types, FunctionalDependencies, ViewPatterns, LiberalTypeSynonyms, NoRebindableSyntax, EmptyDataDecls, CPP, ScopedTypeVariables, UndecidableInstances, DeriveGeneric, ExistentialQuantification, RecursiveDo, DeriveDataTypeable
-  build-depends: base >=4.9 && <4.10,bytestring >=0.10 && <0.11,containers >=0.5 && <0.6,deepseq >=1.4 && <1.5
+  build-depends: base >=4.8 && <4.10,bytestring >=0.10 && <0.11,containers >=0.5 && <0.6,deepseq >=1.4 && <1.5
   if !impl(haste)
     build-depends: clock >=0.7 && <0.8,vector >=0.12 && <0.13
     exposed-modules: IO.Time, Data.Queue
