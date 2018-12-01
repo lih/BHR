@@ -17,11 +17,11 @@ data AType str = AArr (AType str) (AType str) | ATVar Int | AAny
 par lvl d msg | d>lvl = "("+msg+")"
               | otherwise = msg
 
-instance Show str => Show (Algebraic str) where
+instance IsCapriconString str => Show (Algebraic str) where
   show = go 0 []
-    where go d env (AFun x tx e) = par 0 d $ "fun ("+show x+" : "+go_t 0 tx+") => "+go 0 (x:env) e
+    where go d env (AFun x tx e) = par 0 d $ "fun ("+toString x+" : "+go_t 0 tx+") => "+go 0 (x:env) e
           go d env (AApply f x) = par 1 d $ go 1 env f+" "+go 2 env x
-          go _ env (AVar n) | v:_ <- drop n env = show v
+          go _ env (AVar n) | v:_ <- drop n env = toString v
                             | otherwise = "__var_"+show n
           go_t d (AArr a b) = par 0 d $ go_t 1 a + " -> " + go_t 0 b
           go_t _ (ATVar n) = "'a"+show n
