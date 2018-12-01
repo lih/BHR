@@ -322,7 +322,7 @@ runCOCBuiltin COCB_ContextVars = do
 runCOCBuiltin COCB_Extract = do
   ctx <- runExtraState (getl context)
   runStackState $ modify $ \case
-    StackCOC (COCExpr (ContextNode d e)):t -> StackCOC (COCAlgebraic (fromNode e (takeLast d ctx))):t
+    StackCOC (COCExpr (ContextNode d e)):t -> StackCOC (COCAlgebraic (fromNode e ([],takeLast d ctx))):t
     st -> st
 
 runCOCBuiltin COCB_GetShowDir = do
