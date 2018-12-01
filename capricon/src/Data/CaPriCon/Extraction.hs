@@ -14,15 +14,18 @@ data Algebraic str = AFun str (AType str) (Algebraic str)
 data AType str = AArr (AType str) (AType str) | ATVar Int | AAny
                deriving (Show,Generic)
 
+par lvl d msg | d>lvl = "("+msg+")"
+              | otherwise = msg
+
 instance Show str => Show (Algebraic str) where
-  show = go []
-    where go env (AFun x tx e) = "fun ("+show x+" : "+go_t tx+") => "+go (x:env) e
-          go env (AApply f x) = "("+go env f+") ("+go env x+")"
-          go env (AVar n) | v:_ <- drop n env = show v
-                          | otherwise = "__var_"+show n
-          go_t (AArr a b) = go_t a + " -> " + go_t b
-          go_t (ATVar n) = "'a"+show n
-          go_t AAny = "__"
+  show = go 0 []
+    where go d env (AFun x tx e) = par 0 d $ "fun ("+show x+" : "+go_t 0 tx+") => "+go 0 (x:env) e
+          go d env (AApply f x) = par 1 d $ go 1 env f+" "+go 2 env x
+          go _ env (AVar n) | v:_ <- drop n env = show v
+                            | otherwise = "__var_"+show n
+          go_t d (AArr a b) = par 0 d $ go_t 1 a + " -> " + go_t 0 b
+          go_t _ (ATVar n) = "'a"+show n
+          go_t _ AAny = "__"
 
 instance Serializable bytes str => Serializable bytes (Algebraic str)
 instance Serializable bytes str => Serializable bytes (AType str)
