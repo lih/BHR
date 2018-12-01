@@ -10,9 +10,19 @@ import GHC.Generics (Generic)
 data Algebraic str = AFun str (AType str) (Algebraic str)
                    | AApply (Algebraic str) (Algebraic str)
                    | AVar Int
-                   deriving (Show,Generic)
+                   deriving (Generic)
 data AType str = AArr (AType str) (AType str) | ATVar Int | AAny
                deriving (Show,Generic)
+
+instance Show str => Show (Algebraic str) where
+  show = go []
+    where go env (AFun x tx e) = "fun ("+show x+" : "+go_t tx+") => "+go (x:env) e
+          go env (AApply f x) = "("+go env f+") ("+go env x+")"
+          go env (AVar n) | v:_ <- drop n env = show v
+                          | otherwise = "__var_"+show n
+          go_t (AArr a b) = go_t a + " -> " + go_t b
+          go_t (ATVar n) = "'a"+show n
+          go_t AAny = "__"
 
 instance Serializable bytes str => Serializable bytes (Algebraic str)
 instance Serializable bytes str => Serializable bytes (AType str)
