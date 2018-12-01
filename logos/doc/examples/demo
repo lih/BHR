@@ -51,8 +51,10 @@
 'viewMat Uniform
 'projMat Uniform
 
+"Creating window...\n" print
 'tile "textures/Pebbles_006_COLOR.jpg" image def
 'tileNormals "textures/Pebbles_006_NRM.jpg" image def
+"Window created\n" print
 
 'tileTexture Uniform       , tile set-tileTexture
 'tileTextureNormal Uniform , tileNormals set-tileTextureNormal
@@ -75,6 +77,7 @@ identity set-modelMat
     } each
   } each
 ] def
+
 
 'refresh { [ 1 1 0 0 vcons translation => cue scene ] draw } def
 
@@ -121,4 +124,5 @@ view-trans set-viewMat
 
 'loop-body { lightVect east-west { dyz } { dzy } if ** set-lightVect refresh } def
 'east-west true def
+
 "press E" { 'east-west { 1 swap - } modify } bind-key
