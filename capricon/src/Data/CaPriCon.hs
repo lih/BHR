@@ -397,16 +397,16 @@ doc2latex (DocSeq l) = fold (map doc2latex l)
 doc2latex (DocParen p) = "("+doc2latex p+")"
 doc2latex (DocMu m) = "\\mu("+doc2latex m+")"
 doc2latex (DocSubscript v x) = doc2latex v+"_{"+doc2latex x+"}"
-doc2latex (DocAssoc x v) = "(\\mathit{"+latexName x+"}:"+doc2latex v+")"
+doc2latex (DocAssoc x v) = "("+latexName x+":"+doc2latex v+")"
 doc2latex DocArrow = " \\rightarrow "
 doc2latex (DocText x) = x
-doc2latex (DocVarName x) = "\\mathrm{"+latexName x+"}"
+doc2latex (DocVarName x) = latexName x
 doc2latex DocSpace = "\\,"
 
 latexName :: IsCapriconString str => str -> str
 latexName s = fromString $ go $ toString s
-  where go ('.':t) = go t+"}^{*"
-        go x = x
+  where go ('.':t) = go t+"^{*}"
+        go x = "\\mathrm{"+x+"}"
 
 showNode = showNode' zero
 showNode' :: IsCapriconString str => NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> Node str -> NodeDoc str
