@@ -272,7 +272,7 @@ findPattern = \x y -> go [] x y^..writerT
 -- (the number of binders between the top-level and the node in
 -- question).
 --
--- For example, `adjust_depth (\i d -> i-d+1) (Bind Lambda "x" (Universe 0) (Cons (Ap (Sym 1) [])))
+ -- For example, `adjust_depth (\i d -> i-d+1) (Bind Lambda "x" (Universe 0) (Cons (Ap (Sym 1) [])))
 --               == Bind Lambda "x" (Universe 0) (Cons (Ap (Sym 2) []))`
 
 adjust_depth f = go 0
@@ -361,6 +361,7 @@ data NodeDoc str = DocSeq [NodeDoc str]
                  | DocMu (NodeDoc str)
                  | DocSubscript (NodeDoc str) (NodeDoc str)
                  | DocAssoc str (NodeDoc str)
+                 | DocVarName str
                  | DocText str
                  | DocArrow
                  | DocSpace
@@ -368,6 +369,16 @@ data NodeDoc str = DocSeq [NodeDoc str]
 par lvl d msg | d>lvl = DocParen msg
               | otherwise = msg
 
+instance Functor NodeDoc where
+  map f (DocSeq l) = DocSeq (map2 f l)
+  map f (DocParen x) = DocParen (map f x)
+  map f (DocMu x) = DocMu (map f x)
+  map f (DocSubscript x y) = DocSubscript (map f x) (map f y)
+  map f (DocAssoc v x) = DocAssoc (f v) (map f x)
+  map f (DocText x) = DocText (f x)
+  map f (DocVarName x) = DocVarName (f x)
+  map _ DocArrow = DocArrow
+  map _ DocSpace = DocSpace
 instance IsString str => IsString (NodeDoc str) where fromString = DocText . fromString
 
 doc2raw :: IsCapriconString str => NodeDoc str -> str
@@ -378,6 +389,7 @@ doc2raw (DocSubscript v x) = doc2raw v+doc2raw x
 doc2raw (DocAssoc x v) = "("+x+" : "+doc2raw v+")"
 doc2raw DocArrow = " -> "
 doc2raw (DocText x) = x
+doc2raw (DocVarName x) = x
 doc2raw DocSpace = " "
 
 doc2latex :: IsCapriconString str => NodeDoc str -> str
@@ -385,10 +397,19 @@ doc2latex (DocSeq l) = fold (map doc2latex l)
 doc2latex (DocParen p) = "("+doc2latex p+")"
 doc2latex (DocMu m) = "\\mu("+doc2latex m+")"
 doc2latex (DocSubscript v x) = doc2latex v+"_{"+doc2latex x+"}"
-doc2latex (DocAssoc x v) = "("+x+":"+doc2latex v+")"
+doc2latex (DocAssoc x v) = "("+latexName x+":"+doc2latex v+")"
 doc2latex DocArrow = " \\rightarrow "
 doc2latex (DocText x) = x
+doc2latex (DocVarName x) = latexName x
 doc2latex DocSpace = "\\,"
+
+latexName :: IsCapriconString str => str -> str
+latexName s = fromString $ go $ toString s
+  where go ('.':t) = go t+"^P"
+        go x = let (n,y) = span (\c -> c>='0' && c<='9') (reverse x) in
+          "\\mathrm{"+reverse y+"}"+case n of
+                                      "" -> ""
+                                      _ -> "_{"+n+"}"
 
 showNode = showNode' zero
 showNode' :: IsCapriconString str => NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> Node str -> NodeDoc str
@@ -399,15 +420,16 @@ showNode' dir = go 0
                                                  | otherwise = par 0 d $ DocSeq [go 1 env atype,DocArrow,go 0 ((aname,atype):env) body]
           where bind_head Lambda = "λ"
                 bind_head Prod = "∀"
-                bind_tail env' x | Just ret <- toPat 0 (env'+env) x = [",",DocSpace,ret]
+                bind_sep Prod = "," ; bind_sep Lambda = "."
+                bind_tail env' x | Just ret <- toPat 0 (env'+env) x = [bind_sep t,DocSpace,ret]
                 bind_tail env' (Bind t' x tx e) | t==t' && (t==Lambda || 0`is_free_in`e) =
-                                                  [DocSpace,DocAssoc x' (go 0 env' tx)] + bind_tail ((x',tx):env') e
+                                                    [DocSpace,DocAssoc x' (go 0 env' tx)] + bind_tail ((x',tx):env') e
                   where x' = fresh (map fst env') x
-                bind_tail env' x = [",",DocSpace,go 0 env' x]
+                bind_tail env' x = [bind_sep t,DocSpace,go 0 env' x]
         go d env (Cons a) = showA d a
           where showA _ (Ap h xs) =
                   let ni = case h of
-                             Sym i -> DocText $ case drop i env of
+                             Sym i -> DocVarName $ case drop i env of
                                (h',_):_ -> h'
                                _ -> "#"+fromString (show i)
                              Mu _ _ a' -> DocMu (showA 0 a')
