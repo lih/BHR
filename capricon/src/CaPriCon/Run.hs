@@ -409,6 +409,7 @@ cocDict version getResource getBResource writeResource writeBResource =
                ("term/forall"              , Builtin_Extra (COCB_Bind False Prod  )),
                ("term/mu"                  , Builtin_Extra COCB_Mu                 ),
                ("term/convertible"         , Builtin_Extra COCB_Convertible        ),
+               ("term/axiom"               , Builtin_Extra COCB_Axiom              ),
                ("term/extract"             , Builtin_Extra COCB_Extract            ),
 
                ("context/intro"           , Builtin_Extra COCB_Hyp                ),
