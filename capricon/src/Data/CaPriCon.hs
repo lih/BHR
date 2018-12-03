@@ -387,7 +387,7 @@ doc2latex (DocMu m) = "\\mu("+doc2latex m+")"
 doc2latex (DocSubscript v x) = doc2latex v+"_{"+doc2latex x+"}"
 doc2latex (DocAssoc x v) = "("+x+":"+doc2latex v+")"
 doc2latex DocArrow = " \\rightarrow "
-doc2latex (DocText x) = x
+doc2latex (DocText x) = "\\mathit{"+x+"}"
 doc2latex DocSpace = "\\,"
 
 showNode = showNode' zero
