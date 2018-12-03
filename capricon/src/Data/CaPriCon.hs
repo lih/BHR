@@ -361,6 +361,7 @@ data NodeDoc str = DocSeq [NodeDoc str]
                  | DocMu (NodeDoc str)
                  | DocSubscript (NodeDoc str) (NodeDoc str)
                  | DocAssoc str (NodeDoc str)
+                 | DocVarName str
                  | DocText str
                  | DocArrow
                  | DocSpace
@@ -375,6 +376,7 @@ instance Functor NodeDoc where
   map f (DocSubscript x y) = DocSubscript (map f x) (map f y)
   map f (DocAssoc v x) = DocAssoc (f v) (map f x)
   map f (DocText x) = DocText (f x)
+  map f (DocVarName x) = DocVarName (f x)
   map _ DocArrow = DocArrow
   map _ DocSpace = DocSpace
 instance IsString str => IsString (NodeDoc str) where fromString = DocText . fromString
@@ -387,6 +389,7 @@ doc2raw (DocSubscript v x) = doc2raw v+doc2raw x
 doc2raw (DocAssoc x v) = "("+x+" : "+doc2raw v+")"
 doc2raw DocArrow = " -> "
 doc2raw (DocText x) = x
+doc2raw (DocVarName x) = x
 doc2raw DocSpace = " "
 
 doc2latex :: IsCapriconString str => NodeDoc str -> str
@@ -396,7 +399,8 @@ doc2latex (DocMu m) = "\\mu("+doc2latex m+")"
 doc2latex (DocSubscript v x) = doc2latex v+"_{"+doc2latex x+"}"
 doc2latex (DocAssoc x v) = "(\\mathit{"+latexName x+"}:"+doc2latex v+")"
 doc2latex DocArrow = " \\rightarrow "
-doc2latex (DocText x) = "\\mathit{"+latexName x+"}"
+doc2latex (DocText x) = x
+doc2latex (DocVarName x) = "\\mathit{"+latexName x+"}"
 doc2latex DocSpace = "\\,"
 
 latexName :: IsCapriconString str => str -> str
@@ -422,7 +426,7 @@ showNode' dir = go 0
         go d env (Cons a) = showA d a
           where showA _ (Ap h xs) =
                   let ni = case h of
-                             Sym i -> DocText $ case drop i env of
+                             Sym i -> DocVarName $ case drop i env of
                                (h',_):_ -> h'
                                _ -> "#"+fromString (show i)
                              Mu _ _ a' -> DocMu (showA 0 a')
