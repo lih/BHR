@@ -5,6 +5,7 @@ import Definitive
 import Language.Format
 import Algebra.Monad.Concatenative
 import Data.CaPriCon
+import Data.CaPriCon.Extraction (Algebraic(..),fromNode)
 import GHC.Generics (Generic)
 
 class Monad m => MonadSubIO io m where
@@ -13,16 +14,18 @@ instance MonadSubIO IO IO where liftSubIO = id
 instance MonadSubIO io m => MonadSubIO io (ConcatT st b o s m) where
   liftSubIO ma = lift $ liftSubIO ma
 
+type COCAxiom str = str
 type MaxDelta = Int
 type UniverseConstraint = [Maybe MaxDelta]
 data UniverseConstraints = UniverseConstraints [UniverseConstraint]
 instance Semigroup UniverseConstraints where
   UniverseConstraints x + UniverseConstraints y = UniverseConstraints $ zipWith (zipWith (\_x _y -> zipWith max _x _y + _x + _y)) x y
 instance Monoid UniverseConstraints where zero = UniverseConstraints (repeat (repeat Nothing))
-data COCValue io str = COCExpr (ContextNode str)
+data COCValue io str = COCExpr (ContextNode str (COCAxiom str))
                      | COCNull | COCError str
                      | COCConvertible (Maybe (Int,Int))
-                     | COCDir (NodeDir str ([str],StackVal str (COCBuiltin io str) (COCValue io str)))
+                     | COCAlgebraic (Algebraic str)
+                     | COCDir (NodeDir str (COCAxiom str) ([str],StackVal str (COCBuiltin io str) (COCValue io str)))
                      deriving Generic
 instance (ListSerializable s,ListSerializable b,ListSerializable a) => ListSerializable (StackStep s b a)
 instance (ListSerializable s,ListSerializable b,ListSerializable a) => ListSerializable (StackClosure s b a)
@@ -43,7 +46,7 @@ pattern StackCOC v = StackExtra (Opaque v)
 
 takeLast n l = drop (length l-n) l
 
-showStackVal :: IsCapriconString str => (NodeDoc str -> str) -> NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> StackVal str (COCBuiltin io str) (COCValue io str) -> str
+showStackVal :: IsCapriconString str => (NodeDoc str -> str) -> NodeDir str (COCAxiom str) ([str],StringPattern str) -> [(str,Node str (COCAxiom str))] -> StackVal str (COCBuiltin io str) (COCValue io str) -> str
 showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
   StackCOC _x -> case _x of
     COCExpr (ContextNode d e) -> -- "<"+show d+">:"+
@@ -52,6 +55,7 @@ showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
     COCError e -> "<!"+e+"!>"
     COCDir d -> fromString $ show d
     COCConvertible conv -> fromString $ show conv
+    COCAlgebraic a -> fromString $ show a
   StackSymbol s -> fromString $ show s
   StackInt n -> fromString $ show n
   StackList l -> "["+intercalate "," (map go l)+"]"
@@ -73,9 +77,9 @@ data COCBuiltin io str = COCB_Print
                        | COCB_Ap | COCB_Bind Bool BindType
                        | COCB_TypeOf | COCB_Mu | COCB_Convertible
                        | COCB_HypBefore | COCB_Subst | COCB_Rename
-                       | COCB_ContextVars
+                       | COCB_ContextVars | COCB_Axiom
                        | COCB_GetShowDir | COCB_SetShowDir | COCB_InsertNodeDir
-                       | COCB_Format
+                       | COCB_Format | COCB_Extract
                        deriving (Show,Generic)
 data ReadImpl io str bytes = ReadImpl (str -> io (Maybe bytes))
 data WriteImpl io str bytes = WriteImpl (str -> bytes -> io ())
@@ -131,15 +135,15 @@ literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " <+? cmdline "$> " <+? c
 
 data COCState str = COCState {
   _endState :: Bool,
-  _context :: [(str,Node str)],
-  _showDir :: NodeDir str ([str],StringPattern str),
+  _context :: [(str,Node str (COCAxiom str))],
+  _showDir :: NodeDir str (COCAxiom str) ([str],StringPattern str),
   _outputText :: str -> str
   }
 endState :: Lens' (COCState str) Bool
 endState = lens _endState (\x y -> x { _endState = y })
-context :: Lens' (COCState str) [(str,Node str)]
+context :: Lens' (COCState str) [(str,Node str (COCAxiom str))]
 context = lens _context (\x y -> x { _context = y })
-showDir :: Lens' (COCState str) (NodeDir str ([str],StringPattern str))
+showDir :: Lens' (COCState str) (NodeDir str (COCAxiom str) ([str],StringPattern str))
 showDir = lens _showDir (\x y -> x { _showDir = y })
 outputText :: Lens' (COCState str) (str -> str)
 outputText = lens _outputText (\x y -> x { _outputText = y })
@@ -147,11 +151,11 @@ outputText = lens _outputText (\x y -> x { _outputText = y })
 pushError :: MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m => str -> m ()
 pushError s = runStackState $ modify $ (StackCOC (COCError s):)
 
-runInContext :: Env str -> MaybeT ((->) (Env str)) a -> Maybe a
+runInContext :: Env str ax -> MaybeT ((->) (Env str ax)) a -> Maybe a
 runInContext c v = (v^..maybeT) c
 
 modifyAllExprs :: MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m
-               => (ContextNode str -> ContextNode str) -> m ()
+               => (ContextNode str (COCAxiom str) -> ContextNode str (COCAxiom str)) -> m ()
 modifyAllExprs f = do
   let modStack (StackCOC (COCExpr e)) = StackCOC (COCExpr (f e))
       modStack (StackDict d) = StackDict (map modStack d)
@@ -160,7 +164,7 @@ modifyAllExprs f = do
   runStackState $ modify $ map modStack
   runDictState $ modify $ map modStack
 modifyCOCEnv :: MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m
-          => Maybe (ContextNode str -> ContextNode str,Env str) -> m ()
+          => Maybe (ContextNode str (COCAxiom str) -> ContextNode str (COCAxiom str),Env str (COCAxiom str)) -> m ()
 modifyCOCEnv Nothing = unit
 modifyCOCEnv (Just (modE,ctx)) = do
   runExtraState (context =- ctx)
@@ -177,6 +181,10 @@ runCOCBuiltin COCB_Print = do
   for_ (take 1 s) $ \case
     StackSymbol s' -> runExtraState (outputText =~ \o t -> o (s'+t))
     _ -> return ()
+
+runCOCBuiltin COCB_Axiom = runStackState $ modify $ \case
+  StackCOC (COCExpr (ContextNode 0 e)):StackSymbol s:st -> StackCOC (COCExpr (ContextNode 0 (Cons (Ap (Axiom e s) [])))):st
+  st -> st
 
 runCOCBuiltin COCB_Format = do
   ex <- runExtraState get
@@ -316,6 +324,12 @@ runCOCBuiltin COCB_ContextVars = do
   ctx <- runExtraState (getl context)
   runStackState $ modify (StackList (map (StackSymbol . fst) (freshContext ctx)):)
 
+runCOCBuiltin COCB_Extract = do
+  ctx <- runExtraState (getl context)
+  runStackState $ modify $ \case
+    StackCOC (COCExpr (ContextNode d e)):t -> StackCOC (COCAlgebraic (fromNode e ([],takeLast d ctx))):t
+    st -> st
+
 runCOCBuiltin COCB_GetShowDir = do
   dir <- runExtraState (getl showDir)
   runStackState $ modify $ (StackCOC (COCDir (map (\(c,l) -> (c,StackSymbol (intercalate " " $ map (id <|> head . flip drop c) l))) dir)):)
@@ -391,15 +405,17 @@ cocDict version getResource getBResource writeResource writeBResource =
                ("term/universe"            , Builtin_Extra COCB_Uni                ),
                ("term/variable"            , Builtin_Extra COCB_Var                ),
                ("term/apply"               , Builtin_Extra COCB_Ap                 ),
-               ("term/lambda"              , Builtin_Extra (COCB_Bind False Lambda )),
-               ("term/forall"              , Builtin_Extra (COCB_Bind False Prod   )  ),
+               ("term/lambda"              , Builtin_Extra (COCB_Bind False Lambda)),
+               ("term/forall"              , Builtin_Extra (COCB_Bind False Prod  )),
                ("term/mu"                  , Builtin_Extra COCB_Mu                 ),
                ("term/convertible"         , Builtin_Extra COCB_Convertible        ),
+               ("term/axiom"               , Builtin_Extra COCB_Axiom              ),
+               ("term/extract"             , Builtin_Extra COCB_Extract            ),
 
                ("context/intro"           , Builtin_Extra COCB_Hyp                ),
                ("context/intro-before"    , Builtin_Extra COCB_HypBefore          ),
-               ("context/extro-lambda"    , Builtin_Extra (COCB_Bind True Lambda  ) ),
-               ("context/extro-forall"    , Builtin_Extra (COCB_Bind True Prod    )   ),
+               ("context/extro-lambda"    , Builtin_Extra (COCB_Bind True Lambda )),
+               ("context/extro-forall"    , Builtin_Extra (COCB_Bind True Prod   )),
                ("context/rename"          , Builtin_Extra COCB_Rename             ),
                ("context/substitute"      , Builtin_Extra COCB_Subst              ),
                ("context/type"            , Builtin_Extra COCB_TypeOf             ),

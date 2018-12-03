@@ -3,11 +3,12 @@ IFSBAK="$IFS"
 declare -A PKGS
 while read pkg ver; do
     PKGS[$pkg]="$ver"
-done < <(stack list-dependencies)
+done < <(stack ls dependencies)
 for file in */*.cabal; do
     while IFS= read line; do
         case "$line" in
             *build-depends:*)
+		prefix="${line%%build-depends:*}"
                 IFS="$IFS,&" deps=( ${line#*build-depends:} ) IFS="$IFSBAK"
                 full_deps=( )
                 for dep in "${deps[@]}"; do
@@ -16,7 +17,7 @@ for file in */*.cabal; do
                         *)
                             ver="${PKGS[$dep]}"
                             IFS=. vern=( $ver ) IFS="$IFSBAK"
-                            if [ "$RAW_DEPS" != '' ]; then
+                            if [ "$RAW_DEPS" != '' ] || [ "${vern[0]}" == "" ]; then
                                 full_deps+=( "$dep" )
                             else
                                 full_deps+=( "$dep >=${vern[0]}.${vern[1]} && <${vern[0]}.$((vern[1]+1))" )
@@ -25,7 +26,7 @@ for file in */*.cabal; do
                     esac
                 done
                 IFS=$'\n' full_deps=( $(printf "%s\n" "${full_deps[@]}" | sort) ) IFS="$IFSBAK"
-                IFS=,; printf "  build-depends: %s\n" "${full_deps[*]}"; IFS="$IFSBAK"
+                IFS=,; printf "%sbuild-depends: %s\n" "$prefix" "${full_deps[*]}"; IFS="$IFSBAK"
                 ;;
             *) printf "%s\n" "$line";;
         esac
