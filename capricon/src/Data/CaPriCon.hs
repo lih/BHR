@@ -405,7 +405,7 @@ doc2latex DocSpace = "\\,"
 
 latexName :: IsCapriconString str => str -> str
 latexName s = fromString $ go $ toString s
-  where go ('.':t) = go t+"^{P}"
+  where go ('.':t) = "P_{"+go t+"}"
         go x = "\\mathrm{"+x+"}"
 
 showNode = showNode' zero
