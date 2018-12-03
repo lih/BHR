@@ -272,7 +272,7 @@ findPattern = \x y -> go [] x y^..writerT
 -- (the number of binders between the top-level and the node in
 -- question).
 --
--- For example, `adjust_depth (\i d -> i-d+1) (Bind Lambda "x" (Universe 0) (Cons (Ap (Sym 1) [])))
+ -- For example, `adjust_depth (\i d -> i-d+1) (Bind Lambda "x" (Universe 0) (Cons (Ap (Sym 1) [])))
 --               == Bind Lambda "x" (Universe 0) (Cons (Ap (Sym 2) []))`
 
 adjust_depth f = go 0
@@ -399,11 +399,12 @@ showNode' dir = go 0
                                                  | otherwise = par 0 d $ DocSeq [go 1 env atype,DocArrow,go 0 ((aname,atype):env) body]
           where bind_head Lambda = "λ"
                 bind_head Prod = "∀"
-                bind_tail env' x | Just ret <- toPat 0 (env'+env) x = [",",DocSpace,ret]
+                bind_sep Prod = "," ; bind_sep Lambda = "."
+                bind_tail env' x | Just ret <- toPat 0 (env'+env) x = [bind_sep t,DocSpace,ret]
                 bind_tail env' (Bind t' x tx e) | t==t' && (t==Lambda || 0`is_free_in`e) =
-                                                  [DocSpace,DocAssoc x' (go 0 env' tx)] + bind_tail ((x',tx):env') e
+                                                    [DocSpace,DocAssoc x' (go 0 env' tx)] + bind_tail ((x',tx):env') e
                   where x' = fresh (map fst env') x
-                bind_tail env' x = [",",DocSpace,go 0 env' x]
+                bind_tail env' x = [bind_sep t,DocSpace,go 0 env' x]
         go d env (Cons a) = showA d a
           where showA _ (Ap h xs) =
                   let ni = case h of
