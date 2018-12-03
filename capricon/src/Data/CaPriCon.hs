@@ -51,29 +51,31 @@ type UniverseSize = Int
 type SymbolRef = Int
 data BindType = Lambda | Prod
               deriving (Show,Eq,Ord,Generic)
-data Node str = Bind BindType str (NodeType str) (Node str)
-              | Cons (Application str)
-              | Universe UniverseSize
+data Node str a = Bind BindType str (NodeType str a) (Node str a)
+                | Cons (Application str a)
+                | Universe UniverseSize
           deriving (Show,Generic)
-type NodeType str = Node str
-data ApHead str = Sym SymbolRef | Mu [(str,Node str,Node str)] [Node str] (Application str)
+type NodeType str a = Node str a
+data ApHead str a = Sym SymbolRef | Mu [(str,Node str a,Node str a)] [Node str a] (Application str a) | Axiom (Node str a) a
             deriving (Show,Generic)
-data Application str = Ap (ApHead str) [Node str]
+data Application str a = Ap (ApHead str a) [Node str a]
                  deriving (Show,Generic) 
-type Env str = [(str,NodeType str)]
+type Env str a = [(str,NodeType str a)]
 
 type ListSerializable a = (Serializable ListStream a)
 type ListFormat a = (Format ListStream a)
 instance ListSerializable BindType
 instance ListFormat BindType
-instance ListSerializable str => ListSerializable (Node str)
-instance ListFormat str => ListFormat (Node str)
-instance ListSerializable str => ListSerializable (ApHead str)
-instance ListFormat str => ListFormat (ApHead str)
-instance ListSerializable str => ListSerializable (Application str)
-instance ListFormat str => ListFormat (Application str)
+instance (ListSerializable a,ListSerializable str) => ListSerializable (Node str a)
+instance (ListFormat a,ListFormat str) => ListFormat (Node str a)
+instance (ListSerializable a,ListSerializable str) => ListSerializable (ApHead str a)
+instance (ListFormat a,ListFormat str) => ListFormat (ApHead str a)
+instance (ListSerializable a,ListSerializable str) => ListSerializable (Application str a)
+instance (ListFormat a,ListFormat str) => ListFormat (Application str a)
 
 class Monad m => COCExpression str m e | e -> str where
+  type Axiom e :: *
+  
   mkUniverse :: UniverseSize -> m e
   mkVariable :: str -> m e
   mkBind :: BindType -> e -> m e
@@ -82,10 +84,12 @@ class Monad m => COCExpression str m e | e -> str where
   checkType :: e -> m e
   conversionDelta :: e -> e -> m (UniverseSize,UniverseSize)
 
-  substHyp :: str -> e -> m (e -> e,Env str)
+  substHyp :: str -> e -> m (e -> e,Env str (Axiom e))
   pullTerm :: e -> m e
-  insertHypBefore :: Maybe str -> str -> e -> m (e -> e,Env str)
-instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression str (MaybeT m) (Node str) where
+  insertHypBefore :: Maybe str -> str -> e -> m (e -> e,Env str (Axiom e))
+instance (Show a,IsCapriconString str,Monad m,MonadReader (Env str a) m) => COCExpression str (MaybeT m) (Node str a) where
+  type Axiom (Node str a) = a
+
   mkUniverse = pure . Universe
   mkVariable v = hypIndex v <&> \i -> Cons (Ap (Sym i) [])
   mkBind b e = ask >>= \case
@@ -123,19 +127,21 @@ instance (IsCapriconString str,Monad m,MonadReader (Env str) m) => COCExpression
                            GT -> second (adjust_depth (adj i)) x:k (i+1))
           (\_ -> []) ctx 0)
 
-hypIndex :: (IsCapriconString str,MonadReader (Env str) m) => str -> MaybeT m Int
+hypIndex :: (IsCapriconString str,MonadReader (Env str a) m) => str -> MaybeT m Int
 hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
   i:_ -> return i
   _ -> zero
     
-data ContextNode str = ContextNode SymbolRef (Node str)
-                     deriving (Show,Generic)
-instance ListSerializable str => ListSerializable (ContextNode str)
-instance ListFormat str => ListFormat (ContextNode str)
-restrictEnv :: SymbolRef -> Env str -> Env str
+data ContextNode str a = ContextNode SymbolRef (Node str a)
+                       deriving (Show,Generic)
+instance (ListSerializable a,ListSerializable str) => ListSerializable (ContextNode str a)
+instance (ListFormat a,ListFormat str) => ListFormat (ContextNode str a)
+restrictEnv :: SymbolRef -> Env str a -> Env str a
 restrictEnv n e = drop (length e-n) e
 
-instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression str (MaybeT m) (ContextNode str) where
+instance (Show a,IsCapriconString str,MonadReader (Env str a) m,Monad m) => COCExpression str (MaybeT m) (ContextNode str a) where
+  type Axiom (ContextNode str a) = a
+
   mkUniverse u = ask >>= \ctx -> ContextNode (length ctx)<$>mkUniverse u
   mkVariable i = local (dropWhile ((/=i) . fst)) (ask >>= \ctx -> ContextNode (length ctx)<$>mkVariable i)
   mkBind t ce@(ContextNode de e) | de>0 = ContextNode (de-1) <$> local (restrictEnv de) (mkBind t e)
@@ -166,69 +172,71 @@ instance (IsCapriconString str,MonadReader (Env str) m,Monad m) => COCExpression
              else ContextNode (d+1) (inc_depth (d-dh) $ f $ inc_depth (dh-d) x))
             <$> insertHypBefore h h' th'
 
-data NodeDir str a = NodeDir
-  (Map BindType (NodeDir str (NodeDir str a)))
-  (ApDir str a)
+data NodeDir str ax a = NodeDir
+  (Map BindType (NodeDir str ax (NodeDir str ax a)))
+  (ApDir str ax a)
   (Map Int a)
   deriving (Eq,Ord,Show,Generic)
-instance Functor (NodeDir str) where
+instance Functor (NodeDir str ax) where
   map f (NodeDir a b c) = NodeDir (map3 f a) (map3 f b) (map f c)
-instance Foldable (NodeDir str) where
+instance Foldable (NodeDir str ax) where
   fold (NodeDir a b c) = (fold.map fold.map2 fold) a + (fold.map fold.map2 fold) b + fold c
-instance Traversable (NodeDir str) where
+instance Ord ax => Traversable (NodeDir str ax) where
   sequence (NodeDir a b c) = NodeDir<$>sequence3 a<*>sequence3 b<*>sequence c
 
-instance (Serializable ListStream str,Serializable ListStream a) => Serializable ListStream (Cofree (NodeDir str) a) where encode = encodeCofree
-instance (ListSerializable str, ListSerializable a) => ListSerializable (NodeDir str a)
-instance (Format ListStream str,Format ListStream a) => Format ListStream (Cofree (NodeDir str) a) where datum = datumCofree
-instance (ListFormat str, ListFormat a) => ListFormat (NodeDir str a)
+instance (Serializable ListStream str,Serializable ListStream a, Serializable ListStream ax) => Serializable ListStream (Cofree (NodeDir str ax) a) where encode = encodeCofree
+instance (ListSerializable str, ListSerializable a, ListSerializable ax) => ListSerializable (NodeDir str ax a)
+instance (Ord ax,Format ListStream str,Format ListStream a, Format ListStream ax) => Format ListStream (Cofree (NodeDir str ax) a) where datum = datumCofree
+instance (Ord ax,ListFormat str, ListFormat a, ListFormat ax) => ListFormat (NodeDir str ax a)
 
-i'NodeDir :: Iso (NodeDir str a) (NodeDir str' a')
-             ((,,) (Map BindType (NodeDir str (NodeDir str a)))
-               (ApDir str a)
+i'NodeDir :: Iso (NodeDir str ax a) (NodeDir str' ax' a')
+             ((,,) (Map BindType (NodeDir str ax (NodeDir str ax a)))
+               (ApDir str ax a)
                (Map Int a))
-             ((,,) (Map BindType (NodeDir str' (NodeDir str' a')))
-               (ApDir str' a')
+             ((,,) (Map BindType (NodeDir str' ax' (NodeDir str' ax' a')))
+               (ApDir str' ax' a')
                (Map Int a'))
 i'NodeDir = iso (\(x,y,z) -> NodeDir x y z) (\(NodeDir x y z) -> (x,y,z))
 
-type ApDir str a = AHDir str (FreeMap (NodeDir str) a)
-data AHDir str a = AHDir
+type ApDir str ax a = AHDir str ax (FreeMap (NodeDir str ax) a)
+data AHDir str ax a = AHDir
   (Map Int a)
-  (Map Int (ApDir str a))
+  (Map Int (ApDir str ax a))
+  (Map ax a)
   deriving (Eq,Ord,Show,Generic)
-instance Functor (AHDir str) where
-  map f (AHDir a b) = AHDir (map f a) ((map2.map2) f b)
-instance Foldable (AHDir str) where
-  fold (AHDir a b) = fold a + (fold.map fold.map2 fold.map3 fold) b
-instance Traversable (AHDir str) where
-  sequence (AHDir a b) = AHDir<$>sequence a<*>(sequence3.map3 sequence) b
-instance (ListSerializable str, ListSerializable a) => ListSerializable (AHDir str a)
-instance (ListFormat str, ListFormat a) => ListFormat (AHDir str a)
-i'AHDir :: Iso (AHDir str a) (AHDir str' a')
-           ((,) (Map Int a) (Map Int (ApDir str a)))
-           ((,) (Map Int a') (Map Int (ApDir str' a')))
-i'AHDir = iso (uncurry AHDir) (\(AHDir x y) -> (x,y))
+instance Functor (AHDir str ax) where
+  map f (AHDir a b c) = AHDir (map f a) ((map2.map2) f b) (map f c)
+instance Foldable (AHDir str ax) where
+  fold (AHDir a b c) = fold a + (fold.map fold.map2 fold.map3 fold) b + fold c
+instance Ord ax => Traversable (AHDir str ax) where
+  sequence (AHDir a b c) = AHDir<$>sequence a<*>(sequence3.map3 sequence) b<*>sequence c
+instance (ListSerializable str, ListSerializable ax, ListSerializable a) => ListSerializable (AHDir str ax a)
+instance (Ord ax,ListFormat str, ListFormat ax, ListFormat a) => ListFormat (AHDir str ax a)
+i'AHDir :: Iso (AHDir str ax a) (AHDir str' ax' a')
+           ((,,) (Map Int a) (Map Int (ApDir str ax a)) (Map ax a))
+           ((,,) (Map Int a') (Map Int (ApDir str' ax' a')) (Map ax' a'))
+i'AHDir = iso (uncurry3 AHDir) (\(AHDir x y z) -> (x,y,z))
 
 i'Cofree :: Iso (Cofree f a) (Cofree f' a') (a,Coforest f a) (a',Coforest f' a')
 i'Cofree = iso (uncurry Step) (\(Step x y) -> (x,y))
 
-instance Semigroup (NodeDir str a) where NodeDir a b c + NodeDir a' b' c' = NodeDir (a+a') (b+b') (c+c')
-instance Monoid (NodeDir str a) where zero = NodeDir zero zero zero
-instance DataMap (NodeDir str a) (Node str) a where
+instance Ord ax => Semigroup (NodeDir str ax a) where NodeDir a b c + NodeDir a' b' c' = NodeDir (a+a') (b+b') (c+c')
+instance Ord ax => Monoid (NodeDir str ax a) where zero = NodeDir zero zero zero
+instance Ord ax => DataMap (NodeDir str ax a) (Node str ax) a where
   at (Bind t _ tx e) = from i'NodeDir.l'1.at t.l'Just zero.at tx.l'Just zero.at e
   at (Cons a) = from i'NodeDir.l'2.atAp a
   at (Universe u) = from i'NodeDir.l'3.at u
 
-instance Semigroup (AHDir str a) where AHDir a b + AHDir a' b' = AHDir (a+a') (b+b')
-instance Monoid (AHDir str a) where zero = AHDir zero zero
-instance DataMap (AHDir str a) (ApHead str) a where
+instance Ord ax => Semigroup (AHDir str ax a) where AHDir a b c + AHDir a' b' c' = AHDir (a+a') (b+b') (c+c')
+instance Ord ax => Monoid (AHDir str ax a) where zero = AHDir zero zero zero
+instance Ord ax => DataMap (AHDir str ax a) (ApHead str ax) a where
   at (Sym i) = from i'AHDir.l'1.at i
   at (Mu xs _ a) = from i'AHDir.l'2.at (length xs).l'Just zero.atAp a
+  at (Axiom _ a) = from i'AHDir.l'3.at a
 
 type StringPattern str = [str :+: Int]
 
-atAp :: Application str -> Lens' (ApDir str a) (Maybe a)
+atAp :: Ord ax => Application str ax -> Lens' (ApDir str ax a) (Maybe a)
 atAp (Ap h xs) = at h.l'Just zero.at xs
 
 mayChoose (Just x) = return x
@@ -237,11 +245,11 @@ mayChoose Nothing = zero
 (<++>) :: WriterT w [] a -> WriterT w [] a -> WriterT w [] a
 a <++> b = a & from writerT %~ (+ b^..writerT)
 
-findPattern :: NodeDir str a -> Node str -> [([([(str,Node str)],Int,Node str)],a)]
+findPattern :: Ord ax => NodeDir str ax a -> Node str ax -> [([([(str,Node str ax)],Int,Node str ax)],a)]
 findPattern = \x y -> go [] x y^..writerT
-  where go :: [(str,Node str)] -> NodeDir str a -> Node str -> WriterT [([(str,Node str)],Int,Node str)] [] a
-        go_a :: [(str,Node str)] -> ApDir str a -> Application str -> WriterT [([(str,Node str)],Int,Node str)] [] a
-        go_ah :: [(str,Node str)] -> AHDir str a -> ApHead str -> WriterT [([(str,Node str)],Int,Node str)] [] a
+  where go :: Ord ax => [(str,Node str ax)] -> NodeDir str ax a -> Node str ax -> WriterT [([(str,Node str ax)],Int,Node str ax)] [] a
+        go_a :: Ord ax => [(str,Node str ax)] -> ApDir str ax a -> Application str ax -> WriterT [([(str,Node str ax)],Int,Node str ax)] [] a
+        go_ah :: Ord ax => [(str,Node str ax)] -> AHDir str ax a -> ApHead str ax -> WriterT [([(str,Node str ax)],Int,Node str ax)] [] a
         withEnv env d x m = foldr (\(i,as) ma -> ma <++> (foldl'.foldl') (\l a -> (tell [(env,i-length env,x)] >> return a) <++> l) zero as)
                             m (d^??from i'NodeDir.l'2.from i'AHDir.l'1.ascList.each.sat ((>=length env) . fst))
         go env d wh@(Bind t x tx e) = withEnv env d wh $ do
@@ -258,6 +266,7 @@ findPattern = \x y -> go [] x y^..writerT
             (\d''' -> mayChoose (d'''^.from i'Cofree.l'1))
             xs d' 
 
+        go_ah _ d (Axiom _ a) = mayChoose (d^.from i'AHDir.l'3.at a)
         go_ah env d (Sym i) | i<length env = mayChoose (d^.from i'AHDir.l'1.at i)
                             | otherwise = []^.writerT
         go_ah env d (Mu tenv _ a) = do
@@ -285,29 +294,33 @@ adjust_depth f = go 0
                                             (reverse $ zipWith (\i (x,tx,tx') -> (x,go (d+i) tx,go (d+i) tx')) [0..] (reverse env))
                                             (zipWith (\i -> go (d+length env+i)) [0..] t)
                                             (go_a (d+length env) a')) (map (go d) subs)
+        go_a d (Ap x@(Axiom _ _) subs) = Ap x (map (go d) subs)
+
 inc_depth 0 = \x -> x
 inc_depth dx = adjust_depth (+dx)
 adjust_telescope_depth field f = zipWith (field . adjust_depth . \i j -> if j<i then j else i+f (j-i)) [0..]
-free_vars :: Node str -> Set Int
+free_vars :: Node str a -> Set Int
 free_vars (Bind _ _ tx e) = free_vars tx + delete (-1) (map (subtract 1) (free_vars e))
 free_vars (Cons a) = freeA a
   where freeA (Ap (Sym i) xs) = singleton' i + foldMap free_vars xs
         freeA (Ap (Mu env _ a') xs) = foldMap free_vars xs +
           map (subtract envS) (freeA a' - fromKList [0..envS-1])
           where envS = length env
+        freeA (Ap (Axiom _ _) xs) = foldMap free_vars xs
 free_vars _ = zero
 
-is_free_in :: Int -> Node str -> Bool
+is_free_in :: Int -> Node str a -> Bool
 is_free_in = map2 not go
   where go v (Bind _ _ t e) = go v t && go (v+1) e
         go v (Cons a) = go_a v a
         go _ (Universe _) = True
         go_a v (Ap (Sym v') subs) = v/=v' && all (go v) subs
         go_a v (Ap (Mu env _ a) subs) = go_a (v+length env) a && all (go v) subs
-
-subst :: Show str => Node str -> Node str -> Node str
+        go_a v (Ap (Axiom _ _) subs) = all (go v) subs
+        
+subst :: (Show str,Show a) => Node str a -> Node str a -> Node str a
 subst = flip substn 0
-substn :: Show str => Node str -> Int -> Node str -> Node str
+substn :: (Show str,Show a) => Node str a -> Int -> Node str a -> Node str a
 substn val n | n>=0 = getId . go n
              | otherwise = error "'subst' should not be called with a negative index"
   where go d (Bind t x tx e) = do
@@ -330,7 +343,8 @@ substn val n | n>=0 = getId . go n
           case x of
             Cons a' -> return (Cons (Ap (Mu e' t' a') xs'))
             _ -> rec_subst xs' =<< go_mu d e' t' x
-  
+        go_a d (Ap x@(Axiom _ _) xs) = Cons . Ap x <$> traverse (go d) xs
+        
         go_mu d env (tx':t) (Bind Lambda x tx e) = go_mu d ((x,tx,tx'):env) t e
         go_mu _ env _ (Cons (Ap (Sym i) xs))
           | i < length env = do
@@ -412,7 +426,7 @@ latexName s = fromString $ go $ toString s
                                       _ -> "_{"+n+"}"
 
 showNode = showNode' zero
-showNode' :: IsCapriconString str => NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> Node str -> NodeDoc str
+showNode' :: (IsCapriconString str,Show ax,Ord ax) => NodeDir str ax ([str],StringPattern str) -> [(str,Node str ax)] -> Node str ax -> NodeDoc str
 showNode' dir = go 0
   where go d env x | Just ret <- toPat d env x = ret
         go _ _ (Universe u) = DocSubscript "Set" (fromString (show u))
@@ -433,6 +447,7 @@ showNode' dir = go 0
                                (h',_):_ -> h'
                                _ -> "#"+fromString (show i)
                              Mu _ _ a' -> DocMu (showA 0 a')
+                             Axiom _ ax -> DocText (fromString $ show ax)
                       lvl = if empty xs then 1000 else 1
                   in par lvl d $ DocSeq $ intercalate [DocSpace] $ map pure (ni:map (go 2 env) xs)
 
@@ -457,7 +472,7 @@ showNode' dir = go 0
                 | word <- k]
           | otherwise = Nothing
 
-type_of :: (IsCapriconString str,MonadReader (Env str) m) => Node str -> m (Maybe (Node str))
+type_of :: (Show a,IsCapriconString str,MonadReader (Env str a) m) => Node str a -> m (Maybe (Node str a))
 type_of = yb maybeT . go
   where go (Bind Lambda x tx e) = Bind Prod x tx <$> local ((x,tx):) (go e)
         go (Bind Prod x tx e) = do
@@ -477,12 +492,13 @@ type_of = yb maybeT . go
                   ta <- local (map (\(x,tx,_) -> (x,tx)) env +) (go' a')
                   preret <- maybeT $^ mu_type $ foldl' (\e (x,tx,_) -> Bind Prod x tx e) ta env
                   rec_subst subs (subst (Cons a') preret)
-                      
+                go' (Ap (Axiom t _) subs) = rec_subst subs t
+                    
                 rec_subst (y:t) (Bind Prod _ _ e) = rec_subst t (subst y e)
                 rec_subst [] x = return x
                 rec_subst _ _ = zero
 
-mu_type :: MonadReader (Env str) m => Node str -> m (Maybe (Node str))
+mu_type :: MonadReader (Env str a) m => Node str a -> m (Maybe (Node str a))
 mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
   where
     root_args = go' root_type
@@ -527,7 +543,7 @@ mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
               return $ Bind Prod xn tIH (Universe (u+1))
             go_col' _ _ _ = zero
 
-convertible :: Node str -> Node str -> Maybe (Int,Int)
+convertible :: Node str a -> Node str a -> Maybe (Int,Int)
 convertible = \x y -> map ((getMax<#>getMax) . fst) ((tell (Max 0,Max 0) >> go False x y)^..writerT)
   where go inv (Bind b _ tx e) (Bind b' _ tx' e') = guard (b==b') >> go (not inv) tx tx' >> go inv e e'
         go inv (Cons ax) (Cons ay) = go_a inv ax ay
