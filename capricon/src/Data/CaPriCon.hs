@@ -368,6 +368,15 @@ data NodeDoc str = DocSeq [NodeDoc str]
 par lvl d msg | d>lvl = DocParen msg
               | otherwise = msg
 
+instance Functor NodeDoc where
+  map f (DocSeq l) = DocSeq (map2 f l)
+  map f (DocParen x) = DocParen (map f x)
+  map f (DocMu x) = DocMu (map f x)
+  map f (DocSubscript x y) = DocSubscript (map f x) (map f y)
+  map f (DocAssoc v x) = DocAssoc (f v) (map f x)
+  map f (DocText x) = DocText (f x)
+  map _ DocArrow = DocArrow
+  map _ DocSpace = DocSpace
 instance IsString str => IsString (NodeDoc str) where fromString = DocText . fromString
 
 doc2raw :: IsCapriconString str => NodeDoc str -> str
@@ -385,10 +394,15 @@ doc2latex (DocSeq l) = fold (map doc2latex l)
 doc2latex (DocParen p) = "("+doc2latex p+")"
 doc2latex (DocMu m) = "\\mu("+doc2latex m+")"
 doc2latex (DocSubscript v x) = doc2latex v+"_{"+doc2latex x+"}"
-doc2latex (DocAssoc x v) = "(\\mathit{"+x+"}:"+doc2latex v+")"
+doc2latex (DocAssoc x v) = "(\\mathit{"+latexName x+"}:"+doc2latex v+")"
 doc2latex DocArrow = " \\rightarrow "
-doc2latex (DocText x) = "\\mathit{"+x+"}"
+doc2latex (DocText x) = "\\mathit{"+latexName x+"}"
 doc2latex DocSpace = "\\,"
+
+latexName :: IsCapriconString str => str -> str
+latexName s = fromString $ go $ toString s
+  where go ('.':t) = "{\\cdot}" + go t
+        go x = x
 
 showNode = showNode' zero
 showNode' :: IsCapriconString str => NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> Node str -> NodeDoc str
