@@ -400,7 +400,7 @@ doc2latex (DocSubscript v x) = doc2latex v+"_{"+doc2latex x+"}"
 doc2latex (DocAssoc x v) = "(\\mathit{"+latexName x+"}:"+doc2latex v+")"
 doc2latex DocArrow = " \\rightarrow "
 doc2latex (DocText x) = x
-doc2latex (DocVarName x) = "\\mathit{"+latexName x+"}"
+doc2latex (DocVarName x) = "\\mathrm{"+latexName x+"}"
 doc2latex DocSpace = "\\,"
 
 latexName :: IsCapriconString str => str -> str
