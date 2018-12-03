@@ -406,7 +406,10 @@ doc2latex DocSpace = "\\,"
 latexName :: IsCapriconString str => str -> str
 latexName s = fromString $ go $ toString s
   where go ('.':t) = go t+"^P"
-        go x = "\\mathrm{"+x+"}"
+        go x = let (n,y) = span (\c -> c>='0' && c<='9') (reverse x) in
+          "\\mathrm{"+reverse y+"}"+case n of
+                                      "" -> ""
+                                      _ -> "_{"+n+"}"
 
 showNode = showNode' zero
 showNode' :: IsCapriconString str => NodeDir str ([str],StringPattern str) -> [(str,Node str)] -> Node str -> NodeDoc str
