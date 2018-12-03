@@ -401,7 +401,7 @@ doc2latex DocSpace = "\\,"
 
 latexName :: IsCapriconString str => str -> str
 latexName s = fromString $ go $ toString s
-  where go ('.':t) = go t+"^{*}"
+  where go ('.':t) = go t+"}^{*"
         go x = x
 
 showNode = showNode' zero
