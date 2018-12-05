@@ -79,7 +79,7 @@ data COCBuiltin io str = COCB_Print
                        | COCB_HypBefore | COCB_Subst | COCB_Rename
                        | COCB_ContextVars | COCB_Axiom
                        | COCB_GetShowDir | COCB_SetShowDir | COCB_InsertNodeDir
-                       | COCB_Format | COCB_Extract
+                       | COCB_Format | COCB_Extract | COCB_MatchTerm
                        deriving (Show,Generic)
 data ReadImpl io str bytes = ReadImpl (str -> io (Maybe bytes))
 data WriteImpl io str bytes = WriteImpl (str -> bytes -> io ())
@@ -251,6 +251,45 @@ runCOCBuiltin COCB_Mu = do
     StackCOC (COCExpr e):t | Just e' <- runInContext ctx (mkMu e) -> StackCOC (COCExpr e'):t
                            | otherwise -> StackCOC COCNull:t
     st -> st
+
+runCOCBuiltin COCB_MatchTerm = do
+  st <- runStackState get
+  cctx <- runExtraState (getl context)
+  let tailCall v go = go >> execValue runCOCBuiltin (const unit) v
+  case st of
+    onLambda:onProduct:onApply:onMu:onVar:onAxiom:StackCOC (COCExpr (ContextNode d e)):st' ->
+      case e of
+        Bind Lambda x tx e' -> tailCall onLambda $ do
+          runExtraState $ context =~ ((x,tx):)
+          runStackState $ put (StackCOC (COCExpr (ContextNode (d+1) (Cons (Ap (Sym 0) []))))
+                               :StackCOC (COCExpr (ContextNode (d+1) e'))
+                               :st')
+        Bind Prod x tx e' -> tailCall onProduct $ do
+          runExtraState $ context =~ ((x,tx):)
+          runStackState $ put (StackCOC (COCExpr (ContextNode (d+1) (Cons (Ap (Sym 0) []))))
+                               :StackCOC (COCExpr (ContextNode (d+1) e'))
+                               :st')
+        Cons (Ap h []) -> do
+          case h of
+            Sym i | (x,_):_ <- takeLast (d-i) cctx -> tailCall onVar $ runStackState $ put (StackSymbol x:st')
+                  | otherwise -> tailCall onVar $ runStackState $ put (StackSymbol ("#"+fromString (show i)):st')
+            Mu ctx _ a -> do
+              let a' = foldl' (\e' (x,tx,_) -> Bind Lambda x tx e') (Cons a) ctx
+              tailCall onMu $ runStackState $ put (StackCOC (COCExpr (ContextNode d a'))
+                                                   :st')
+            Axiom t a -> tailCall onAxiom $ do
+              runStackState $ put (StackSymbol a
+                                   :StackCOC (COCExpr (ContextNode 0 t))
+                                   :st')
+        Cons (Ap h args) -> tailCall onApply $ do
+          runStackState $ put (StackList (map (StackCOC . COCExpr . ContextNode d) args)
+                               :StackCOC (COCExpr (ContextNode d (Cons (Ap h []))))
+                               :st')
+        _ -> unit
+
+    _ -> unit
+          
+
 runCOCBuiltin COCB_TypeOf = do
   ctx <- runExtraState (getl context)
   runStackState $ modify $ \case
@@ -411,6 +450,7 @@ cocDict version getResource getBResource writeResource writeBResource =
                ("term/convertible"         , Builtin_Extra COCB_Convertible        ),
                ("term/axiom"               , Builtin_Extra COCB_Axiom              ),
                ("term/extract"             , Builtin_Extra COCB_Extract            ),
+               ("term/match"               , Builtin_Extra COCB_MatchTerm          ),
 
                ("context/intro"           , Builtin_Extra COCB_Hyp                ),
                ("context/intro-before"    , Builtin_Extra COCB_HypBefore          ),

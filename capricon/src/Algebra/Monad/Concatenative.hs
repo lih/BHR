@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, GeneralizedNewtypeDeriving, LambdaCase, DeriveGeneric #-}
 module Algebra.Monad.Concatenative(
   -- * Extensible stack types
-  StackBuiltin(..),StackSymbol(..),StackVal(..),StackStep(..),StackClosure(..),
+  StackBuiltin(..),StackSymbol(..),StackVal(..),StackStep(..),StackClosure(..),execValue,
   t'StackDict,
   -- * The MonadStack class
   StackState,defaultState,
@@ -143,8 +143,8 @@ execSymbolImpl execBuiltin' onComment atom = do
   where execStep [] stp = runStep execBuiltin' onComment stp
         execStep (StackClosure cs p:ps) stp = progStack =- (StackClosure cs (stp:p):ps)
 
-execBuiltin :: (StackSymbol s, MonadState (StackState st s b a) m) => (b -> m ()) -> (s -> m ()) -> StackBuiltin b -> m ()
-execBuiltin runExtra onComment = go
+execBuiltinImpl :: (StackSymbol s, MonadState (StackState st s b a) m) => (b -> m ()) -> (s -> m ()) -> StackBuiltin b -> m ()
+execBuiltinImpl runExtra onComment = go
   where 
     go Builtin_Def = get >>= \st -> case st^.stack of
       (val:StackSymbol var:tl) -> do dict =~ insert var val ; stack =- tl
@@ -236,16 +236,22 @@ execBuiltin runExtra onComment = go
 class (StackSymbol s,Monad m) => MonadStack st s b a m | m -> st s b a where
   execSymbol :: (b -> m ()) -> (s -> m ()) -> s -> m ()
   execProgram :: (b -> m ()) -> (s -> m ()) -> StackProgram s b a -> m ()
+  execBuiltin :: (b -> m ()) -> (s -> m ()) -> StackBuiltin b -> m ()
   runStackState :: State [StackVal s b a] x -> m x
   runExtraState :: State st x -> m x
   runDictState :: State (Map s (StackVal s b a)) x -> m x
+
+execValue runExtra onComment (StackProg p) = execProgram runExtra onComment p
+execValue runExtra onComment (StackBuiltin b) = execBuiltin runExtra onComment b
+execValue _ _ _ = unit
 
 newtype ConcatT st b o s m a = ConcatT { _concatT :: StateT (StackState st s b o) m a }
                           deriving (Functor,SemiApplicative,Unit,Applicative,MonadTrans)
 instance Monad m => Monad (ConcatT st b o s m) where join = coerceJoin ConcatT
 instance (StackSymbol s,Monad m) => MonadStack st s b a (ConcatT st b a s m) where
-  execSymbol x y z = ConcatT $ execSymbolImpl (execBuiltin (map _concatT x) (map _concatT y)) (map _concatT y) z
-  execProgram x y p = ConcatT $ traverse_ (runStep (execBuiltin (map _concatT x) (map _concatT y)) (map _concatT y)) p
+  execSymbol x y z = ConcatT $ execSymbolImpl (execBuiltinImpl (map _concatT x) (map _concatT y)) (map _concatT y) z
+  execProgram x y p = ConcatT $ traverse_ (runStep (execBuiltinImpl (map _concatT x) (map _concatT y)) (map _concatT y)) p
+  execBuiltin x y b = ConcatT $ execBuiltinImpl (map _concatT x) (map _concatT y) b
   runStackState st = ConcatT $ (\x -> return (swap $ stack (map swap (st^..state)) x))^.stateT
   runExtraState st = ConcatT $ (\x -> return (swap $ extraState (map swap (st^..state)) x))^.stateT
   runDictState st = ConcatT $ (\x -> return (swap $ dict (map swap (st^..state)) x))^.stateT
