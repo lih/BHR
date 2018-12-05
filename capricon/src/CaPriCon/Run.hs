@@ -284,7 +284,7 @@ runCOCBuiltin COCB_MatchTerm = do
         Cons (Ap h args) -> tailCall onApply $ do
           runStackState $ put (StackList (map (StackCOC . COCExpr . ContextNode d) args)
                                :StackCOC (COCExpr (ContextNode d (Cons (Ap h []))))
-                               :st)
+                               :st')
         _ -> unit
 
     _ -> unit
