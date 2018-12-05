@@ -143,8 +143,8 @@ execSymbolImpl execBuiltin' onComment atom = do
   where execStep [] stp = runStep execBuiltin' onComment stp
         execStep (StackClosure cs p:ps) stp = progStack =- (StackClosure cs (stp:p):ps)
 
-execBuiltin :: (StackSymbol s, MonadState (StackState st s b a) m) => (b -> m ()) -> (s -> m ()) -> StackBuiltin b -> m ()
-execBuiltin runExtra onComment = go
+execBuiltinImpl :: (StackSymbol s, MonadState (StackState st s b a) m) => (b -> m ()) -> (s -> m ()) -> StackBuiltin b -> m ()
+execBuiltinImpl runExtra onComment = go
   where 
     go Builtin_Def = get >>= \st -> case st^.stack of
       (val:StackSymbol var:tl) -> do dict =~ insert var val ; stack =- tl
@@ -181,7 +181,7 @@ execBuiltin runExtra onComment = go
       case st^.stack of
         e:StackList l:t -> do
           stack =- t
-          for_ l $ \x -> do stack =~ (x:) ; execValue go onComment e
+          for_ l $ \x -> do stack =~ (x:) ; execVal e
         _ -> return ()
 
     go Builtin_CurrentDict = getl dict >>= \d -> stack =~ (StackDict d:)
@@ -195,8 +195,8 @@ execBuiltin runExtra onComment = go
     go Builtin_Lookup = join $ do
       stack <~ \case
         el:th:StackSymbol s:StackDict d:t -> case lookup s d of
-          Just x -> (x:t,execValue go onComment th)
-          Nothing -> (t,execValue go onComment el)
+          Just x -> (x:t,execVal th)
+          Nothing -> (t,execVal el)
         st -> (st,return ())
     go Builtin_Keys = stack =~ \case
       StackDict d:t -> StackList (map StackSymbol (keys d)):t
@@ -220,8 +220,8 @@ execBuiltin runExtra onComment = go
     go Builtin_Exec = do
       st <- get
       case st^.stack of
-        StackProg p:t -> do stack =- t ; execValue go onComment (StackProg p)
-        StackBuiltin p:t -> do stack =- t ; execValue go onComment (StackBuiltin p)
+        StackProg p:t -> do stack =- t ; execVal (StackProg p)
+        StackBuiltin p:t -> do stack =- t ; execVal (StackBuiltin p)
         _ -> return ()
     go Builtin_Quote = stack =~ \case
       StackList l:t -> StackProg (map ConstStep l):t
@@ -229,23 +229,29 @@ execBuiltin runExtra onComment = go
       
     go (Builtin_Extra x) = runExtra x
 
-execValue go onComment (StackProg p) = traverse_ (runStep go onComment) p
-execValue go _ (StackBuiltin b) = go b
-execValue _ _ _ = return ()
+    execVal (StackProg p) = traverse_ (runStep go onComment) p
+    execVal (StackBuiltin b) = go b
+    execVal _ = return ()
 
 class (StackSymbol s,Monad m) => MonadStack st s b a m | m -> st s b a where
   execSymbol :: (b -> m ()) -> (s -> m ()) -> s -> m ()
   execProgram :: (b -> m ()) -> (s -> m ()) -> StackProgram s b a -> m ()
+  execBuiltin :: (b -> m ()) -> (s -> m ()) -> StackBuiltin b -> m ()
   runStackState :: State [StackVal s b a] x -> m x
   runExtraState :: State st x -> m x
   runDictState :: State (Map s (StackVal s b a)) x -> m x
+
+execValue runExtra onComment (StackProg p) = execProgram runExtra onComment p
+execValue runExtra onComment (StackBuiltin b) = execBuiltin runExtra onComment b
+execValue _ _ _ = unit
 
 newtype ConcatT st b o s m a = ConcatT { _concatT :: StateT (StackState st s b o) m a }
                           deriving (Functor,SemiApplicative,Unit,Applicative,MonadTrans)
 instance Monad m => Monad (ConcatT st b o s m) where join = coerceJoin ConcatT
 instance (StackSymbol s,Monad m) => MonadStack st s b a (ConcatT st b a s m) where
-  execSymbol x y z = ConcatT $ execSymbolImpl (execBuiltin (map _concatT x) (map _concatT y)) (map _concatT y) z
-  execProgram x y p = ConcatT $ traverse_ (runStep (execBuiltin (map _concatT x) (map _concatT y)) (map _concatT y)) p
+  execSymbol x y z = ConcatT $ execSymbolImpl (execBuiltinImpl (map _concatT x) (map _concatT y)) (map _concatT y) z
+  execProgram x y p = ConcatT $ traverse_ (runStep (execBuiltinImpl (map _concatT x) (map _concatT y)) (map _concatT y)) p
+  execBuiltin x y b = ConcatT $ execBuiltinImpl (map _concatT x) (map _concatT y) b
   runStackState st = ConcatT $ (\x -> return (swap $ stack (map swap (st^..state)) x))^.stateT
   runExtraState st = ConcatT $ (\x -> return (swap $ extraState (map swap (st^..state)) x))^.stateT
   runDictState st = ConcatT $ (\x -> return (swap $ dict (map swap (st^..state)) x))^.stateT
