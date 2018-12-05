@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, GeneralizedNewtypeDeriving, LambdaCase, DeriveGeneric #-}
 module Algebra.Monad.Concatenative(
   -- * Extensible stack types
-  StackBuiltin(..),StackSymbol(..),StackVal(..),StackStep(..),StackClosure(..),
+  StackBuiltin(..),StackSymbol(..),StackVal(..),StackStep(..),StackClosure(..),execValue,
   t'StackDict,
   -- * The MonadStack class
   StackState,defaultState,
@@ -181,7 +181,7 @@ execBuiltin runExtra onComment = go
       case st^.stack of
         e:StackList l:t -> do
           stack =- t
-          for_ l $ \x -> do stack =~ (x:) ; execVal e
+          for_ l $ \x -> do stack =~ (x:) ; execValue go onComment e
         _ -> return ()
 
     go Builtin_CurrentDict = getl dict >>= \d -> stack =~ (StackDict d:)
@@ -195,8 +195,8 @@ execBuiltin runExtra onComment = go
     go Builtin_Lookup = join $ do
       stack <~ \case
         el:th:StackSymbol s:StackDict d:t -> case lookup s d of
-          Just x -> (x:t,execVal th)
-          Nothing -> (t,execVal el)
+          Just x -> (x:t,execValue go onComment th)
+          Nothing -> (t,execValue go onComment el)
         st -> (st,return ())
     go Builtin_Keys = stack =~ \case
       StackDict d:t -> StackList (map StackSymbol (keys d)):t
@@ -220,8 +220,8 @@ execBuiltin runExtra onComment = go
     go Builtin_Exec = do
       st <- get
       case st^.stack of
-        StackProg p:t -> do stack =- t ; execVal (StackProg p)
-        StackBuiltin p:t -> do stack =- t ; execVal (StackBuiltin p)
+        StackProg p:t -> do stack =- t ; execValue go onComment (StackProg p)
+        StackBuiltin p:t -> do stack =- t ; execValue go onComment (StackBuiltin p)
         _ -> return ()
     go Builtin_Quote = stack =~ \case
       StackList l:t -> StackProg (map ConstStep l):t
@@ -229,9 +229,9 @@ execBuiltin runExtra onComment = go
       
     go (Builtin_Extra x) = runExtra x
 
-    execVal (StackProg p) = traverse_ (runStep go onComment) p
-    execVal (StackBuiltin b) = go b
-    execVal _ = return ()
+execValue go onComment (StackProg p) = traverse_ (runStep go onComment) p
+execValue go _ (StackBuiltin b) = go b
+execValue _ _ _ = return ()
 
 class (StackSymbol s,Monad m) => MonadStack st s b a m | m -> st s b a where
   execSymbol :: (b -> m ()) -> (s -> m ()) -> s -> m ()
