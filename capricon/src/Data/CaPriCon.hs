@@ -85,7 +85,7 @@ class Monad m => COCExpression str m e | e -> str where
   conversionDelta :: e -> e -> m (UniverseSize,UniverseSize)
 
   substHyp :: str -> e -> m (e -> e,Env str (Axiom e))
-  pullTerm :: e -> m e
+  pullTerm :: Maybe str -> e -> m e
   insertHypBefore :: Maybe str -> str -> e -> m (e -> e,Env str (Axiom e))
 instance (Show a,IsCapriconString str,Monad m,MonadReader (Env str a) m) => COCExpression str (MaybeT m) (Node str a) where
   type Axiom (Node str a) = a
@@ -110,7 +110,7 @@ instance (Show a,IsCapriconString str,Monad m,MonadReader (Env str a) m) => COCE
     lift $ do
       ctx <- ask
       return (substn x i,let (ch,ct) = splitAt i ctx in zipWith (\j -> second $ substn (inc_depth (negate (1+j)) x) (i-j-1)) [0..] ch+drop 1 ct)
-  pullTerm = return
+  pullTerm _ = return
   insertHypBefore Nothing h th = lift $ do
     ctx <- ask
     return (inc_depth 1,(h,th):ctx)
@@ -156,19 +156,24 @@ instance (Show a,IsCapriconString str,MonadReader (Env str a) m,Monad m) => COCE
       local (restrictEnv dm)
       $ conversionDelta (inc_depth (dm-da) a) (inc_depth (dm-db) b)
   
-  pullTerm (ContextNode d e) = ask <&> \l -> ContextNode (length l) (inc_depth (length l-d) e)
+  pullTerm Nothing (ContextNode d e) = ask <&> \l -> ContextNode (length l) (inc_depth (length l-d) e)
+  pullTerm (Just v) (ContextNode d e) = do
+    nctx <- length <$> ask
+    i <- hypIndex v
+    let d' = nctx-(i+1)
+    guard (d'>=d || all (\j -> d'+j >= d) (free_vars e))
+    return (ContextNode d' $ inc_depth (d'-d) e)
+
   substHyp h vh = do
-    hi <- hypIndex h
-    ContextNode dm vh' <- pullTerm vh
+    ContextNode dm vh' <- pullTerm (Just h) vh
     first (\f cv@(ContextNode d v) ->
-             if d+hi < dm then cv
+             if d <= dm then cv
              else ContextNode (d-1) (inc_depth (d-dm) $ f $ inc_depth (dm-d) v)) <$>
       substHyp h vh'
   insertHypBefore h h' cth' = do
-    ContextNode dh th' <- pullTerm cth'
-    hi <- maybe (return (-1)) hypIndex h
+    ContextNode dh th' <- pullTerm h cth'
     first (\f cx@(ContextNode d x) ->
-             if d+hi < dh then cx
+             if d <= dh then cx
              else ContextNode (d+1) (inc_depth (d-dh) $ f $ inc_depth (dh-d) x))
             <$> insertHypBefore h h' th'
 
