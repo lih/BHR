@@ -222,7 +222,7 @@ runCOCBuiltin COCB_Uni = do
 runCOCBuiltin COCB_Var = do
   ctx <- runExtraState (getl context)
   runStackState $ modify $ \case
-    StackSymbol name:t | Just e <- runInContext ctx (pullTerm =<< mkVariable name) -> StackCOC (COCExpr e):t
+    StackSymbol name:t | Just e <- runInContext (map (\(x,(_,v)) -> (x,v)) $ freshContext ctx) (pullTerm =<< mkVariable name) -> StackCOC (COCExpr e):t
     st -> st
 runCOCBuiltin COCB_Ap = do
   ctx <- runExtraState (getl context)
