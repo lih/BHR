@@ -69,17 +69,26 @@ showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
         showClosure (StackClosure cs c) = "{ "+intercalate " " (map (\(i,c') -> showSteps i+" "+showClosure c') cs + map showStep c)+" }"
     in "{ "+showSteps p+" }"
   _ -> fromString $ show _x
-data COCBuiltin io str = COCB_Print
+data COCBuiltin io str = COCB_Print | COCB_Quit
                        | COCB_Open (ReadImpl io str str) | COCB_ExecModule (WriteImpl io str str)
                        | COCB_Cache (ReadImpl io str [Word8]) (WriteImpl io str [Word8])
-                       | COCB_ToInt | COCB_Concat | COCB_Uni | COCB_Hyp
-                       | COCB_Quit | COCB_Var
-                       | COCB_Ap | COCB_Bind Bool BindType
-                       | COCB_TypeOf | COCB_Mu | COCB_Convertible
-                       | COCB_HypBefore | COCB_Subst | COCB_Rename
-                       | COCB_ContextVars | COCB_Axiom
+
+                       | COCB_ToInt | COCB_Concat
+
+                       | COCB_Bind Bool BindType
+                       | COCB_Uni | COCB_Var | COCB_Mu | COCB_Ap | COCB_Axiom
+
+                       | COCB_TypeOf | COCB_Convertible
+                       | COCB_Extract | COCB_MatchTerm
+                       
+                       | COCB_Intro | COCB_Subst | COCB_Rename
+                       | COCB_Pull
+
+                       | COCB_ContextVars
                        | COCB_GetShowDir | COCB_SetShowDir | COCB_InsertNodeDir
-                       | COCB_Format | COCB_Extract | COCB_MatchTerm
+
+                       | COCB_Format
+                       
                        deriving (Show,Generic)
 data ReadImpl io str bytes = ReadImpl (str -> io (Maybe bytes))
 data WriteImpl io str bytes = WriteImpl (str -> bytes -> io ())
@@ -222,7 +231,7 @@ runCOCBuiltin COCB_Uni = do
 runCOCBuiltin COCB_Var = do
   ctx <- runExtraState (getl context)
   runStackState $ modify $ \case
-    StackSymbol name:t | Just e <- runInContext ctx (pullTerm =<< mkVariable name) -> StackCOC (COCExpr e):t
+    StackSymbol name:t | Just e <- runInContext (map (\(x,(_,v)) -> (x,v)) $ freshContext ctx) (mkVariable name) -> StackCOC (COCExpr e):t
     st -> st
 runCOCBuiltin COCB_Ap = do
   ctx <- runExtraState (getl context)
@@ -251,6 +260,7 @@ runCOCBuiltin COCB_Mu = do
     StackCOC (COCExpr e):t | Just e' <- runInContext ctx (mkMu e) -> StackCOC (COCExpr e'):t
                            | otherwise -> StackCOC COCNull:t
     st -> st
+
 
 runCOCBuiltin COCB_MatchTerm = do
   st <- runStackState get
@@ -303,6 +313,16 @@ runCOCBuiltin COCB_Convertible = do
       StackCOC (COCConvertible (runInContext ctx $ conversionDelta e e')):t
     st -> st
 
+runCOCBuiltin COCB_Pull = do
+  ctx <- runExtraState (getl context)
+  runStackState $ modify $ \case
+    StackCOC (COCExpr e):st | Just e' <- runInContext ctx (pullTerm Nothing e) -> StackCOC (COCExpr e'):st
+                            | otherwise -> StackCOC COCNull:st
+    StackSymbol s:StackCOC (COCExpr e):st
+      | Just e' <- runInContext ctx (pullTerm (Just s) e) -> StackCOC (COCExpr e'):st
+      | otherwise -> StackCOC COCNull:st
+    st -> st
+
 runCOCBuiltin (COCB_ExecModule (WriteImpl writeResource)) = do
   st <- runStackState get
   case st of
@@ -331,21 +351,17 @@ runCOCBuiltin (COCB_Cache (ReadImpl getResource) (WriteImpl writeResource)) = do
             _ -> unit
     _ -> pushError "Invalid argument types for builtin 'cache'. Usage: <prog> <string> cache."
 
-runCOCBuiltin COCB_Hyp = do
+runCOCBuiltin COCB_Intro = do
   ctx <- runExtraState (getl context)
   s <- runStackState $ id <~ \case
+    StackCOC (COCExpr e):t -> (t,runInContext ctx (insertHypBefore Nothing "_" e))
     StackSymbol name:StackCOC (COCExpr e):t
       -> (t,runInContext ctx (insertHypBefore Nothing name e))
+    StackSymbol limit:StackSymbol name:StackCOC (COCExpr e):t
+      -> (t,runInContext ctx (insertHypBefore (Just limit) name e))
     st -> (st,Nothing)
   modifyCOCEnv s
   
-runCOCBuiltin COCB_HypBefore = do
-  ctx <- runExtraState (getl context)
-  s <- runStackState $ id <~ \case
-    StackSymbol h:StackSymbol h':StackCOC (COCExpr e):t
-      -> (t,runInContext ctx (insertHypBefore (Just h) h' e))
-    st -> (st,Nothing)
-  modifyCOCEnv s
 runCOCBuiltin COCB_Subst = do
   ctx <- runExtraState (getl context)
   s <- runStackState $ id <~ \case
@@ -441,24 +457,25 @@ cocDict version getResource getBResource writeResource writeBResource =
                ("term-index/set-pattern-index" , Builtin_Extra COCB_SetShowDir         ),
                ("term-index/index-insert"      , Builtin_Extra COCB_InsertNodeDir      ),
                
-               ("term/universe"            , Builtin_Extra COCB_Uni                ),
-               ("term/variable"            , Builtin_Extra COCB_Var                ),
-               ("term/apply"               , Builtin_Extra COCB_Ap                 ),
-               ("term/lambda"              , Builtin_Extra (COCB_Bind False Lambda)),
-               ("term/forall"              , Builtin_Extra (COCB_Bind False Prod  )),
-               ("term/mu"                  , Builtin_Extra COCB_Mu                 ),
-               ("term/convertible"         , Builtin_Extra COCB_Convertible        ),
-               ("term/axiom"               , Builtin_Extra COCB_Axiom              ),
-               ("term/extract"             , Builtin_Extra COCB_Extract            ),
-               ("term/match"               , Builtin_Extra COCB_MatchTerm          ),
-
-               ("context/intro"           , Builtin_Extra COCB_Hyp                ),
-               ("context/intro-before"    , Builtin_Extra COCB_HypBefore          ),
+               ("construction/universe"            , Builtin_Extra COCB_Uni                ),
+               ("construction/variable"            , Builtin_Extra COCB_Var                ),
+               ("construction/apply"               , Builtin_Extra COCB_Ap                 ),
+               ("construction/lambda"              , Builtin_Extra (COCB_Bind False Lambda)),
+               ("construction/forall"              , Builtin_Extra (COCB_Bind False Prod  )),
+               ("construction/mu"                  , Builtin_Extra COCB_Mu                 ),
+               ("construction/axiom"               , Builtin_Extra COCB_Axiom              ),
+               ("construction/pull"                , Builtin_Extra COCB_Pull               ),
+               
+               ("query/convertible"         , Builtin_Extra COCB_Convertible        ),
+               ("query/extract"             , Builtin_Extra COCB_Extract            ),
+               ("query/match"               , Builtin_Extra COCB_MatchTerm          ),
+               ("query/type"                , Builtin_Extra COCB_TypeOf             ),
+               
+               ("context/intro"           , Builtin_Extra COCB_Intro                ),
                ("context/extro-lambda"    , Builtin_Extra (COCB_Bind True Lambda )),
                ("context/extro-forall"    , Builtin_Extra (COCB_Bind True Prod   )),
                ("context/rename"          , Builtin_Extra COCB_Rename             ),
                ("context/substitute"      , Builtin_Extra COCB_Subst              ),
-               ("context/type"            , Builtin_Extra COCB_TypeOf             ),
                ("context/hypotheses"      , Builtin_Extra COCB_ContextVars        )
                ]])
   where mkDict :: [(str,StackVal str (COCBuiltin io str) (COCValue io str))] -> Map str (StackVal str (COCBuiltin io str) (COCValue io str))

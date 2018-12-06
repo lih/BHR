@@ -35,7 +35,7 @@
 
 'vis { show-context "-------\n" printf show-stack } def
 
-'-> { dup 1 swapn swap intro dup [ swap "'%s" format 'variable ] quote def } def
+'-> { dup 1 swapn swap intro { {@ dup @} variable } def } def
 '! 'extro-lambda $ def
 '? 'extro-forall $ def
 
@@ -50,3 +50,9 @@
 ') { ] applyl } def
 
 'defconstr { 1 dupn swap showdef def } def
+
+'mustache. { show } def
+'tex { 'mustache. { "$%l$\n" printf 'mustache. {@ dup $ @} def } def } def
+'raw { 'mustache. { "%s\n" printf 'mustache. {@ dup $ @} def } def } def
+
+'recursor { dup 2 shaft -> variable mu ! } def
