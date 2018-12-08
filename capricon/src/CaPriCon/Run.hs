@@ -266,39 +266,40 @@ runCOCBuiltin COCB_MatchTerm = do
   st <- runStackState get
   cctx <- runExtraState (getl context)
   let tailCall v go = go >> execValue runCOCBuiltin (const unit) v
-  case st of
-    onLambda:onProduct:onApply:onMu:onVar:onAxiom:StackCOC (COCExpr (ContextNode d e)):st' ->
-      case e of
-        Bind Lambda x tx e' -> tailCall onLambda $ do
-          runExtraState $ context =~ ((x,tx):)
-          runStackState $ put (StackCOC (COCExpr (ContextNode (d+1) (Cons (Ap (Sym 0) []))))
-                               :StackCOC (COCExpr (ContextNode (d+1) e'))
-                               :st')
-        Bind Prod x tx e' -> tailCall onProduct $ do
-          runExtraState $ context =~ ((x,tx):)
-          runStackState $ put (StackCOC (COCExpr (ContextNode (d+1) (Cons (Ap (Sym 0) []))))
-                               :StackCOC (COCExpr (ContextNode (d+1) e'))
-                               :st')
-        Cons (Ap h []) -> do
-          case h of
-            Sym i | (x,_):_ <- takeLast (d-i) cctx -> tailCall onVar $ runStackState $ put (StackSymbol x:st')
-                  | otherwise -> tailCall onVar $ runStackState $ put (StackSymbol ("#"+fromString (show i)):st')
-            Mu ctx _ a -> do
-              let a' = foldl' (\e' (x,tx,_) -> Bind Lambda x tx e') (Cons a) ctx
-              tailCall onMu $ runStackState $ put (StackCOC (COCExpr (ContextNode d a'))
-                                                   :st')
-            Axiom t a -> tailCall onAxiom $ do
-              runStackState $ put (StackSymbol a
-                                   :StackCOC (COCExpr (ContextNode 0 t))
-                                   :st')
-        Cons (Ap h args) -> tailCall onApply $ do
-          runStackState $ put (StackList (map (StackCOC . COCExpr . ContextNode d) args)
-                               :StackCOC (COCExpr (ContextNode d (Cons (Ap h []))))
-                               :st')
-        _ -> unit
+      runMatch onUniverse onLambda onProduct onApply onMu onVar onAxiom d e st' =
+        case e of
+          Bind Lambda x tx e' -> tailCall onLambda $ do
+            runExtraState $ context =~ ((x,tx):)
+            runStackState $ put (StackCOC (COCExpr (ContextNode (d+1) (Cons (Ap (Sym 0) []))))
+                                 :StackCOC (COCExpr (ContextNode (d+1) e'))
+                                 :st')
+          Bind Prod x tx e' -> tailCall onProduct $ do
+            runExtraState $ context =~ ((x,tx):)
+            runStackState $ put (StackCOC (COCExpr (ContextNode (d+1) (Cons (Ap (Sym 0) []))))
+                                 :StackCOC (COCExpr (ContextNode (d+1) e'))
+                                 :st')
+          Cons (Ap h []) -> do
+            case h of
+              Sym i | (x,_):_ <- takeLast (d-i) cctx -> tailCall onVar $ runStackState $ put (StackSymbol x:st')
+                    | otherwise -> tailCall onVar $ runStackState $ put (StackSymbol ("#"+fromString (show i)):st')
+              Mu ctx _ a -> do
+                let a' = foldl' (\e' (x,tx,_) -> Bind Lambda x tx e') (Cons a) ctx
+                tailCall onMu $ runStackState $ put (StackCOC (COCExpr (ContextNode d a'))
+                                                     :st')
+              Axiom t a -> tailCall onAxiom $ do
+                runStackState $ put (StackSymbol a
+                                     :StackCOC (COCExpr (ContextNode 0 t))
+                                     :st')
+          Cons (Ap h args) -> tailCall onApply $ do
+            runStackState $ put (StackList (map (StackCOC . COCExpr . ContextNode d) args)
+                                 :StackCOC (COCExpr (ContextNode d (Cons (Ap h []))))
+                                 :st')
+          Universe n -> tailCall onUniverse $ runStackState $ put (StackInt n:st')
 
+  case st of
+    StackList [onUniverse,onLambda,onProduct,onApply,onMu,onVar,onAxiom]:StackCOC (COCExpr (ContextNode d e)):st' -> runMatch onUniverse onLambda onProduct onApply onMu onVar onAxiom d e st'
+    onUniverse:onLambda:onProduct:onApply:onMu:onVar:onAxiom:StackCOC (COCExpr (ContextNode d e)):st' -> runMatch onUniverse onLambda onProduct onApply onMu onVar onAxiom d e st'
     _ -> unit
-          
 
 runCOCBuiltin COCB_TypeOf = do
   ctx <- runExtraState (getl context)
