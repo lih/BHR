@@ -72,7 +72,7 @@ stringWords = map fromString . fromBlank
         fromWChar k "" = [k ""]
   
 data LogosBuiltin = Wait | Quit | Format | Print | OpenWindow | Texture Bool | BuildMesh | Draw | Uniform | DefUniform
-                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | Transpose | MAdd | Recip | Delay
+                  | VCons | MCons | Norm | Rotation | Translation | Skew | Ejection | MCompose | MScalar | Transpose | MAdd | Recip | Delay
                   deriving Show
 toFloat (StackInt n) = Just (fromIntegral n)
 toFloat (StackSymbol s) = matches Just readable s
@@ -111,6 +111,7 @@ dict = fromAList $
    ("rotation"    , Builtin_Extra Rotation),
    ("translation" , Builtin_Extra Translation),
    ("**"          , Builtin_Extra MCompose),
+   ("<>"          , Builtin_Extra MScalar),
    ("++"          , Builtin_Extra MAdd),
    ("transpose"   , Builtin_Extra Transpose),
    ("skew"        , Builtin_Extra Skew),
@@ -216,6 +217,9 @@ runLogos MCompose = runStackState $ modify $ \case
   StackFloat f:StackMat m:st -> StackMat (map2 (f*) m):st
   StackMat m:StackFloat f:st -> StackMat (map2 (f*) m):st
   StackFloat f:StackFloat f':st -> StackExtra (Opaque $ F $ f*f'):st
+  st -> st
+runLogos MScalar = runStackState $ modify $ \case
+  StackMat m:StackMat m':st -> StackMat (scalProdM m m'):st
   st -> st
 runLogos Transpose = runStackState $ modify $ \case
   StackMat m:st -> StackMat (transpose m):st
