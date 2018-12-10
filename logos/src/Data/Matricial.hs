@@ -73,7 +73,7 @@ matMult x y = map (\vm -> map (\vm' -> scalProd vm vm') (transpose y)) x
 scalProd :: (Ring a,Vector (Vec n)) => Vec n a -> Vec n a -> a
 scalProd u v = sum (u*v)
 scalProdM :: (Ring a,Vector (Vec n)) => Mat n n a -> Mat n n a -> Mat n n a
-scalProdM u v = fromLinearMap (from scalar %~ \w -> w * pure (scalProd (w $* u) (w $* v)))
+scalProdM u v = fromLinearMap (\w -> w * pure (scalProd (w & from scalar %~ ($* u)) (w & from scalar %~ ($* v))))
 
 normalize :: (Vector (Vec n),Invertible a, RealFloat a) => Vec n a -> Vec n a
 normalize v = map (/ sqrt (scalProd v v)) v
