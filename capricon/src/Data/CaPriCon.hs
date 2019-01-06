@@ -544,7 +544,7 @@ mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
                   
             go_col' d' recs (Universe u) = do
               let tIH = bind Prod (adjust_telescope_depth second (+(d+d')) root_args) ihRoot
-                  ihRoot = Cons (Ap (Sym (nargs-d-1)) [Cons (Ap (Sym (j+nargs)) []) | j <- reverse $ select (not . (`isKeyIn`recs)) [0..d'-1]])
+                  ihRoot = Cons (Ap (Sym (nargs-d-1)) [Cons (Ap (Sym (j+nargs)) []) | j <- reverse $ select (not . (`isKeyIn`recs) . (+1)) [0..d'-1]])
               return $ Bind Prod xn tIH (Universe (u+1))
             go_col' _ _ _ = zero
 
