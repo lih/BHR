@@ -1,0 +1,8 @@
+#!/bin/bash
+cat <<EOF
+WATCH := $1
+NOTIFY := $2
+DOC := $3
+PREFIX := $4
+TARGETS := $5
+EOF
