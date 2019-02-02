@@ -122,7 +122,8 @@ view-trans set-viewMat
 
 "press L" { auto-toggle auto-loop } bind-key
 
-'loop-body { lightVect east-west { dyz } { dzy } if ** set-lightVect refresh } def
+'update-sun { lightVect east-west { dyz } { dzy } if ** set-lightVect refresh } def
+'loop-body { update-sun } def
 'east-west true def
 
 "press E" { 'east-west { 1 swap - } modify } bind-key
