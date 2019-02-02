@@ -8,4 +8,5 @@ Curly_Test.hs
 *.o
 *.js
 *.jsmod
-*/distconfig.mk
+config.mk
+*/dist
