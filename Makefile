@@ -1,3 +1,9 @@
+all: build
+
+config.mk:
+	scripts/new-config "$(WATCH)" "$(NOTIFY)" "$(DOC)" "$(PREFIX)" "$(TARGETS)" > $@
+-include config.mk
+
 ifeq ($(WATCH),true)
 STACK_FLAGS += --file-watch
 endif
