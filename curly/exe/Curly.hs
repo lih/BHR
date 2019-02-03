@@ -44,7 +44,7 @@ main = cli "curly" $ do
   let prefixes "" = []
       prefixes f = let (h,t) = splitFileName f in f:prefixes (init h)
   args <- parseCurlyArgs <$> getArgs
-  let defaultConfig = curlyUserDir</>"default.curly"
+  let defaultConfig = curlyConfigRoot</>"default.curly"
   do ex <- doesFileExist defaultConfig
      unless ex $ do
        createFileDirectory defaultConfig
