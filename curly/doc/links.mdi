@@ -1,6 +1,6 @@
 
 [curly-install-script]: install-curly.sh
-[curly-source]: http://git.curly-lang.org/marc/curly
+[curly-source]: https://git.curly-lang.org/marc/stack-libs/src/master/curly
 [curly-package]: pkg/curly.tar.xz
 [curly-linux-x86-64]: pkg/curly.tar.xz
 [curly-complaints]: http://git.curly-lang.org/marc/curly/issues
