@@ -1,7 +1,7 @@
 {-# LANGUAGE ViewPatterns,TypeFamilies #-}
 module Curly.UI(
   -- * Variables
-  curlyPort,curlyUserDir,curlyHistoryFile,
+  curlyPort,curlyHistoryFile,
 
   -- * Arguments
   CurlyConfig,
@@ -371,7 +371,7 @@ sourceLibs = symList $ fromPList [(p,sourceFile b (f,c) (getFile f^.thunk)) | (p
         symList (Join (ModDir l)) = join [symList a <&> l'1 %~ (s:) | (s,a) <- l]
 
 curlyHistoryFile :: String
-curlyHistoryFile = curlyUserDir </> "history"
+curlyHistoryFile = curlyDataRoot </> "history"
 
 getVCSBranches :: MonadIO m => String -> m StampedBranches
 getVCSBranches name = liftIO $ do

@@ -10,7 +10,8 @@ module Curly.Core(
   -- ** Utilities
   c'Expression,syntax,semantic,mapParams,
   -- * Environment
-  envVar,curlyUserDir,curlyKeysFile,curlyCacheDir,curlyCommitDir,curlyPort,
+  envVar,curlyDataRoot,curlyConfigRoot,curlyCacheRoot,
+  curlyKeysFile,curlyCacheDir,curlyCommitDir,curlyPort,
   -- * Logging facilities
   LogLevel(..),LogMessage(..),serialWriteHBytes,addLogCallback,removeLogCallback,withLogCallback,envLogLevel,logLine,logMessage,logAction,trylogLevel,trylog,liftIOLog,cyDebug,
   -- * Misc
@@ -18,23 +19,24 @@ module Curly.Core(
   Compressed(..),noCurlySuf,(</>),format
   ) where
 
-import Definitive
-import Language.Format
-import Curly.Core.Documentation
-import Control.DeepSeq
-import IO.Filesystem ((</>),takeFileName,dropFileName)
-import IO.Network.Socket (PortNumber,connect,getAddrInfo)
-import System.Directory (createDirectoryIfMissing,doesDirectoryExist)
-import System.Environment (lookupEnv)
-import qualified System.FSNotify as FSNotify
-import System.IO (openFile,IOMode(AppendMode),hSetBuffering,BufferMode(LineBuffering))
-import qualified Data.ByteString.Base64 as Base64
 import Codec.Compression.Zlib (compress,decompress)
-import Data.IORef
 import Control.Concurrent.Chan
 import Control.Concurrent (forkIO,MVar,newEmptyMVar,putMVar,readMVar)
+import Control.DeepSeq
 import Control.Exception (bracket)
+import Curly.Core.Documentation
+import Data.IORef
+import Definitive
+import IO.Filesystem ((</>),takeFileName,dropFileName)
+import IO.Network.Socket (PortNumber,connect,getAddrInfo)
+import Language.Format
 import qualified Curly.Core.Security.SHA256 as SHA256
+import qualified Data.ByteString.Base64 as Base64
+import qualified System.FSNotify as FSNotify
+import System.Directory (createDirectoryIfMissing,doesDirectoryExist)
+import System.Environment (lookupEnv)
+import System.Environment.XDG.BaseDir
+import System.IO (openFile,IOMode(AppendMode),hSetBuffering,BufferMode(LineBuffering))
 
 {-| The type of an expression node
 
@@ -187,20 +189,23 @@ curlyDirPath dir = (createDirectoryIfMissing True dir^.thunk)`seq`dir
 curlyPort :: PortNumber
 curlyPort = fromMaybe 25465 $ matches Just number (envVar "" "CURLY_PORT")
 
--- | A user-writable directory to store Curly configurations
-curlyUserDir :: FilePath
-curlyUserDir = curlyDirPath $ envVar "/tmp" "HOME"+"/.curly"
+curlyDataRoot :: FilePath
+curlyDataRoot = curlyDirPath $ getUserDataDir "curly"^.thunk
+curlyConfigRoot :: FilePath
+curlyConfigRoot = curlyDirPath $ getUserConfigDir "curly"^.thunk
+curlyCacheRoot :: FilePath
+curlyCacheRoot = curlyDirPath $ getUserCacheDir "curly"^.thunk
 
 -- | The path of the Curly key wallet
 curlyKeysFile :: FilePath
-curlyKeysFile = curlyUserDir + "/keys"
+curlyKeysFile = curlyDataRoot + "/keys"
 
 -- | The path to the user's cache directory
 curlyCacheDir :: FilePath
-curlyCacheDir = curlyDirPath $ envVar (curlyUserDir + "/libraries") "CURLY_LIBCACHE"
+curlyCacheDir = curlyDirPath $ envVar (curlyCacheRoot + "/libraries") "CURLY_LIBCACHE"
 
 curlyCommitDir :: FilePath
-curlyCommitDir = curlyDirPath (curlyUserDir + "/commits")
+curlyCommitDir = curlyDirPath (curlyCacheRoot + "/commits")
 
 -- | A Curly log level
 data LogLevel = Quiet | Chatty | Verbose | Debug
