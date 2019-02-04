@@ -1,6 +1,6 @@
 #!/bin/bash
 make -C curly/doc || exit
-make doc || exit
+# make doc || exit
 function has_cmd() { which "$1" 2>/dev/null; }
 
 if has_cmd sass; then scss=sass
