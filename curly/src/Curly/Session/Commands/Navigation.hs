@@ -40,7 +40,7 @@ cdDoc = [q_string|
 {title Change Directory}
 {p {em Usage:} cd {em OR} cd PATH}
 {p Set the working directory to the path given on the command-line.
-   Paths are taken relative to the working directory before changing.}"
+   Paths are taken relative to the working directory before changing.}
 |]
 cdCmd = withDoc cdDoc (fill False $ withargs <+? noarg)
   where noarg = liftIO (modifyIORef ?sessionState (wd %- []))
