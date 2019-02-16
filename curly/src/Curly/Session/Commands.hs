@@ -164,7 +164,7 @@ interactiveSession ack = while sessionLine
           s <- remaining
           cmd <- hspace >> many1' (satisfy (\c -> not (isSpace c || c=='\'')))
           let onCurlyCmd = runStreamState (put s) >> codeLine
-          maybe onCurlyCmd snd (foldMap snd commands^.at cmd) <* hspace <* (eol+eoi)
+          maybe onCurlyCmd (\(_,x) -> x <* hspace <* (eol+eoi)) (foldMap snd commands^.at cmd)
 
         codeLine = withMountain $ do
           (ws,ln) <- listen $ muteOnSuccess $ option' Nothing (Just <$> withSessionLib curlyLine)
