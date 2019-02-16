@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo #-}
+{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo, QuasiQuotes #-}
 module Curly.Session.Commands.Style where
 
 import Curly.Core.Parser
@@ -10,12 +10,12 @@ import Curly.Session.Commands.Common
 
 styleCmd :: Interactive Command
 
-styleDoc = unlines [
-  "{section {title Style Documentation}",
-  "{p {em Usage:} style TAG STYLE VALUE}",
-  "{p Changes the style of the given class of tags to match the value when showing documentation.}",
-  "{p {em Example:} style title color ff0000}}"
-  ]
+styleDoc = [q_string|
+{title Style Documentation}
+{p {em Usage:} style TAG STYLE VALUE}
+{p Changes the style of the given class of tags to match the value when showing documentation.}
+{p {em Example:} style title color ff0000}
+|]
 styleCmd = withDoc styleDoc $ False <$ do
   tag <- nbsp >> dirArg
   let hexColor = do

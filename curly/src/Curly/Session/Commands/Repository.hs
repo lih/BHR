@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo #-}
+{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo, QuasiQuotes #-}
 module Curly.Session.Commands.Repository where
 
 import Curly.Core
@@ -19,35 +19,43 @@ import Data.IORef
 
 repositoryCmd :: Interactive Command
 
-repositoryDoc = unlines [
-  "{section {title Manage Repository}",
-  " {p A command to manage repositories and their contents}",
-  " {title Usage}",
-  ul [
-    li "{em repository info} {p List all active repositories}",
-    li "{em repository add <repository>} {p Add a repository to the list of active repositories}",
-    li "{em repository browse (<library-id>|<search-pattern>)} {p Open a sub-session in the context of an external library}",
-    li (fold ["{em repository list [<template> [<key-name> [<branch>]]]} ",
-              "{p List the branches published by <key-name>}",
-              "{ln If a branch name is specified, lists that branch's libraries instead.}"]),
-    li (fold ["{em repository commit <branch> <modifier>...}",
-              "{p Push a new commit on the given branch, by applying various modifiers in order}",
-              "{p The <modifier>s can be either of the following: ",
-              "  {ul {li {em -add <path>...} Adds the libraries under <path> to the branch}",
-              "      {li {em -(keep|drop) (<library-id>|<search-pattern>|(maximum|minimum) <template> by <template>)} ",
-              "          {ln Filters the branch according to a pattern.}}}}"]),
-    li (fold ["{em repository branch <branch> ((fork|alias) <key-name> <source-branch>|rename <new-name>|delete)}",
-              "{p Create a new branch that points to the same commit a another.}",
-              "{p The 'alias' option creates an alias branch rather than a fork.",
-              "    Alias branches will always be resolved to the latest commit on their source branch.}"]),
-    li (fold ["{em repository get (source|library) <filename> (#<library-id>|<search-pattern>)}",
-              " {p Retrieve a library or its source and saves it to a file}"]),
-    li (fold ["{em repository checkout <source-prefix> (#<library-id>|<search-pattern>)}",
-              "{p Reconstruct a working source tree for the given library}"])
-    ],
-  "}"]
-  where li = format "{li.p %s}"
-        ul l = format "{ul %s}" (intercalate " " l)
+repositoryDoc = [q_string|
+{title Manage Repository}
+
+{p A command to manage repositories and their contents.}
+
+{title Usage}
+
+{ul
+  {li.p {em repository info} {p List all active repositories}}
+  {li.p {em repository add <repository>} {p Add a repository to the list of active repositories}}
+  {li.p
+    {em repository browse (<library-id>|<search-pattern>)}
+    {p Open a sub-session in the context of an external library}}
+  {li.p
+    {em repository list [<template> [<key-name> [<branch>]]]} 
+    {p List the branches published by <key-name>}
+    {ln If a branch name is specified, lists that branch's libraries instead.}}
+  {li.p
+    {em repository commit <branch> <modifier>...}
+    {p Push a new commit on the given branch, by applying various modifiers in order}
+    {p The <modifier>s can be either of the following: 
+    {ul {li {em -add <path>...} Adds the libraries under <path> to the branch}
+        {li {em -(keep|drop) (<library-id>|<search-pattern>|(maximum|minimum) <template> by <template>)} 
+        {ln Filters the branch according to a pattern.}}}}}
+  {li.p
+    {em repository branch <branch> ((fork|alias) <key-name> <source-branch>|rename <new-name>|delete)}
+    {p Create a new branch that points to the same commit a another.}
+    {p The 'alias' option creates an alias branch rather than a fork.
+       Alias branches will always be resolved to the latest commit on their source branch.}}
+  {li.p
+    {em repository get (source|library) <filename> (#<library-id>|<search-pattern>)}
+    {p Retrieve a library or its source and saves it to a file}}
+  {li.p
+    {em repository checkout <source-prefix> (#<library-id>|<search-pattern>)}
+    {p Reconstruct a working source tree for the given library}}}
+|]
+  
 repositoryCmd = withDoc repositoryDoc $ False <$ do
   cmd <- expected "keyword, either 'commit', 'list' or 'get-source'" (nbhspace >> dirArg)
   u <- lookup curlyPublisher <$> getKeyStore

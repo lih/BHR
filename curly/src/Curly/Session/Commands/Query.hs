@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo #-}
+{-# LANGUAGE CPP, ExistentialQuantification, ViewPatterns, RecursiveDo, QuasiQuotes #-}
 module Curly.Session.Commands.Query where
 
 import Curly.Core
@@ -40,11 +40,11 @@ viewCmd doc onExpr onPath showV = withDoc doc . fill False $ (several "'s" >> vi
             Just s -> showV [] s
             _ -> serveStrLn $ "Error: "+n+": no such symbol."
 
-editDoc = unlines [
-  "{section {title Edit Function}"
-  ,"{p {em Usage:} edit PATH}"
-  ,"{p Start an editing session for the function at PATH.}}"
-  ]
+editDoc = [q_string|
+{title Edit Function}
+{p {em Usage:} edit PATH}
+{p Start an editing session for the function at PATH.}
+|]
 editCmd = viewCmd editDoc zero onPath $ \path (by leafPos -> r) -> case r of
   SourceRange (Just f) (_,l,c) _ -> editSource f (l,c) reloadMountain
   _ -> serveStrLn $ "No source position available for "+showPath path 
@@ -65,11 +65,12 @@ showExprDefault pat n v = do
   serveStrLn (docString ?terminal ?style (fromMaybe (nodoc $ "Cannot show pattern "+showRawDoc pat)
                                           (evalDocWithPatterns ?patterns params pat)))
 
-showDoc = unlines [
-  "{section {title Formatted Query} {p {em Usage:} show (PATH|\\\\(EXPR\\\\)) [PATTERN]}",
-  "  {p Show information about functions under PATH, or an ad-hoc expression}",
-  "  {p The pattern will default to '\\{call show-default\\}' if left unspecified.}}"
-  ]
+showDoc = [q_string|
+{title Formatted Query}
+{p {em Usage:} show (PATH|\\(EXPR\\)) [PATTERN]}
+{p Show information about functions under PATH, or an ad-hoc expression.}
+{p The pattern will default to '\{call show-default\}' if left unspecified.}
+|]
 showCmd = withDoc showDoc . fill False $ do
   epath <- map Right (nbhspace >> between (single '(') (single ')') (withParsedString (expr AnySpaces)))
            <+? map Left ((nbhspace >> ((several "{}" >> getSession wd) <+? absPath ""))
@@ -100,10 +101,12 @@ showCmd = withDoc showDoc . fill False $ do
     Right (n,e) -> do
       v <- optExprIn <$> getSession this <*> pure e
       showExprDefault pat n v
-patternDoc = unlines [
-  "{section {title Define Formatting Patterns} {p {em Usage:} pattern NAME ARG... = PATTERN {em OR} pattern NAME}",
-  "  {p Defines a new query pattern accessible with \\{pattern PATTERN PARAM...\\}}",
-  "  {p If you only specify the pattern name, its current definition will be printed instead.}}"]
+patternDoc = [q_string|
+{title Define Formatting Patterns}
+{p {em Usage:} pattern NAME ARG... = PATTERN {em OR} pattern NAME}
+{p Defines a new query pattern accessible with \{pattern PATTERN PARAM...\}}
+{p If you only specify the pattern name, its current definition will be printed instead.}
+|]
 patternCmd = withDoc patternDoc . fill False $ do
   ph:pt <- many1' (nbhspace >> dirArg <*= guard . (/="="))
   let setPat = do
