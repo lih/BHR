@@ -22,9 +22,9 @@ repositoryCmd :: Interactive Command
 repositoryDoc = [q_string|
 {title Manage Repository}
 
-{p A command to manage repositories and their contents},
+{p A command to manage repositories and their contents}
 
-{title Usage}:
+{title Usage}
 
 {ul
   {li.p {em repository info} {p List all active repositories}}
