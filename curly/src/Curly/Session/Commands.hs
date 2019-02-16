@@ -173,8 +173,7 @@ interactiveSession ack = while sessionLine
             Nothing -> guard (empty ws) >> parseCmd
 
         parseCmd = hspace >> do
-          (n,e) <- withParsedString (optimized =<< accessorExpr HorizSpaces)
-          lookingAt (hspace >> eol)
+          (n,e) <- withParsedString (optimized =<< accessorExpr HorizSpaces) <* hspace <* eol
           withPatterns $ withStyle $ showExprDefault (docTag' "call" [Pure "show-default"]) n e
           return False
 
