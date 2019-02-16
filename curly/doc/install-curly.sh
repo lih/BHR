@@ -1,9 +1,10 @@
 #!/bin/sh
-curly_version="0.59.4.1"
+curly_version="0.59.4.2"
 curly_url="https://www.curly-lang.org/pkg/curly-$curly_version.tar.xz"
 
 import_stdkeys=
-install_dir=
+prefix_dir="$HOME/.local"
+lib_dir=
 bin_dir=
 
 while [ "$#" -gt  0 ]; do
@@ -17,16 +18,21 @@ while [ "$#" -gt  0 ]; do
     esac
     case "$optname" in
 	--import-standard-keys) import_stdkeys=true;;
-	-p|--prefix) install_dir="$optval";;
+	-p|--prefix) prefix_dir="$optval";;
+	-L|--lib-dir) lib_dir="$optval";;
 	-B|--bin-dir) bin_dir="$optval";;
     esac
 done
 
-if [ "${install_dir:+x}" = '' ]; then
-    read -p "Please enter a directory in which to install Curly (default: $HOME/.local/lib) : " install_dir </dev/tty
+if [ "${lib_dir:+x}" = '' ]; then
+    read -p "Please enter a directory in which to install Curly (default: $prefix_dir/lib) : " lib_dir </dev/tty
 fi
-if [ "${install_dir:+x}" = '' ]; then
-    install_dir="$HOME/.local/lib"
+if [ "${lib_dir:+x}" = '' ]; then
+    lib_dir="$prefix_dir/lib"
+fi
+
+if [ "${bin_dir:+x}" = '' ]; then
+    bin_dir="$prefix_dir/bin"
 fi
 
 trace() { printf "\033[1m$ %s \033[m" "$*" >&2; "$@"; ret="$?"; echo >&2; return $ret; }
@@ -39,11 +45,9 @@ else
     get_url() { exit 1; }
 fi
 
-get_url "$curly_url" | { mkdir -p "$install_dir"; trace tar -xJ --checkpoint=40 --checkpoint-action=dot -C "$install_dir"; }
-if [ -n "$bin_dir" ]; then
-    mkdir -p "$bin_dir"
-    trace ln -fs "$install_dir/curly-$curly_version/curly" "$bin_dir/curly"
-fi
+get_url "$curly_url" | { mkdir -p "$lib_dir"; trace tar -xJ --checkpoint=40 --checkpoint-action=dot -C "$lib_dir"; }
+mkdir -p "$bin_dir"
+trace ln -fs "$lib_dir/curly-$curly_version/curly" "$bin_dir/curly"
 if [ -n "$import_stdkeys" ]; then
     "$bin_dir/curly" %'key import curly-std standard.curly-lang.org'
 fi

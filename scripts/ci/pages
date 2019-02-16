@@ -71,7 +71,7 @@ EOF
 	    	tmp="$(mktemp -d)"
 	    	mkdir -p "$tmp/$full"
 	    	cd "$stack_path"
-	    	cp -r bin/$exe share/*/$exe-*/* "$tmp/$full"
+	    	cp -r bin/$exe share/*/$full/* "$tmp/$full"
 	    	tar -C "$tmp" -c .
 	    	rm -r "$tmp"
 	    ) | xz > public/pkg/$full.tar.xz
