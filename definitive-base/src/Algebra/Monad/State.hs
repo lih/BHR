@@ -64,7 +64,7 @@ instance Functor m => StateRes (StateT s m a) (s -> m s) (s -> m a) where
 state :: Iso (State s a) (State t b) (s -> (s,a)) (t -> (t,b))
 state = mapping i'Id.stateT
 
-(=-) :: MonadState s m => Fold' s s' -> s' -> m ()
+(=-) :: MonadState s m => FixFold' s s' -> s' -> m ()
 infixl 1 =-,=~,<~
 (<~) :: MonadState s m => Lens' s a -> (a -> (a,b)) -> m b
 (<~) l st = getl l >>= \a -> let (a',b) = st a in b <$ modify (l %- a')
@@ -72,7 +72,7 @@ swapWith :: MonadState s m => Lens' s a -> (a -> a) -> m a
 swapWith l f = l <~ \a' -> (f a',a')
 
 l =- x = modify (set l x)
-(=~) :: MonadState s m => Fold' s a -> (a -> a) -> m ()
+(=~) :: MonadState s m => FixFold' s a -> (a -> a) -> m ()
 l =~ f = modify (warp l f)
 (^>=) :: MonadState s m => LensLike m a a s s -> (a -> m ()) -> m ()
 l ^>= k = get >>= \s -> forl_ l s k
