@@ -4,7 +4,7 @@ module Main(
   main,
 
   -- * Functions for running your own Curly instances
-  initCurly,runTargets,
+  runTargets,
   ) where
 
 import Control.Concurrent (forkIO,forkFinally)
@@ -38,7 +38,7 @@ import System.FilePath.Posix (splitFileName)
 
 main :: IO ()
 main = cli "curly" $ do
-  initCurly
+  initCurly getDataFileName
 
   cwd <- getCurrentDirectory
   let prefixes "" = []
@@ -76,11 +76,6 @@ data TargetType = ForkTgt (MVar ())
 t'IOTgt :: Traversal' TargetType (IO ())
 t'IOTgt k (IOTgt m) = IOTgt<$>k m
 t'IOTgt _ x = return x
-
-initCurly = do
-  setLocaleEncoding utf8
-  putMVar getDataFileName_ref getDataFileName
-  curlyDataFileName "proto/vc" >>= \p -> modifyIORef vcsProtoRoots (p:)
   
 ioTgt = return . IOTgt
 forkTgt m = do

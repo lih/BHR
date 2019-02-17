@@ -16,7 +16,7 @@ module Curly.Core(
   LogLevel(..),LogMessage(..),serialWriteHBytes,addLogCallback,removeLogCallback,withLogCallback,envLogLevel,logLine,logMessage,logAction,trylogLevel,trylog,liftIOLog,cyDebug,
   -- * Misc
   B64Chunk(..),PortNumber,watchFile,connectTo,(*+),cacheFileName,createFileDirectory,
-  Compressed(..),noCurlySuf,(</>),format
+  Compressed(..),noCurlySuf,(</>),format,
   ) where
 
 import Codec.Compression.Zlib (compress,decompress)
