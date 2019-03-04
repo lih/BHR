@@ -119,6 +119,10 @@ function C.curly.isHash() {
     C.returnRaw "$@"
 }
 function C.curly.hash() { C.argument word C.curly.isHash "$@"; }
+function C.curly.goody() {
+    local -a goodies=( $(curly --goody list) )
+    C.wordOf "${#goodies[@]}" "${goodies[@]}" "$@"
+}
 
 function C.curly.withScript() {
     local -a CURLY_COMP_SCRIPTS=( "${CURLY_COMP_SCRIPTS[@]}" "$SCRIPT" )
@@ -169,6 +173,7 @@ function C.curly.arg() {
     C.alt C.curly.flags opt 2 -M --mount C.curly.input "$@"
     C.alt C.curly.flags opt 2 -t --translate C.curly.translate "$@"
     C.alt C.curly.flags opt 1 --banner C.any "$@"
+    C.alt C.curly.flags opt 1 --goody C.curly.goody "$@"
     C.alt C.curly.flags opt 8 -p -P --prelude --prelude+ --banner --banner+ --instance -e --execute C.any "$@"
     C.alt C.curly.flags opt 1 --at C.curly.server "$@"
     C.alt C.describing "Small mount description" C.suffixed ":" C.wordOf 1 package C.normal C.argument word C.curly.isPackageName "$@"
