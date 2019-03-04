@@ -10,8 +10,8 @@ function C.curly.init() {
             COMP_DESCRIPTIONS["curly:$short"]="$desc"; fi
         if [ "${long:+x}" = x ]; then
             COMP_DESCRIPTIONS["curly:$long"]="$desc"; fi
-    done < <(CURLY_VCS=dummy /usr/bin/curly -h | tail -n +2 | sed -rn 's/^\s+(-[^-])?\s+(--\S+)\s+(\S+)\s+(.*\S)\s*$/\1|\2|\3|\4/p')
-    IFS=', ' CURLY_SYSTEMS=( $(CURLY_VCS=dummy /usr/bin/curly -h | sed -n 's/^Known systems: //p') ) IFS="$IFSBAK"
+    done < <(CURLY_VCS=dummy curly -h | tail -n +2 | sed -rn 's/^\s+(-[^-])?\s+(--\S+)\s+(\S+)\s+(.*\S)\s*$/\1|\2|\3|\4/p')
+    IFS=', ' CURLY_SYSTEMS=( $(CURLY_VCS=dummy curly -h | sed -n 's/^Known systems: //p') ) IFS="$IFSBAK"
 }
 function C.curly.flags() {
     C.curly.init
