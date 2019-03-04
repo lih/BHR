@@ -171,6 +171,7 @@ function C.curly.arg() {
     C.alt C.curly.flags opt 1 --banner C.any "$@"
     C.alt C.curly.flags opt 8 -p -P --prelude --prelude+ --banner --banner+ --instance -e --execute C.any "$@"
     C.alt C.curly.flags opt 1 --at C.curly.server "$@"
+    C.alt C.describing "Small mount description" C.suffixed ":" C.wordOf 1 package C.normal C.argument word C.curly.isPackageName "$@"
     C.alt C.describing "Curly script, source or library" C.capture word SCRIPT C.fileIn CF.cyscript . C.curly.withScript C.describing "" "$@"
     C.alt C.suffixed "@" C.wordOf 1 '' C.curly.server "$@"
 }
