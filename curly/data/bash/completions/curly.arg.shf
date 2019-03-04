@@ -69,7 +69,7 @@ function C.curly.isPackageName() {
     SUGGESTIONS=( )
     while read _ name descr; do
 	SUGGESTIONS+=( "$name -- Package: $descr" )
-    done < <(PREFIX="$arg" curly %'repository list "{matches {$ name} "{env PREFIX}*"} {$ synopsis}"')
+    done < <(PREFIX="$arg" TERM= curly %'repository list "{matches {$ name} "{env PREFIX}*"} {$ synopsis}"')
     if ((${#SUGGESTIONS[@]} == 0)); then
 	SUGGESTIONS=( "$arg -- Unknown package" )
     fi
