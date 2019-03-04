@@ -321,22 +321,23 @@ if [ -z "$INCLUDED_BASHCOMPS" ]; then
     function C.any() { C.argument word C.isAny "$@"; }
     
     function C.init() {
-        local name fname cmdname comp
-        for comp in /usr/share/bash/completions/*; do
+        local dir name fname cmdname comp 
+	for dir in "${BASHCOMPS_COMP_DIRS[@]}"; do
+            for comp in "$dir"/*; do
             if [ -r "$comp" ]; then
                 name="$(realpath "$comp")"
-                name="${name#/usr/share/bash/completions/}"
+                name="${name#$dir/}"
                 fname="$name"
                 case "$name" in
                     *.shf) fname="$name"; name="${name%.shf}";;
 		    *.sh)  . "$comp" ; continue;;
                     *)
-                        cmdname="${comp#/usr/share/bash/completions/}"
+                        cmdname="${comp#$dir/}"
                         fname="$name"
                         C.defcomp "C.$name" "$cmdname"
                         ;;
                 esac
-                eval "function C.$name() { source /usr/share/bash/completions/$fname; }"
+                eval "function C.$name() { source $dir/$fname; }"
             fi
         done
 
