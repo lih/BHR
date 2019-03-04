@@ -22,4 +22,14 @@ EOF
 	    rm -r "curly-$ver"
 	fi
 	;;
+
+    bash-completions)
+	data="${XDG_DATA_HOME:-$HOME/.local/share}/bashcomps/"
+	mkdir -p "$data"
+	get-data "$data/bashcomps.shl"			bash/completions/bashcomps.shl
+	get-data "$data/completions/curly"		bash/completions/curly
+	get-data "$data/completions/curly.arg.shf"	bash/completions/curly.arg.shf
+	get-data "$data/completions/curly.script.shf"	bash/completions/curly.script.shf
+	get-data "$data/completions/curly.sh"	        bash/completions/curly.sh
+	;;
 esac
