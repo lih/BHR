@@ -27,7 +27,9 @@ EOF
     bash-completions)
 	root="${XDG_DATA_HOME:-$HOME/.local/share}/bashcomps"
 	mkdir -p "$root/completions"
-	get_data "$root/bashcomps.shl"			bash/completions/bashcomps.shl
+	if [ ! -e "$root/bashcomps.shl" ]; then
+	    get_data "$root/bashcomps.shl"			bash/completions/bashcomps.shl
+	fi
 	get_data "$root/completions/curly"		bash/completions/curly
 	get_data "$root/completions/curly.arg.shf"	bash/completions/curly.arg.shf
 	get_data "$root/completions/curly.script.shf"	bash/completions/curly.script.shf
