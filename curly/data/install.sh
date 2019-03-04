@@ -1,6 +1,6 @@
 #!/bin/sh
 get_data() {
-    printf "Installing goody $2 at location $1"
+    printf "Installing goody %s at location %s\n" "$2" "$1"
     curly --goody="$2" > "$1"
 }
 case "$1" in
