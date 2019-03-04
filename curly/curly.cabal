@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                curly
-version:             0.59.4.3
+version:             0.59.4.5
 synopsis:            A minimal cross-compiler for the simply-typed lambda-calculus
 -- description:         
 license:             GPL-3
@@ -22,6 +22,7 @@ data-files:
   applications/curly-library.desktop
   applications/curly-source.desktop
   applications/curly-uri.desktop
+  bash/completions/bashcomps.shl
   bash/completions/curly
   bash/completions/curly.arg.shf
   bash/completions/curly.script.shf
@@ -34,6 +35,7 @@ data-files:
   emacs/curly-utils.el
   freeze.sh
   install.sh
+  env.sh
   kate/highlight-curly.xml
   list
   make/curly.mk

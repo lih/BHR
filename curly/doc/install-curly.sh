@@ -1,8 +1,9 @@
 #!/bin/sh
-curly_version="0.59.4.3"
+curly_version="0.59.4.4"
 curly_url="https://www.curly-lang.org/pkg/curly-$curly_version.tar.xz"
 
 import_stdkeys=
+install_completions=
 prefix_dir="$HOME/.local"
 lib_dir=
 bin_dir=
@@ -17,7 +18,8 @@ while [ "$#" -gt  0 ]; do
 	*) optname="$o";;
     esac
     case "$optname" in
-	--import-standard-keys) import_stdkeys=true;;
+	--standard-keys) import_stdkeys=true;;
+	--completions) install_completions=true;;
 	-p|--prefix) prefix_dir="$optval";;
 	-L|--lib-dir) lib_dir="$optval";;
 	-B|--bin-dir) bin_dir="$optval";;
@@ -50,4 +52,7 @@ mkdir -p "$bin_dir"
 trace ln -fs "$lib_dir/curly-$curly_version/curly" "$bin_dir/curly"
 if [ -n "$import_stdkeys" ]; then
     "$bin_dir/curly" %'key import curly-std standard.curly-lang.org'
+fi
+if [ -n "$install_completions" ]; then
+    "$bin_dir/curly" --goody install.sh | sh -s bash-completions
 fi

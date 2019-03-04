@@ -95,8 +95,11 @@ evalDocWithPatterns pats = eval
             eval' (Join (DocTag "or" [] xs)) = foldMap eval' xs
             eval' (Join (DocTag "when" [] [x,y])) = eval' x >> eval' y
             eval' (Join (DocTag "unless" [] [x,y])) = maybe (Just ()) (const Nothing) (eval' x) >> eval' y
-            eval' (Join (DocTag "splice" as xs)) = Join . DocTag "splice" as . foldr merge [] <$> traverse eval' xs
-              where merge x [] = [x]
+            eval' (Join (DocTag "splice" as xs)) = constr . foldr merge [] <$> traverse eval' xs
+              where constr [] = Pure ""
+                    constr [x] = x
+                    constr l = Join $ DocTag "splice" as l
+                    merge x [] = [x]
                     merge (Pure x) (Pure y:t) = Pure (x+y):t
                     merge x t = x:t
             eval' (Join (DocTag op [] [ea,eb]))

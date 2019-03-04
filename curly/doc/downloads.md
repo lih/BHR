@@ -15,7 +15,7 @@ If you're feeling lucky, you can try to run the following command in a
 terminal, which will perform all the necessary steps for you :
 
 ~~~~{.terminal}
-curl -s https://www.curly-lang.org/install-curly.sh | sh -s - --import-standard-keys
+curl -s https://www.curly-lang.org/install-curly.sh | sh -s - --standard-keys
 ~~~~~
 
 Compiling from source, for the curious

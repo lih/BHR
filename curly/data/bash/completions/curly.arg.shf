@@ -10,8 +10,8 @@ function C.curly.init() {
             COMP_DESCRIPTIONS["curly:$short"]="$desc"; fi
         if [ "${long:+x}" = x ]; then
             COMP_DESCRIPTIONS["curly:$long"]="$desc"; fi
-    done < <(CURLY_VCS=dummy /usr/bin/curly -h | tail -n +2 | sed -rn 's/^\s+(-[^-])?\s+(--\S+)\s+(\S+)\s+(.*\S)\s*$/\1|\2|\3|\4/p')
-    IFS=', ' CURLY_SYSTEMS=( $(CURLY_VCS=dummy /usr/bin/curly -h | sed -n 's/^Known systems: //p') ) IFS="$IFSBAK"
+    done < <(CURLY_VCS=dummy curly -h | tail -n +2 | sed -rn 's/^\s+(-[^-])?\s+(--\S+)\s+(\S+)\s+(.*\S)\s*$/\1|\2|\3|\4/p')
+    IFS=', ' CURLY_SYSTEMS=( $(CURLY_VCS=dummy curly -h | sed -n 's/^Known systems: //p') ) IFS="$IFSBAK"
 }
 function C.curly.flags() {
     C.curly.init
@@ -64,12 +64,27 @@ function C.curly.path() {
     C.alt C.suffixed ":" C.argument word C.curly.isArg C.curly.path "$@"
     C.alt C.suffixed "=" C.argument word C.curly.isArg "$@"
 }
+function C.curly.isPackageName() {
+    local arg="$1"; shift
+    SUGGESTIONS=( )
+    if C.leaf; then
+	while read _ name version descr; do
+	    SUGGESTIONS+=( "$name -- Package: $descr (version $version)" )
+	done < <(PREFIX="$arg" TERM= curly %'repository list "{matches {$ name} "{env PREFIX}*"} {$ version} {$ synopsis}"')
+    fi
+    if ((${#SUGGESTIONS[@]} == 0)); then
+	SUGGESTIONS=( "$arg -- Unknown package" )
+    fi
+    C.returnRaw "$@"
+}
+function C.curly.packageName() { C.argument word C.curly.isPackageName "$@"; }
 function C.curly.inputarg() {
     C.alt C.suffixed ":" \
             C.wordOf 1 source \
             C.fileIn -d . \
           C.suffixed "" C.fileIn -d . "$@"
     C.alt C.suffixed ":" C.wordOf 1 library C.normal C.curly.hash "$@"
+    C.alt C.suffixed ":" C.wordOf 1 package C.normal C.curly.packageName "$@"
     C.alt C.suffixed "" C.wordOf 1 builtins "$@"
 }
 function C.curly.input() { C.curly.path C.curly.inputarg "$@"; }
@@ -92,13 +107,16 @@ function C.curly.library() {
 }
 function C.curly.isHash() {
     local arg="$1" ; shift
-    : ${CURLY_LIBCACHE:=$HOME/.curly/libraries}
+    : ${CURLY_LIBCACHE:=$HOME/.cache/curly/libraries}
     if C.leaf; then
         IFSBAK="$IFS" IFS=$'\n' \
-	      SUGGESTIONS=( $({ /usr/bin/curly -l'l"{$ synopsis}{or " (v{$ version})" ""}"'
-				for i in $(ls "$CURLY_LIBCACHE" 2> /dev/null); do
-				    hash="${i%.cyl}"; head="$(head -1 "$CURLY_LIBCACHE/$i")"
-				    echo "${head/##!*!#/$hash}"
+	      SUGGESTIONS=( $({ TERM= curly %'repository list "{$ synopsis}{or " (v{$ version})" ""}"'
+				shopt -s nullglob
+				for i in "$CURLY_LIBCACHE"/*/*.cyl; do
+				    head="$(head -1 "$i")"
+				    hash="${i#$CURLY_LIBCACHE/}"
+				    hash="${hash%.cyl}"
+				    echo "${head/##!*!#/${hash//\//}}"
 				done; } \
 				  | sort -u | sed -rn "s/^($arg\\S+)\\s*(.*)\$/\\1 -- \\2/p") ) IFS="$IFSBAK"
     else
@@ -107,17 +125,26 @@ function C.curly.isHash() {
     C.returnRaw "$@"
 }
 function C.curly.hash() { C.argument word C.curly.isHash "$@"; }
+function C.curly.goody() {
+    local -a goodies=( $(curly --goody list) )
+    C.wordOf "${#goodies[@]}" "${goodies[@]}" "$@"
+}
 
 function C.curly.withScript() {
     local -a CURLY_COMP_SCRIPTS=( "${CURLY_COMP_SCRIPTS[@]}" "$SCRIPT" )
     "$@"
 }
 function C.curly.instance() {
-    local -a instances=( $(cy @"$HOST"/_ -li 2> /dev/null | sed -n '/^Couldn.t connect to/!{s/^[^:]*:\s*//;y/,/ /;p}') )
+    local -a instances=( $(curly @"$HOST"/_ -l 2> /dev/null | sed -n '/^Couldn.t connect to/!{s/^[^:]*:\s*//;y/,/ /;p}') )
     C.wordOf "${#instances[@]}" "${instances[@]}" "$@"
 }
+function C.curly.isHostname() {
+    local arg="$1"; shift
+    SUGGESTIONS=( "$arg -- Instance server" )
+    C.returnRaw "$@"
+}
 function C.curly.server() {
-    C.suffixed / C.capture word HOST C.hostname \
+    C.suffixed / C.capture word HOST C.argument word C.curly.isHostname \
 	       C.suffixed "" C.curly.instance "$@"
 }
 function C.curly.run_arg() {
@@ -143,18 +170,19 @@ function C.curly.arg() {
             for ((i=0;i<${#compFlags[@]};i++)); do
                 compFlags[i]+=" -- ${compFlagDescs[${compFlags[i]}]}"
             done
-        } < <(CURLY_VCS=dummy /usr/bin/curly "${CURLY_COMP_SCRIPTS[@]}" -h)
+        } < <(CURLY_VCS=dummy curly "${CURLY_COMP_SCRIPTS[@]}" -h)
 	C.alt C.rawWordOf "${#compFlags[@]}" "${compFlags[@]}" "$@"
     fi
     C.alt C.curly.flags flag 6 -h --help -v --version -i --interactive "$@"
-    C.alt C.curly.flags opt 4 -l --list -s --serve C.wordOf 2 libraries instances "$@"
+    C.alt C.curly.flags opt 4 -l --list-instances -s --serve-instance "$@"
     C.alt C.curly.flags opt 2 -r --run C.curly.run_arg "$@"
     C.alt C.curly.flags opt 2 -M --mount C.curly.input "$@"
-    C.alt C.curly.flags opt 2 -d --dump C.curly.library "$@"
     C.alt C.curly.flags opt 2 -t --translate C.curly.translate "$@"
-    C.alt C.curly.flags opt 1 --banner C.fileIn -r . "$@"
-    C.alt C.curly.flags opt 7 -p -P --prelude --prelude+ --instance -e --execute C.any "$@"
+    C.alt C.curly.flags opt 1 --banner C.any "$@"
+    C.alt C.curly.flags opt 1 --goody C.curly.goody "$@"
+    C.alt C.curly.flags opt 8 -p -P --prelude --prelude+ --banner --banner+ --instance -e --execute C.any "$@"
     C.alt C.curly.flags opt 1 --at C.curly.server "$@"
+    C.alt C.describing "Small mount description" C.suffixed ":" C.wordOf 1 package C.normal C.packageName "$@"
     C.alt C.describing "Curly script, source or library" C.capture word SCRIPT C.fileIn CF.cyscript . C.curly.withScript C.describing "" "$@"
     C.alt C.suffixed "@" C.wordOf 1 '' C.curly.server "$@"
 }

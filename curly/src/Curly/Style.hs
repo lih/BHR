@@ -10,39 +10,44 @@ import System.Environment (lookupEnv)
 
 csi = "\x1b["
 
-data ANSITerm = ANSITerm Bool
-tc2c :: Bool -> TermColor -> String
-tc2c True Black = "30m"
-tc2c False Black = "40m"
-tc2c True Red = "31m"
-tc2c False Red = "41m"
-tc2c True Green = "32m"
-tc2c False Green = "42m"
-tc2c True Yellow = "33m"
-tc2c False Yellow = "43m"
-tc2c True Blue = "34m"
-tc2c False Blue = "44m"
-tc2c True Magenta = "35m"
-tc2c False Magenta = "45m"
-tc2c True Cyan = "36m"
-tc2c False Cyan = "46m"
-tc2c True White = "37m"
-tc2c False White = "47m"
-tc2c True (ColorNumber n) = "38;5;"+show n+"m"
+data ANSITerm = ColorTerm | BWTerm | DummyTerm
+data Layer = Fg | Bg
+tc2c :: Layer -> TermColor -> String
+tc2c Fg Black = "30m"
+tc2c Bg Black = "40m"
+tc2c Fg Red = "31m"
+tc2c Bg Red = "41m"
+tc2c Fg Green = "32m"
+tc2c Bg Green = "42m"
+tc2c Fg Yellow = "33m"
+tc2c Bg Yellow = "43m"
+tc2c Fg Blue = "34m"
+tc2c Bg Blue = "44m"
+tc2c Fg Magenta = "35m"
+tc2c Bg Magenta = "45m"
+tc2c Fg Cyan = "36m"
+tc2c Bg Cyan = "46m"
+tc2c Fg White = "37m"
+tc2c Bg White = "47m"
+tc2c Fg (ColorNumber n) = "38;5;"+show n+"m"
 instance Terminal ANSITerm where
-  setBold _ b             = csi + if b then "1m" else "m"
-  setUnderlined _ b       = csi + if b then "4m" else "24m"
-  setItalic _ b           = csi + if b then "3m" else "23m"
-  setForegroundColor (ANSITerm True) c = csi + tc2c True c
-  setForegroundColor _ _ = ""
-  setBackgroundColor (ANSITerm True) c = csi + tc2c False c
-  setBackgroundColor _ _ = ""
-  restoreDefaultColors (ANSITerm True) = csi + "39m"
-  restoreDefaultColors _ = ""
+  setBold DummyTerm _                   = ""
+  setBold _ b                           = csi + if b then "1m" else "m"
+  setUnderlined DummyTerm _             = ""
+  setUnderlined _ b                     = csi + if b then "4m" else "24m"
+  setItalic DummyTerm _                 = ""
+  setItalic _ b                         = csi + if b then "3m" else "23m"
+  setForegroundColor ColorTerm c        = csi + tc2c Fg c
+  setForegroundColor _ _                = ""
+  setBackgroundColor ColorTerm c        = csi + tc2c Bg c
+  setBackgroundColor _ _                = ""
+  restoreDefaultColors ColorTerm        = csi + "39m"
+  restoreDefaultColors _                = ""
 
 setupTerm :: String -> IO ANSITerm
-setupTerm "vt100" = return (ANSITerm False)
-setupTerm ('e':'t':'e':'r':'m':'-':_) = return (ANSITerm False)
-setupTerm _ =  return (ANSITerm True)
+setupTerm "vt100" = return BWTerm
+setupTerm ('e':'t':'e':'r':'m':'-':_) = return BWTerm
+setupTerm "" =  return DummyTerm
+setupTerm _ = return ColorTerm
 setupTermFromEnv :: IO ANSITerm
-setupTermFromEnv = setupTerm . fromMaybe "vt100" =<< lookupEnv "TERM" 
+setupTermFromEnv = setupTerm . fromMaybe "" =<< lookupEnv "TERM" 
