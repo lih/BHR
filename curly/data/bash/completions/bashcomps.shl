@@ -327,22 +327,23 @@ if [ -z "$INCLUDED_BASHCOMPS" ]; then
     
 	for dir in "${compdirs[@]}"; do
             for comp in "$dir"/*; do
-            if [ -r "$comp" ]; then
-                name="$(realpath "$comp")"
-                name="${name#$dir/}"
-                fname="$name"
-                case "$name" in
-                    *.shf) fname="$name"; name="${name%.shf}";;
-		    *.sh)  . "$comp" ; continue;;
-                    *)
-                        cmdname="${comp#$dir/}"
-                        fname="$name"
-                        C.defcomp "C.$name" "$cmdname"
-                        ;;
-                esac
-                eval "function C.$name() { source $dir/$fname; }"
-            fi
-        done
+		if [ -r "$comp" ]; then
+                    name="$(realpath "$comp")"
+                    name="${name#$dir/}"
+                    fname="$name"
+                    case "$name" in
+			*.shf) fname="$name"; name="${name%.shf}";;
+			*.sh)  . "$comp" ; continue;;
+			*)
+                            cmdname="${comp#$dir/}"
+                            fname="$name"
+                            C.defcomp "C.$name" "$cmdname"
+                            ;;
+                    esac
+                    eval "function C.$name() { source $dir/$fname; }"
+		fi
+            done
+	done
 
 	function C.default() {
 	    local program="$(which "$1" 2>/dev/null || echo "$1")"
