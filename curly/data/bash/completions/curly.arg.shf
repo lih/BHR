@@ -107,7 +107,7 @@ function C.curly.isHash() {
     : ${CURLY_LIBCACHE:=$HOME/.curly/libraries}
     if C.leaf; then
         IFSBAK="$IFS" IFS=$'\n' \
-	      SUGGESTIONS=( $({ /usr/bin/curly -l'l"{$ synopsis}{or " (v{$ version})" ""}"'
+	      SUGGESTIONS=( $({ curly -l'l"{$ synopsis}{or " (v{$ version})" ""}"'
 				for i in $(ls "$CURLY_LIBCACHE" 2> /dev/null); do
 				    hash="${i%.cyl}"; head="$(head -1 "$CURLY_LIBCACHE/$i")"
 				    echo "${head/##!*!#/$hash}"
@@ -164,7 +164,7 @@ function C.curly.arg() {
             for ((i=0;i<${#compFlags[@]};i++)); do
                 compFlags[i]+=" -- ${compFlagDescs[${compFlags[i]}]}"
             done
-        } < <(CURLY_VCS=dummy /usr/bin/curly "${CURLY_COMP_SCRIPTS[@]}" -h)
+        } < <(CURLY_VCS=dummy curly "${CURLY_COMP_SCRIPTS[@]}" -h)
 	C.alt C.rawWordOf "${#compFlags[@]}" "${compFlags[@]}" "$@"
     fi
     C.alt C.curly.flags flag 6 -h --help -v --version -i --interactive "$@"
