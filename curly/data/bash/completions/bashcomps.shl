@@ -3,7 +3,7 @@ declare -gA BASHCOMPS
 declare -gA COMP_DESCRIPTIONS
 declare -gA INTERPRETER_COMPS
 if [ -z "$INCLUDED_BASHCOMPS" ]; then
-    INCLUDED_BASHCOMPS=true
+    INCLUDED_BASHCOMPS="$BASH_SOURCE"
     declare -gix CI_PREFIX=0 CI_REST=1 CI_POP=2
     
     function C.testBashCorrectness() {
