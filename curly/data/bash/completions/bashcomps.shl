@@ -323,7 +323,7 @@ if [ -z "$INCLUDED_BASHCOMPS" ]; then
     function C.init() {
         local dir name fname cmdname comp ifs="$IFS"
 	local -a compdirs=( )
-	IFS=: BASHCOMPS_COMP_DIRS+=( ${XDG_DATA_HOME:-"$HOME/.local/share"} ${XDG_DATA_DIRS:-/usr/local/share:/usr/share} ) IFS="$ifs"
+	IFS=: compdirs+=( ${XDG_DATA_HOME:-"$HOME/.local/share"} ${XDG_DATA_DIRS:-/usr/local/share:/usr/share} ) IFS="$ifs"
     
 	for dir in "${compdirs[@]/%//bashcomps/completions}"; do
 	    echo "Loading completions from $dir"
