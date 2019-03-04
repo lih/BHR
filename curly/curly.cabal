@@ -22,6 +22,7 @@ data-files:
   applications/curly-library.desktop
   applications/curly-source.desktop
   applications/curly-uri.desktop
+  bash/completions/bashcomps.shl
   bash/completions/curly
   bash/completions/curly.arg.shf
   bash/completions/curly.script.shf
