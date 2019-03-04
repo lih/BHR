@@ -326,7 +326,8 @@ if [ -z "$INCLUDED_BASHCOMPS" ]; then
 	IFS=: BASHCOMPS_COMP_DIRS+=( ${XDG_DATA_HOME:-"$HOME/.local/share"} ${XDG_DATA_DIRS:-/usr/local/share:/usr/share} ) IFS="$ifs"
     
 	for dir in "${compdirs[@]}"; do
-            for comp in "$dir"/bashcomps/completions/*; do
+	    dir="$dir/bashcomps/completions"
+            for comp in "$dir"/*; do
 		if [ -r "$comp" ]; then
                     name="$(realpath "$comp")"
                     name="${name#$dir/}"
