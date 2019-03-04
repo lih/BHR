@@ -25,12 +25,12 @@ EOF
 	;;
 
     bash-completions)
-	data="${XDG_DATA_HOME:-$HOME/.local/share}/bashcomps"
-	mkdir -p "$data/completions"
-	get_data "$data/bashcomps.shl"			bash/completions/bashcomps.shl
-	get_data "$data/completions/curly"		bash/completions/curly
-	get_data "$data/completions/curly.arg.shf"	bash/completions/curly.arg.shf
-	get_data "$data/completions/curly.script.shf"	bash/completions/curly.script.shf
-	get_data "$data/completions/curly.sh"	        bash/completions/curly.sh
+	root="${XDG_DATA_HOME:-$HOME/.local/share}/bashcomps"
+	mkdir -p "$root/completions"
+	get_data "$root/bashcomps.shl"			bash/completions/bashcomps.shl
+	get_data "$root/completions/curly"		bash/completions/curly
+	get_data "$root/completions/curly.arg.shf"	bash/completions/curly.arg.shf
+	get_data "$root/completions/curly.script.shf"	bash/completions/curly.script.shf
+	get_data "$root/completions/curly.sh"	        bash/completions/curly.sh
 	;;
 esac
