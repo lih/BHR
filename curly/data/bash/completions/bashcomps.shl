@@ -5,7 +5,7 @@ declare -gA INTERPRETER_COMPS
 if [ -z "$INCLUDED_BASHCOMPS" ]; then
     INCLUDED_BASHCOMPS=true
     declare -gix CI_PREFIX=0 CI_REST=1 CI_POP=2
-
+    
     function C.testBashCorrectness() {
         # Some versions of Bash give incorrect results when splicing arrays
         # that contain empty strings, so we need to check if we are running
@@ -321,8 +321,11 @@ if [ -z "$INCLUDED_BASHCOMPS" ]; then
     function C.any() { C.argument word C.isAny "$@"; }
     
     function C.init() {
-        local dir name fname cmdname comp 
-	for dir in "${BASHCOMPS_COMP_DIRS[@]}"; do
+        local dir name fname cmdname comp ifs="$IFS"
+	local -a compdirs=( )
+	IFS=: BASHCOMPS_COMP_DIRS+=( ${XDG_DATA_HOME:-"$HOME/.local/share"} ${XDG_DATA_DIRS:-/usr/local/share:/usr/share} ) IFS="$ifs"
+    
+	for dir in "${compdirs[@]}"; do
             for comp in "$dir"/*; do
             if [ -r "$comp" ]; then
                 name="$(realpath "$comp")"
