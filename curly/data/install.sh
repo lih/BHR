@@ -26,7 +26,7 @@ EOF
 
     bash-completions)
 	data="${XDG_DATA_HOME:-$HOME/.local/share}/bashcomps/"
-	mkdir -p "$data"
+	mkdir -p "$data/completions"
 	get_data "$data/bashcomps.shl"			bash/completions/bashcomps.shl
 	get_data "$data/completions/curly"		bash/completions/curly
 	get_data "$data/completions/curly.arg.shf"	bash/completions/curly.arg.shf
