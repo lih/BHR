@@ -105,10 +105,10 @@ function C.curly.library() {
 }
 function C.curly.isHash() {
     local arg="$1" ; shift
-    : ${CURLY_LIBCACHE:=$HOME/.curly/libraries}
+    : ${CURLY_LIBCACHE:=$HOME/.cache/curly/libraries}
     if C.leaf; then
         IFSBAK="$IFS" IFS=$'\n' \
-	      SUGGESTIONS=( $({ curly -l'l"{$ synopsis}{or " (v{$ version})" ""}"'
+	      SUGGESTIONS=( $({ curly %'repository list "{$ synopsis}{or " (v{$ version})" ""}"'
 				for i in $(ls "$CURLY_LIBCACHE" 2> /dev/null); do
 				    hash="${i%.cyl}"; head="$(head -1 "$CURLY_LIBCACHE/$i")"
 				    echo "${head/##!*!#/$hash}"
