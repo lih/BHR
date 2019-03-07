@@ -67,9 +67,11 @@ function C.curly.path() {
 function C.curly.isPackageName() {
     local arg="$1"; shift
     SUGGESTIONS=( )
-    while read _ name version descr; do
-	SUGGESTIONS+=( "$name -- Package: $descr (version $version)" )
-    done < <(PREFIX="$arg" TERM= curly %'repository list "{matches {$ name} "{env PREFIX}*"} {$ version} {$ synopsis}"')
+    if C.leaf; then
+	while read _ name version descr; do
+	    SUGGESTIONS+=( "$name -- Package: $descr (version $version)" )
+	done < <(PREFIX="$arg" TERM= curly %'repository list "{matches {$ name} "{env PREFIX}*"} {$ version} {$ synopsis}"')
+    fi
     if ((${#SUGGESTIONS[@]} == 0)); then
 	SUGGESTIONS=( "$arg -- Unknown package" )
     fi
