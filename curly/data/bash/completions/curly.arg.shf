@@ -108,7 +108,7 @@ function C.curly.isHash() {
     : ${CURLY_LIBCACHE:=$HOME/.cache/curly/libraries}
     if C.leaf; then
         IFSBAK="$IFS" IFS=$'\n' \
-	      SUGGESTIONS=( $({ curly %'repository list "{$ synopsis}{or " (v{$ version})" ""}"'
+	      SUGGESTIONS=( $({ TERM= curly %'repository list "{$ synopsis}{or " (v{$ version})" ""}"'
 				shopt -s nullglob
 				for i in "$CURLY_LIBCACHE"/*/*.cyl; do
 				    head="$(head -1 "$i")"
