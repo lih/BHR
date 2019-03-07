@@ -109,9 +109,12 @@ function C.curly.isHash() {
     if C.leaf; then
         IFSBAK="$IFS" IFS=$'\n' \
 	      SUGGESTIONS=( $({ curly %'repository list "{$ synopsis}{or " (v{$ version})" ""}"'
-				for i in $(ls "$CURLY_LIBCACHE" 2> /dev/null); do
-				    hash="${i%.cyl}"; head="$(head -1 "$CURLY_LIBCACHE/$i")"
-				    echo "${head/##!*!#/$hash}"
+				shopt -s nullglob
+				for i in "$CURLY_LIBCACHE"/*/*.cyl; do
+				    head="$(head -1 "$i")"
+				    hash="${i#$CURLY_LIBCACHE/}"
+				    hash="${hash%.cyl}"
+				    echo "${head/##!*!#/${hash//\//}}"
 				done; } \
 				  | sort -u | sed -rn "s/^($arg\\S+)\\s*(.*)\$/\\1 -- \\2/p") ) IFS="$IFSBAK"
     else
