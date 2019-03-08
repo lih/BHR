@@ -43,6 +43,15 @@ associating the symbols `_+_`{.curly}, `_-_`{.curly}, `_*_`{.curly}
 and `_/_`{.curly} to their corresponding function. The "square"
 function can be abbreviated to `_²`{.curly} in the same manner.
 
+~~~~{.curly}
+# Example : arithmetic operators
+define _+_ = addInt
+define _-_ = subInt
+define _*_ = mulInt
+define _/_ = divInt
+define _² x = x*x
+~~~~~~~
+
 In some cases, there can be ambiguity in the syntax. For example, the
 expression `x+y*z`{.curly} can be interpreted as either
 `(x+y)*z`{.curly} or `x+(y*z)`{.curly}. In those cases, the operators
@@ -74,6 +83,36 @@ which they appear.
 For instance, `x+_*y`{.curly} is equivalent to `{z: x+z*y}`{.curly},
 and `if _ then true else _`{.curly} is equivalent to `{x y: if x then
 true else y}`{.curly}.
+
+### Local definitions in argument lists
+
+We've now seen that functions can accept abstract arguments in the
+form of variables. If we want to give a name to the value `(1+2)` in
+the expression `(1+2)*((1+2)+3)` we can do so by writing the
+equivalent expression `{x: x*(x+3)} (1+2)`.
+
+This is a functionally correct way to factor out a value, but it's not
+a very practical one for two reasons :
+
+  - the variable name can be syntactically far away from its value,
+    forcing the reader to jump back and forth in the code to find out its flow
+  - when dealing with multiple nested patterns, a lot of brackets become necessary
+
+To avoid both those problems, Curly allows the previous expression to
+be rewritten as `{{x = 1+2}: x*(x+3)}`. More generally, the special
+form `{var arg... = body}` can appear anywhere in an argument list,
+and has the effect of declaring a local variable `var` with a value of
+`{arg...: body}`.
+
+A local definition can refer to any parameter that precedes it,
+including other local definitions. For example, the expression `{x {x2
+= x*x} y {xy2 = x2+y*y}: sqrt xy2}` describes a function of two
+arguments (`x` and `y`), that returns `sqrt (x*x+y*y)`.
+
+### Continuations in argument lists
+
+**TODO** : describe how the syntax `{x... (f) y...: z}` is equivalent to
+`{x...: f {y...: z}}`, and why it can be useful.
 
 Source Directives
 =================
