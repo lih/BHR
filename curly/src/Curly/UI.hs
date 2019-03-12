@@ -1,9 +1,10 @@
 {-# LANGUAGE ViewPatterns,TypeFamilies #-}
 module Curly.UI(
   -- * Variables
-  curlyPort,curlyHistoryFile,
+  curlyPort,curlyHistoryFile,curlyDataFileName,
 
-  -- * Arguments
+  -- * Initialization and arguments
+  initCurly,
   CurlyConfig,
   parseCurlyArgs,withCurlyPlex,withCurlyConfig,
   curlyFiles,
@@ -12,7 +13,7 @@ module Curly.UI(
   withMountain,reloadMountain,sourceFile,
 
   -- * Misc
-  watchSources,sourceLibs,getVCSBranches,curlyDataFileName,getDataFileName_ref
+  watchSources,sourceLibs,getVCSBranches,
   ) where
 
 import Control.Concurrent.MVar
@@ -30,13 +31,14 @@ import Curly.Core.VCS
 import Curly.UI.Options
 import Data.IORef 
 import Data.List (sortBy)
+import GHC.IO.Encoding (utf8,setLocaleEncoding)
 import IO.Filesystem hiding ((</>))
 import IO.Time
 import Language.Format
 import Language.Syntax.CmdArgs hiding (hspace)
+import System.Environment (getExecutablePath)
 import System.IO (IOMode(..),withFile)
 import System.Posix.Files (createSymbolicLink,removeLink,fileAccess)
-import System.Environment (getExecutablePath)
 
 withMountain :: (?curlyPlex :: CurlyPlex,MonadIO m) => ((?mountain :: Mountain) => m a) -> m a
 withMountain m = liftIO (trylogLevel Quiet (return undefined) $ readIORef (?curlyPlex^.mountainCache)) >>= \(c,_) -> let ?mountain = c in m
@@ -232,6 +234,11 @@ curlyDataFileName n = withMVar getDataFileName_ref $ \gdfn -> do
           canRead <- trylog (return False) (fileAccess f True False False)
           if canRead then return f
             else k
+
+initCurly gdf = do
+  setLocaleEncoding utf8
+  putMVar getDataFileName_ref gdf
+  curlyDataFileName "proto/vc" >>= \p -> modifyIORef vcsProtoRoots (p:)
 
 i'isJust :: Monoid m => Iso' (Maybe m) Bool
 i'isJust = iso (maybe False (const True)) (\b -> if b then Just zero else Nothing)
