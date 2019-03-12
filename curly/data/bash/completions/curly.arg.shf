@@ -77,7 +77,7 @@ function C.curly.isPackageName() {
     fi
     C.returnRaw "$@"
 }
-function C.packageName() { C.argument word C.curly.isPackageName "$@"; }
+function C.curly.packageName() { C.argument word C.curly.isPackageName "$@"; }
 function C.curly.inputarg() {
     C.alt C.suffixed ":" \
             C.wordOf 1 source \

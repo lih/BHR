@@ -18,8 +18,8 @@ while [ "$#" -gt  0 ]; do
 	*) optname="$o";;
     esac
     case "$optname" in
-	--import-standard-keys) import_stdkeys=true;;
-	--install-completions) install_completions=true;;
+	--standard-keys) import_stdkeys=true;;
+	--completions) install_completions=true;;
 	-p|--prefix) prefix_dir="$optval";;
 	-L|--lib-dir) lib_dir="$optval";;
 	-B|--bin-dir) bin_dir="$optval";;
