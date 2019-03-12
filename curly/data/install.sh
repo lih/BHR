@@ -37,8 +37,13 @@ EOF
 	if grep -q "bashcomps\.shl" ~/.bashrc; then :; else
 	    echo "source $root/bashcomps.shl" >> ~/.bashrc
 	fi
-	
-	echo "Installed Bash completion files at $root."
-	echo "To enable them, enter 'source $root/bashcomps.shl'"
+
+	cat <<EOF
+Installed Bash completion files at $root.
+To enable them, enter the following command :
+
+  source $root/bashcomps.shl
+
+EOF
 	;;
 esac
