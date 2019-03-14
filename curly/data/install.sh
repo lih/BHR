@@ -34,16 +34,5 @@ EOF
 	get_data "$root/completions/curly.arg.shf"	bash/completions/curly.arg.shf
 	get_data "$root/completions/curly.script.shf"	bash/completions/curly.script.shf
 	get_data "$root/completions/curly.sh"	        bash/completions/curly.sh
-	if grep -q "bashcomps\.shl" ~/.bashrc; then :; else
-	    echo "source $root/bashcomps.shl" >> ~/.bashrc
-	fi
-
-	cat <<EOF
-Installed Bash completion files at $root.
-To enable them, enter the following command :
-
-  source $root/bashcomps.shl
-
-EOF
 	;;
 esac

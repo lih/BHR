@@ -422,6 +422,8 @@ data Builtin = B_Undefined
 
              | B_Relocatable Bool Hash [(Bytes,BinaryRelocation)] Bytes
              | B_RawIndex Int
+
+             | B_ShowExpr | B_ShowInd
              deriving (Eq,Ord,Show,Generic)
 instance Documented Builtin where
   document = Pure . show'

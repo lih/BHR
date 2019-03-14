@@ -27,6 +27,6 @@ the heights of getting to compile this fine compiler, by running the
 following commands :
 
 ~~~{.terminal}
-git clone https://git.curly-lang.org/marc/stack-libs
-cd stack-libs && stack build
+git clone http://git.curly-lang.org/marc/curly
+cd curly && stack build
 ~~~~
