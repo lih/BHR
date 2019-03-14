@@ -161,6 +161,10 @@ jit_exprInd pe = let ?sys = jit_machine in do
       mallocBytes (2*wordSize) <*= \pret -> do
         poke (castPtr pret) (2 :: Int)
         poke (castPtr (pret`plusPtr`wordSize)) ps
+jit_showExpr :: JIT_Expr -> IO ()
+jit_showExpr pe = do
+  e <- deRefStablePtr (castPtrToStablePtr pe)
+  print (e :: Expression String String)
 
 jit_memextend_pool sz = getOrDefine TextSection ("memextend-pool-"+show sz) $ do
   ccall (Just poolReg) mallocAddr [return (Constant pageSize)]
@@ -223,6 +227,11 @@ jit_builtin B_ExprApply = Just $ getOrDefineBuiltin0 TextSection "mkExprApply" $
   cst <- global_constant
   thisReg!TypeOffset <-- cst
   jmp cst
+jit_builtin B_ShowExpr = Just $ getOrDefineBuiltin0 TextSection "showExpr" $ do
+  [e,x] <- builtinArgs 2
+  pushing [thisReg] $ callThunk e
+  ccall1 ccall_void (hsAddr jit_showExpr) (pure (e!ValueOffset))
+  tailCall x
 jit_builtin B_ExprInd = Just $ getOrDefineBuiltin0 TextSection "exprInd" $ mdo
   [e,kl,ka,ks] <- builtinArgs 4
   pushing [thisReg] $ callThunk e
