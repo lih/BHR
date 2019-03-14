@@ -4,7 +4,7 @@ module Curly.Core.Security(
   Access(..),PrivateKey,PublicKey,SharedSecret,KeyFingerprint,Signature,Signed,
   genPrivateKey,publicKey,fingerprint,sharedSecret,signBytes,isValidSignatureFrom,signValue,extractSignedBy,unsafeExtractSigned,
   -- * Encryption/Decryption
-  decrypt,encrypt,
+  decrypt,encrypt,signedDatum,
   -- * Environment
   KeyStore,curlyKeysFile,getKeyStore,modifyKeyStore,
   -- * Showing and reading formats
@@ -148,7 +148,7 @@ extractSignedBy pub (Signed a s) | isValidSignatureFrom pub s (serialize a) = Ju
 signValue :: (MonadIO m,Serializable Bytes a) => PrivateKey -> a -> m (Signed a)
 signValue priv a = Signed a <$> signBytes priv (serialize a)
 
-signedDatum :: Format Bytes a => PublicKey -> Parser Bytes (Signed a)
+signedDatum :: Format Bytes a => PublicKey -> Parser Bytes a
 signedDatum pub = datum >>= maybe zero return . extractSignedBy pub
 
 timingRef :: IORef Seconds
@@ -228,7 +228,7 @@ modifyKeyStore m = seq identities $ liftIO $ while $ trylog (threadDelay 1000 >>
         ks' = m ks
         newFile = serialize ks'
     runKeyState (put ks')
-    logLine Debug $ "New store : "+show (map (\(f,pub,_,m,ac) -> (f,pub,m,ac)) ks')+" {{"+show newFile+"}}"
+    logLine Debug $ "New store : "+show (map (\(f,pub,_,meta,ac) -> (f,pub,meta,ac)) ks')+" {{"+show newFile+"}}"
     newFile `deepseq` return ()
     logLine Debug "New key store ready for write"
     hSeek h AbsoluteSeek 0
