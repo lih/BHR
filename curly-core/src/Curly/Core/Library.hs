@@ -394,7 +394,9 @@ libSymbol _ (GlobalID _ (Just (i,lid))) = findLib lid >>= \l -> l^.flLibrary.sym
 builtinsLib :: FileLibrary
 builtinsLib = rawLibrary False blib (serialize blib) Nothing
   where
-    blib = blib_5
+    blib = blib_6
+    blib_6 = blib_5 & set (sym ["syntax"] "showExpr") (mkBLeaf "showExpr" B_ShowExpr showExprDoc)
+      . set (sym ["syntax"] "showSyntax") (mkBLeaf "showSyntax" B_ShowSyntax showSyntaxDoc)
     blib_5 = blib_4 & setMeta ["name"] "curly-builtins"
     blib_4 = blib_3 & setMeta ["author","email"] "marc.coiffier@curly-lang.org"
     blib_3 = blib_2 & set (sym ["string"] "showInt".leafDoc) (mkDoc "leafDoc" showIntDoc)
@@ -538,6 +540,8 @@ builtinsLib = rawLibrary False blib (serialize blib) Nothing
                       mkExprApplyDoc = ""
                       mkExprSymDoc = ""
                       exprIndDoc = ""
+                      showSyntaxDoc = ""
+                      showExprDoc = ""
 
 type Template = Documentation
 defaultTemplate :: Template
