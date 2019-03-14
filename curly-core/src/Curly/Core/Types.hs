@@ -541,6 +541,11 @@ builtinType b = (zero :: Type s) & i'typeRel %~ case b of
                      . ln [Out,In,Out,Out] [Out,Out,Out,In,Out] poly
                      . ln [Out,In,Out,Out] [Out,Out,Out,Out] poly
 
+  B_ShowExpr      -> ln' [] (exprT --> poly --> poly)
+                     . ln [Out,In] [Out,Out] poly
+  B_ShowSyntax    -> ln' [] (synT --> poly --> poly)
+                     . ln [Out,In] [Out,Out] poly
+
   B_Relocatable _ _ _ _ -> ln' [] intT
   B_RawIndex _          -> ln' [] (intT --> intT)
   where

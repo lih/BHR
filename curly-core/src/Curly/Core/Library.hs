@@ -580,8 +580,8 @@ availableLibs :: IO [(LibraryID,Metadata)]
 availableLibs = do
   conn <- readIORef libraryVCS
   ks <- getKeyStore
-  allLibs <- for (ks^.ascList) $ \(kn,(_,k,_,m,_)) -> forkValue $ do
-    case m^.from i'Metadata.at "branches" of
+  allLibs <- for (ks^.ascList) $ \(kn,(_,k,_,meta,_)) -> forkValue $ do
+    case meta^.from i'Metadata.at "branches" of
       Just (Join bs) -> do
         let branches = [b | (b,m) <- bs^.ascList, lookup ["follow"] m == Just (Pure "true")]
         for branches $ \b -> forkValue $ do
