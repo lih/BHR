@@ -27,6 +27,6 @@ the heights of getting to compile this fine compiler, by running the
 following commands :
 
 ~~~{.terminal}
-git clone http://git.curly-lang.org/marc/curly
-cd curly && stack build
+git clone https://github.com/lih/BHR.git
+cd BHR && stack build curly
 ~~~~

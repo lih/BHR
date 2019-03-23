@@ -38,7 +38,7 @@ mkdir -p public/doc && {
   <body>
     <div id="package-header">
       <ul class="links">
-        <li><a href="https://git.curly-lang.org/marc/curly">Source repository</a></li>
+        <li><a href="https://github.com/lih/BHR/curly">Source repository</a></li>
 	<li><a href="../index.html">Back to the main page</a></li>
       </ul>
       <div class="caption">Curly packages</div></div>

@@ -17,7 +17,7 @@ with all occurrences of x replaced by X".
 
 Here are a few functions to help you get a feel of the language : `{x:
 x}`{.curly}, the identity function; `{x _: x}`{.curly}, the constant function; `{f x
-y: f y x}`{.curly}, a function to flip its first arguments parameters.
+y: f y x}`{.curly}, a function to flip its first arguments' parameters.
 
 Functions and operators
 ---------------------
@@ -232,4 +232,65 @@ locally, or imported from another module).
 
 If a leaf symbol has a local name, then the local symbol of that name
 is exported instead of the leaf's name.
+
+### Definining system-specific values
+
+Sometimes, in the interest of efficiency or portability, it can be
+useful to have a symbol represent different implementations of a
+function on different systems. To define such symbols, Curly provides
+the `multi` pragma, with the following syntax :
+
+*Usage*: `multi SYMBOL = DEFAULT_SYMBOL [, SYSTEM_NAME SYSTEM_SYMBOL]...`
+
+This pragma define the multi-system symbol `SYMBOL`, with a system-specific
+implementation for each `SYSTEM_NAME`, and a fallback implementation
+defined in `DEFAULT_SYMBOL`.
+
+#### Example: packaging an external C library
+
+_Warning_: this is still a thought experiment. The Curly FFI is not yet
+capable of integrating with C, although it will be very soon.
+
+Imagine you have a C library called libX. You have the source for this
+library, and maybe a C cross-compiling toolchain for several
+systems. Using all this, you manage to compile libX into three dynamic
+libraries, that each run on a different ABI and maybe a different
+architecture. Let's call these `libX_arm-linux.so`,
+`libX_x86-linux.so`, and `libX_x86_64-linux.so`.
+
+You can now use Curly to create a library of bindings to libX, in a
+portable way. First, mount each .so to a point in context, using the
+"external" input source, along with a `libX.cy` source file :
+
+    #!/usr/bin/env curly
+    # A simple context file for libX
+    mount C libX arm = external libX_arm-linux.so 
+    mount C libX x86 = external libX_x86-linux.so 
+    mount C libX x86-64 = external libX_x86_64-linux.so 
+    
+    mount libX = source libX.cy
+
+That `libX.cy` file can now define a multi-symbol for each function of
+the libX library, handling each system accordingly :
+
+~~~~~~{.curly}
+module libX: Bindings to a library
+
+# Since each library exports the same symbols, we have to rename them during import
+import C.libX{
+  arm{f(arm'f) ...}
+  x86{f(x86'f) ...}
+  x86-64{f(x64'f) ...}
+  }    
+
+let defaultImpl = undefined
+multi f = defaultImpl, linux-x86 x86'f, linux-arm arm'f, linux-x86-64 x64'f
+....
+
+export f ...
+~~~~~~~~~~
+
+You can now import the `libX` module anywhere, and use its functions
+on any of the three handled systems. The C binaries are no longer
+needed once `libX` has been compiled.
 
