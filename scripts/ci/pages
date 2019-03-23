@@ -23,7 +23,7 @@ mkdir -p public/doc && {
 
     executables=( )
     for pkg in "${packages[@]}"; do
-        executables+=( $(sed -rn 's/^executable\s+(\S+).*$/\1/p' "$pkg/$pkg.cabal") )
+        executables+=( $(sed -rn 's/^executable\s+(\S+).*$/\1/p' "$pkg/$pkg.cabal" | grep -v '\.js$') )
     done
     stack_path="$(stack path --local-install-root)"
     
@@ -66,15 +66,10 @@ EOF
         for exe in "${executables[@]}"; do
 	    version="$(sed -n 's/^version:\s*//p' "$exe/$exe.cabal")"
 	    full="$exe-$version"
-	    shopt -s nullglob
-	    (
-	    	tmp="$(mktemp -d)"
-	    	mkdir -p "$tmp/$full"
-	    	cd "$stack_path"
-	    	cp -r bin/$exe share/*/$full/* "$tmp/$full"
-	    	tar -C "$tmp" -c .
-	    	rm -r "$tmp"
-	    ) | xz > public/pkg/$full.tar.xz
+	    if [ ! -e public/pkg/$full.tar.xz ]; then
+		curl -L "https://github.com/lih/stack-libs/releases/download/release-$full/$exe.linux.x86_64.tar.xz" \
+		     > public/pkg/$full.tar.xz
+	    fi
 	    ln -fs $full.tar.xz public/pkg/$exe.tar.xz
             printf '<li><a href="pkg/%s.tar.xz">%s.tar.xz</a></li>\n' "$exe" "$full"
         done
