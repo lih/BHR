@@ -8,8 +8,9 @@ some serious executables (curly), and some random unfinished wankery
 
 You're welcome to use any of the libraries therein in your own code,
 if you can make sense of them. If you just want to test out one of the
-programs, you can also check out the [release page](releases) to find
-a compiled and ready-to-use version.
+programs, you can also check out the [release
+page](https://github.com/lih/stack-libs/releases) to find a compiled
+and ready-to-use version.
 
 Here is a short description of the different packages in this BHR.
 
