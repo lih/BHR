@@ -199,6 +199,7 @@ runCOCBuiltin COCB_Format = do
   ex <- runExtraState get
   let format ('%':'s':s) (StackSymbol h:t) = first (h+) (format s t)
       format ('%':'v':s) (x:t) = first (showStackVal doc2raw (ex^.showDir) (ex^.context) x+) (format s t)
+      format ('%':'g':s) (x:t) = first (showStackVal doc2svg (ex^.showDir) (ex^.context) x+) (format s t)
       format ('%':'l':s) (x:t) = first (showStackVal doc2latex (ex^.showDir) (ex^.context) x+) (format s t)
       format (c:s) t = first (fromString [c]+) (format s t)
       format "" t = ("",t)

@@ -8,7 +8,7 @@ module Data.CaPriCon(
   StringPattern,NodeDir(..),AHDir(..),ApDir,
   findPattern,freshContext,
   -- * Showing nodes
-  ListBuilder(..),NodeDoc(..),doc2raw,doc2latex,showNode,showNode'
+  ListBuilder(..),NodeDoc(..),doc2raw,doc2latex,doc2svg,showNode,showNode'
   ) where
 
 import Definitive
@@ -379,6 +379,7 @@ data NodeDoc str = DocSeq [NodeDoc str]
                  | DocParen (NodeDoc str)
                  | DocMu (NodeDoc str)
                  | DocSubscript (NodeDoc str) (NodeDoc str)
+                 | DocSuperscript (NodeDoc str) (NodeDoc str)
                  | DocAssoc str (NodeDoc str)
                  | DocVarName str
                  | DocText str
@@ -393,6 +394,7 @@ instance Functor NodeDoc where
   map f (DocParen x) = DocParen (map f x)
   map f (DocMu x) = DocMu (map f x)
   map f (DocSubscript x y) = DocSubscript (map f x) (map f y)
+  map f (DocSuperscript x y) = DocSuperscript (map f x) (map f y)
   map f (DocAssoc v x) = DocAssoc (f v) (map f x)
   map f (DocText x) = DocText (f x)
   map f (DocVarName x) = DocVarName (f x)
@@ -405,6 +407,7 @@ doc2raw (DocSeq l) = fold (map doc2raw l)
 doc2raw (DocParen p) = "("+doc2raw p+")"
 doc2raw (DocMu m) = "μ("+doc2raw m+")"
 doc2raw (DocSubscript v x) = doc2raw v+doc2raw x
+doc2raw (DocSuperscript v x) = doc2raw v+"^"+doc2raw x
 doc2raw (DocAssoc x v) = "("+x+" : "+doc2raw v+")"
 doc2raw DocArrow = " -> "
 doc2raw (DocText x) = x
@@ -416,11 +419,39 @@ doc2latex (DocSeq l) = fold (map doc2latex l)
 doc2latex (DocParen p) = "("+doc2latex p+")"
 doc2latex (DocMu m) = "\\mu("+doc2latex m+")"
 doc2latex (DocSubscript v x) = doc2latex v+"_{"+doc2latex x+"}"
+doc2latex (DocSuperscript v x) = doc2latex v+"^{"+doc2latex x+"}"
 doc2latex (DocAssoc x v) = "("+latexName x+":"+doc2latex v+")"
 doc2latex DocArrow = " \\rightarrow "
 doc2latex (DocText x) = x
 doc2latex (DocVarName x) = latexName x
 doc2latex DocSpace = "\\,"
+
+doc2svg :: IsCapriconString str => NodeDoc str -> str
+doc2svg = \x -> snd $ (go x^.from state) (0::Double)
+  where
+    sym s = get >>= \x -> if x == 0 then return s
+                          else ("<tspan dy=\""+fromString (show x)+"em\">"+s+"</tspan>") <$ put 0
+    go (DocSeq l) = fold<$>traverse go l
+    go (DocParen p) = liftA3 (\x y z -> x+y+z) (sym "(") (go p) (sym ")")
+    go (DocMu m) = liftA3 (\x y z -> x+y+z) (sym "μ(") (go m) (sym ")")
+    go (DocSubscript v x) = sub (go v) (go x)
+    go (DocSuperscript v x) = super (go v) (go x)
+    go (DocAssoc x v) = fold<$>sequence [sym "(",svgName x,sym ":",go v,sym ")"]
+    go DocArrow = sym " → "
+    go (DocText x) = sym x
+    go (DocVarName x) = svgName x
+    go DocSpace = sym " "
+
+    super mv mx = liftA2 (\x y -> x+"<tspan dy=\"-0.5em\"><tspan class=\"small\">"+y+"</tspan></tspan>") mv (mx <* put (0.5))
+    sub mv mx = liftA2 (\x y -> x+"<tspan dy=\"0.3em\"><tspan class=\"small\">"+y+"</tspan></tspan>") mv (mx <* put (-0.3))
+
+    svgName s = map (\x -> "<tspan class=\"variable\">"+x+"</tspan>") $ nm $ toString s
+      where nm ('.':t) = super (nm t) (sym "P")
+            nm x =
+              let (n,y) = span (\c -> c>='0' && c<='9') (reverse x) in
+                case n of
+                  "" -> sym (fromString (reverse y))
+                  _ -> sub (sym (fromString (reverse y))) (sym (fromString (reverse n)))
 
 latexName :: IsCapriconString str => str -> str
 latexName s = fromString $ go $ toString s
