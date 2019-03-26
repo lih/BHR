@@ -96,7 +96,7 @@ renditionSize :: Int -> [FT.FT_Glyph_Metrics] -> (Int,Int)
 renditionSize align metrics = (foldMap (fromIntegral . FT.horiAdvance) metrics & toPixels, 
                                foldl1' max (map (fromIntegral . FT.height) metrics) & toPixels)
   where toPixels x = let y = ((x+63)`div`64)+align-1 in y-(y`mod`align)
-      
+
 renderString :: Face -> RenderParams -> String -> IO StringImage
 renderString fc (RenderParams sz align mode) str = withFacePtr fc $ \fcp -> do
   slot <- peek (FT.glyph fcp)
