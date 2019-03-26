@@ -63,10 +63,13 @@ data RenderParams = RenderParams {
   renderMode :: RenderMode
   }
 data CellMetrics = CellMetrics {
-  cellWidth,cellHeight,
-  cellCenterX,cellCenterY :: Int
+  cellLeftWidth, cellRightWidth,
+  cellBottomHeight, cellTopHeight :: Int
   }
   deriving Show
+instance Semigroup CellMetrics where
+  CellMetrics lw rw bh th + CellMetrics lw' rw' bh' th' =
+    CellMetrics (lw+rw) (lw'+rw') (max bh bh') (max th th')
 data CellCoords = CellCoords {
   cellX,cellY :: Int,
   cellMetrics :: CellMetrics
