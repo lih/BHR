@@ -62,10 +62,14 @@ data RenderParams = RenderParams {
   renderSizeAlignment :: Int, -- ^ The alignment required for the sizes of the returned buffer (OpenGL needs it to be a multiple of 4)
   renderMode :: RenderMode
   }
-data CellCoords = CellCoords {
-  cellX,cellY,
+data CellMetrics = CellMetrics {
   cellWidth,cellHeight,
   cellCenterX,cellCenterY :: Int
+  }
+  deriving Show
+data CellCoords = CellCoords {
+  cellX,cellY :: Int,
+  cellMetrics :: CellMetrics
   }
   deriving Show
 data StringImage = StringImage {
@@ -117,10 +121,10 @@ renderString fc (RenderParams sz align mode) str = withFacePtr fc $ \fcp -> do
       for_ (take h rowPtrs `zip` iterate (`plusPtr`sizeX) (pret `plusPtr` dx)) $ \(rowsrc,rowdst) -> do
         copyArray rowdst rowsrc w
   
-      k (dx + adv) (insert c (CellCoords dx 0 adv h
-                              (fromIntegral (FT.horiBearingX m)`div`64 + w`div`2)
-                              (fromIntegral (FT.height m P.- FT.horiBearingY m)`div`64)) ret)
-
+      k (dx + adv) (insert c (CellCoords dx 0 (CellMetrics adv h
+                                               (fromIntegral (FT.horiBearingX m)`div`64 + w`div`2)
+                                               (fromIntegral (FT.height m P.- FT.horiBearingY m)`div`64))) ret)
+  
   return (StringImage sizeX sizeY (V.unsafeFromForeignPtr0 ret (sizeX*sizeY)) cs)
 
 deriving instance Show FTBMP.FT_Bitmap
