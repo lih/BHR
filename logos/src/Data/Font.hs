@@ -85,20 +85,27 @@ data StringImage = StringImage {
 defaultRenderParams :: RenderParams
 defaultRenderParams = RenderParams 72 4 Grayscale
 
+getCharIndices fcp str = for str $ \c -> FT.ft_Get_Char_Index fcp (fromIntegral $ fromEnum c)
+getStringMetrics fcp slot indices = do
+  for indices $ \i -> do
+    throwOnError $ FT.ft_Load_Glyph fcp i FT.ft_LOAD_NO_BITMAP
+    -- putStrLn $ "Loading metrics for glyph "++show i
+    peek (FT.metrics slot)
+
+renditionSize :: Int -> [FT.FT_Glyph_Metrics] -> (Int,Int)
+renditionSize align metrics = (foldMap (fromIntegral . FT.horiAdvance) metrics & toPixels, 
+                               foldl1' max (map (fromIntegral . FT.height) metrics) & toPixels)
+  where toPixels x = let y = ((x+63)`div`64)+align-1 in y-(y`mod`align)
+      
 renderString :: Face -> RenderParams -> String -> IO StringImage
 renderString fc (RenderParams sz align mode) str = withFacePtr fc $ \fcp -> do
   slot <- peek (FT.glyph fcp)
 
   throwOnError $ FT.ft_Set_Pixel_Sizes fcp (fromIntegral sz) (fromIntegral sz)
 
-  indices <- for str $ \c -> FT.ft_Get_Char_Index fcp (fromIntegral $ fromEnum c)
-  metrics <- for indices $ \i -> do
-    throwOnError $ FT.ft_Load_Glyph fcp i FT.ft_LOAD_NO_BITMAP
-    -- putStrLn $ "Loading metrics for glyph "++show i
-    peek (FT.metrics slot)
-  let (sizeX,sizeY) = (foldMap (fromIntegral . FT.horiAdvance) (debug metrics) & toPixels, 
-                       foldl1' max (map (fromIntegral . FT.height) metrics) & toPixels) :: (Int,Int)
-      toPixels x = let y = ((x+63)`div`64)+align-1 in y-(y`mod`align)
+  indices <- getCharIndices fcp str
+  metrics <- getStringMetrics fcp slot indices
+  let (sizeX,sizeY) = renditionSize align metrics
       modeCode = case mode of
         Grayscale -> FT.ft_RENDER_MODE_NORMAL
         Monochromatic -> FT.ft_RENDER_MODE_MONO
