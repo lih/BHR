@@ -445,7 +445,7 @@ doc2svg = \x -> snd $ (go x^.from state) (0::Double)
     super mv mx = liftA2 (\x y -> x+"<tspan dy=\"-0.5em\"><tspan class=\"small\">"+y+"</tspan></tspan>") mv (mx <* put (0.5))
     sub mv mx = liftA2 (\x y -> x+"<tspan dy=\"0.3em\"><tspan class=\"small\">"+y+"</tspan></tspan>") mv (mx <* put (-0.3))
 
-    svgName s = nm $ toString s
+    svgName s = map (\x -> "<tspan class=\"variable\">"+x+"</tspan>") $ nm $ toString s
       where nm ('.':t) = super (nm t) (sym "P")
             nm x =
               let (n,y) = span (\c -> c>='0' && c<='9') (reverse x) in
