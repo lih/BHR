@@ -72,7 +72,8 @@ instance Semigroup CellMetrics where
     CellMetrics (lw+rw) (lw'+rw') (max bh bh') (max th th')
 data CellCoords = CellCoords {
   cellX,cellY :: Int,
-  cellMetrics :: CellMetrics
+  cellMetrics :: CellMetrics,
+  glyphMetrics :: CellMetrics
   }
   deriving Show
 data StringImage = StringImage {
@@ -126,14 +127,20 @@ renderString fc (RenderParams sz align mode) str = withFacePtr fc $ \fcp -> do
           start | incr > 0 = FTBMP.buffer bmp`plusPtr`((h-1)*incr)
                 | otherwise = FTBMP.buffer bmp
           rowPtrs = iterate (`plusPtr`negate incr) start
-          adv = fromIntegral (FT.horiAdvance m`div`64)
       -- putStrLn $ "Copying rows of size "++show w++" from "++show start++" to "++show (pret`plusPtr`dx)++" (size "++show (sizeX-dx)++")"
       for_ (take h rowPtrs `zip` iterate (`plusPtr`sizeX) (pret `plusPtr` dx)) $ \(rowsrc,rowdst) -> do
         copyArray rowdst rowsrc w
-  
-      k (dx + adv) (insert c (CellCoords dx 0 (CellMetrics adv h
-                                               (fromIntegral (FT.horiBearingX m)`div`64 + w`div`2)
-                                               (fromIntegral (FT.height m P.- FT.horiBearingY m)`div`64))) ret)
+
+      let adv = fromIntegral (FT.horiAdvance m`div`64)
+          bearX = fromIntegral (FT.horiBearingX m`div`64)
+          bearY = fromIntegral (FT.horiBearingX m`div`64)
+          mh = fromIntegral (FT.height m`div`64)
+          mw = fromIntegral (FT.width m`div`64)
+      k (dx + adv) (insert c (CellCoords dx 0
+                              (let lw = bearX + mw`div`2 in
+                                 CellMetrics lw (adv-lw) (mh-bearY) bearY)
+                              (let lw = mw`div`2 in
+                                 CellMetrics lw (mw-lw) (mh-bearY) bearY)) ret)
   
   return (StringImage sizeX sizeY (V.unsafeFromForeignPtr0 ret (sizeX*sizeY)) cs)
 
