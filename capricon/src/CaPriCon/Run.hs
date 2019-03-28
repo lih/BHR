@@ -502,7 +502,7 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                        in wrapStart True nlines+"<div class=\"capricon-steps\"><pre class=\"capricon capricon-paragraph capricon-context\">"
                           +fold [if isWord then "<span class=\"symbol\">"+htmlQuote w+"</span>"
                                  else w
-                                | (isWord,w) <- stringWordsAndSpaces c]+"</pre>"+userInput+"</div>"+wrapEnd
+                                | (isWord,w) <- stringWordsAndSpaces (drop 2 c)]+"</pre>"+userInput+"</div>"+wrapEnd
           'c':'s':_ -> wrapStart False 1+"<code class=\"capricon\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
           's':_ -> drop 1 c
           _ -> ""
