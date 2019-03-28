@@ -109,21 +109,25 @@ htmlQuote = fromString . foldMap qChar . toString
   where qChar '<' = "&lt;"
         qChar '>' = "&gt;"
         qChar '&' = "&amp;"
+        qChar '"' = "&quot;"
         qChar c = [c]
 stringWords :: IsCapriconString str => str -> [str]
-stringWords = map fromString . fromBlank . toString
-  where fromBlank (c:t) | c `elem` [' ', '\t', '\r', '\n'] = fromBlank t
-                        | c == '"' = fromQuote id t
-                        | otherwise = fromWChar (c:) t
-        fromBlank "" = []
-        fromQuote k ('"':t) = ('"':k "\""):fromBlank t
+stringWords x = [w | (True,w) <- stringWordsAndSpaces x]
+
+stringWordsAndSpaces :: IsCapriconString str => str -> [(Bool,str)]
+stringWordsAndSpaces = map (second fromString) . fromBlank id . toString
+  where fromBlank k (c:t) | c `elem` [' ', '\t', '\r', '\n'] = fromBlank (k.(c:)) t
+                          | c == '"' = (False,k ""):fromQuote id t
+                          | otherwise = (False,k ""):fromWChar (c:) t
+        fromBlank k "" = [(False,k "")]
+        fromQuote k ('"':t) = (True,'"':k "\""):fromBlank id t
         fromQuote k ('\\':c:t) = fromQuote (k.(qChar c:)) t
           where qChar 'n' = '\n' ; qChar 't' = '\t' ; qChar x = x
         fromQuote k (c:t) = fromQuote (k.(c:)) t
-        fromQuote k "" = ['"':k "\""]
-        fromWChar k (c:t) | c `elem` [' ', '\t', '\r', '\n'] = k "":fromBlank t
+        fromQuote k "" = [(True,'"':k "\"")]
+        fromWChar k (c:t) | c `elem` [' ', '\t', '\r', '\n'] = (True,k ""):fromBlank (c:) t
                           | otherwise = fromWChar (k.(c:)) t
-        fromWChar k "" = [k ""]
+        fromWChar k "" = [(True,k "")]
 
 literate :: forall str. IsCapriconString str => Parser String [str]
 literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " <+? cmdline "$> " <+? commentline) (single '\n')
@@ -495,9 +499,11 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                               tag = if p=='p' then "div" else "span"
                           in "<"+tag+" class=\"capricon-"+x+"result\">"
           'r':'e':p:[] -> "</"+(if p=='p' then "div" else "span")+">"
-          'c':'p':_ -> let nlines = length (lines (toString c))
-                       in wrapStart True nlines+"<div class=\"capricon-steps\"><pre class=\"capricon capricon-paragraph capricon-context\">"
-                          +htmlQuote (drop 2 c)+"</pre>"+userInput+"</div>"+wrapEnd
+          'c':'p':code -> let nlines = length (lines code)
+                          in wrapStart True nlines+"<div class=\"capricon-steps\"><pre class=\"capricon capricon-paragraph capricon-context\">"
+                             +fold [if isWord then let qw = htmlQuote w in "<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>"
+                                    else w
+                                   | (isWord,w) <- stringWordsAndSpaces (drop 2 c)]+"</pre>"+userInput+"</div>"+wrapEnd
           'c':'s':_ -> wrapStart False 1+"<code class=\"capricon\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
           's':_ -> drop 1 c
           _ -> ""

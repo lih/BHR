@@ -66,9 +66,9 @@ EOF
         for exe in "${executables[@]}"; do
 	    version="$(sed -n 's/^version:\s*//p' "$exe/$exe.cabal")"
 	    full="$exe-$version"
-	    if [ ! -e public/pkg/$full.tar.xz ]; then
-		curl -L "https://github.com/lih/stack-libs/releases/download/release-$full/$exe.linux.x86_64.tar.xz" \
-		     > public/pkg/$full.tar.xz
+	    if [ ! -e "public/pkg/$full.tar.xz" ]; then
+		curl -L "https://github.com/lih/stack-libs/releases/download/release-$exe-$version/$exe.linux.x86_64.tar.xz" \
+		     > "public/pkg/$full.tar.xz"
 	    fi
 	    ln -fs $full.tar.xz public/pkg/$exe.tar.xz
             printf '<li><a href="pkg/%s.tar.xz">%s.tar.xz</a></li>\n' "$exe" "$full"
