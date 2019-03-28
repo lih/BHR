@@ -109,6 +109,7 @@ htmlQuote = fromString . foldMap qChar . toString
   where qChar '<' = "&lt;"
         qChar '>' = "&gt;"
         qChar '&' = "&amp;"
+        qChar '"' = "&quot;"
         qChar c = [c]
 stringWords :: IsCapriconString str => str -> [str]
 stringWords x = [w | (True,w) <- stringWordsAndSpaces x]
