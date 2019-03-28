@@ -111,19 +111,22 @@ htmlQuote = fromString . foldMap qChar . toString
         qChar '&' = "&amp;"
         qChar c = [c]
 stringWords :: IsCapriconString str => str -> [str]
-stringWords = map fromString . fromBlank . toString
-  where fromBlank (c:t) | c `elem` [' ', '\t', '\r', '\n'] = fromBlank t
-                        | c == '"' = fromQuote id t
-                        | otherwise = fromWChar (c:) t
-        fromBlank "" = []
-        fromQuote k ('"':t) = ('"':k "\""):fromBlank t
+stringWords x = [w | (True,w) <- stringWordsAndSpaces x]
+
+stringWordsAndSpaces :: IsCapriconString str => str -> [(Bool,str)]
+stringWordsAndSpaces = map (second fromString) . fromBlank id . toString
+  where fromBlank k (c:t) | c `elem` [' ', '\t', '\r', '\n'] = fromBlank (k.(c:)) t
+                          | c == '"' = (False,k ""):fromQuote id t
+                          | otherwise = (False,k ""):fromWChar (c:) t
+        fromBlank k "" = [(False,k "")]
+        fromQuote k ('"':t) = (True,'"':k "\""):fromBlank id t
         fromQuote k ('\\':c:t) = fromQuote (k.(qChar c:)) t
           where qChar 'n' = '\n' ; qChar 't' = '\t' ; qChar x = x
         fromQuote k (c:t) = fromQuote (k.(c:)) t
-        fromQuote k "" = ['"':k "\""]
-        fromWChar k (c:t) | c `elem` [' ', '\t', '\r', '\n'] = k "":fromBlank t
+        fromQuote k "" = [(True,'"':k "\"")]
+        fromWChar k (c:t) | c `elem` [' ', '\t', '\r', '\n'] = (True,k ""):fromBlank (c:) t
                           | otherwise = fromWChar (k.(c:)) t
-        fromWChar k "" = [k ""]
+        fromWChar k "" = [(True,k "")]
 
 literate :: forall str. IsCapriconString str => Parser String [str]
 literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " <+? cmdline "$> " <+? commentline) (single '\n')
