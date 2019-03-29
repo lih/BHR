@@ -514,5 +514,5 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
              + hide +"\"></span><span class=\"capricon-reveal\" data-linecount=\""
              + fromString (show nlines)+"\">"
         wrapEnd = "</span></label>"
-        userInput = "<div class=\"user-input\"><button class=\"capricon-trigger\">Open/Close console</button><span class=\"capricon-input-prefix\">Evaluate in this context (press Enter to run):</span><input type=\"text\" class=\"capricon-input\" /><pre class=\"capricon-output\"></pre></div>"
+        userInput = "<div class=\"user-input\"><button class=\"capricon-trigger\">Try It</button><label class=\"capricon-input-prefix\">&gt;&nbsp;<input type=\"text\" class=\"capricon-input\" /></label><pre class=\"capricon-output\"></pre></div>"
   

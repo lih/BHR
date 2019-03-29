@@ -131,27 +131,37 @@ main = JS.concurrent $ void $ do
         JS.appendChild rootTitle closeBtn
         JS.appendChild console root'
         JS.setChildren root' (rootTitle:rootChildren)
-    
+
         withSubElems root ["capricon-trigger"] $ \[trig] -> void $ do
-          withSubElems root' ["capricon-input"] $ \[inp] -> void $ do
+          withSubElems root' ["capricon-input"] $ \[inpCons] -> void $ do
             let toggleActive = do
                   JS.toggleClass root' "active"
-                  JS.focus inp
+                  JS.focus inpCons
             JS.onEvent closeBtn JS.Click (const toggleActive)
             JS.onEvent trig JS.Click $ \_ -> toggleActive
-        withSubElems root' ["capricon-input","capricon-output"] $ \[inp,out] -> do
-          JS.withElemsQS root' ".capricon-context" $ \case
-            [con] -> do
-              context <- JS.getProp con "textContent"
-              let text = pref+" "+context
-              (state',_) <- runWordsState (stringWords text) state
-              JS.onEvent inp JS.KeyPress $ \case
-                JS.KeyData 13 False False False False -> do
-                  Just v <- JS.getValue inp
-                  (_,x) <- runWordsState (stringWords v) state'
-                  JS.setProp out "textContent" (toString x)
-                _ -> unit
-              next state' ""
+            
+        withSubElems root ["capricon-input"] $ \[inpMain] -> do
+          withSubElems root' ["capricon-input","capricon-output"] $ \[inp,out] -> do
+            JS.withElemsQS root' ".capricon-context" $ \case
+              [con] -> do
+                context <- JS.getProp con "textContent"
+                let text = pref+" "+context
+                (state',_) <- runWordsState (stringWords text) state
+                let onEnter x = \case
+                      JS.KeyData 13 False False False False -> x
+                      _ -> return ()
+                    runCode inp = do
+                      Just v <- JS.getValue inp
+                      (_,x) <- runWordsState (stringWords v) state'
+                      JS.setProp out "textContent" (toString x)
+                      return v
+                JS.onEvent inp JS.KeyPress $ onEnter $ void $ runCode inp
+                JS.onEvent inpMain JS.KeyPress $ onEnter $ do
+                  v <- runCode inpMain
+                  JS.setClass root' "active" True
+                  JS.focus inp
+                  JS.setProp inp "value" v
+                next state' ""
 
 cloneNode :: MonadIO m => JS.Elem -> m JS.Elem
 cloneNode x = liftIO $ JS.ffi "(function (n) { return n.cloneNode(true); })" x
