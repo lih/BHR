@@ -69,9 +69,10 @@ data StackBuiltin b = Builtin_ListBegin | Builtin_ListEnd
                     | Builtin_Swap | Builtin_SwapN
                     | Builtin_Range | Builtin_Each | Builtin_Cons
                     | Builtin_Add | Builtin_Sub | Builtin_Mul | Builtin_Div | Builtin_Mod | Builtin_Sign
-                    | Builtin_DeRef | Builtin_Def
+                    | Builtin_DeRef | Builtin_CurrentDict
+                    | Builtin_Def   | Builtin_SetCurrentDict
                     | Builtin_Exec
-                    | Builtin_CurrentDict | Builtin_Empty | Builtin_Insert | Builtin_Lookup | Builtin_Delete | Builtin_Keys
+                    | Builtin_Empty | Builtin_Insert | Builtin_Lookup | Builtin_Delete | Builtin_Keys
                     | Builtin_Quote
                     | Builtin_Extra b
                     deriving (Show,Generic)
@@ -148,6 +149,9 @@ execBuiltinImpl runExtra onComment = go
   where 
     go Builtin_Def = get >>= \st -> case st^.stack of
       (val:StackSymbol var:tl) -> do dict =~ insert var val ; stack =- tl
+      _ -> return ()
+    go Builtin_SetCurrentDict = get >>= \st -> case st^.stack of
+      (StackDict d:tl) -> do dict =- d ; stack =- tl
       _ -> return ()
     go Builtin_ListBegin = stack =~ (StackBuiltin Builtin_ListBegin:)
     go Builtin_ListEnd = stack =~ \st -> let ex acc (StackBuiltin Builtin_ListBegin:t) = (acc,t)

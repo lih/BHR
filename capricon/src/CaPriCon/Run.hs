@@ -454,6 +454,7 @@ cocDict version getResource getBResource writeResource writeBResource =
                ("list/cons"               , Builtin_Cons                          ),
 
                ("dict/vocabulary"         , Builtin_CurrentDict                   ),
+               ("dict/set-vocabulary"     , Builtin_SetCurrentDict                ),
                ("dict/empty"              , Builtin_Empty                         ),
                ("dict/insert"             , Builtin_Insert                        ),
                ("dict/delete"             , Builtin_Delete                        ),
