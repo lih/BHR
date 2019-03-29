@@ -333,11 +333,11 @@ runCOCBuiltin (COCB_Redirect (WriteImpl writeResource)) = do
   st <- runStackState get
   case st of
     StackSymbol f:StackProg p:t -> do
+      runStackState $ put t
       oldH <- runExtraState (outputText <~ \x -> (id,x))
       execProgram runCOCBuiltin outputComment p
       newH <- runExtraState (outputText <~ \x -> (oldH,x))
       liftSubIO $ writeResource f (newH "")
-      runStackState $ put t
     _ -> return ()
 
 runCOCBuiltin (COCB_Cache (ReadImpl getResource) (WriteImpl writeResource)) = do
