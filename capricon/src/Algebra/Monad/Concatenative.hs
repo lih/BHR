@@ -67,7 +67,7 @@ data StackBuiltin b = Builtin_ListBegin | Builtin_ListEnd
                     | Builtin_Pop  | Builtin_PopN
                     | Builtin_Dup  | Builtin_DupN
                     | Builtin_Swap | Builtin_SwapN
-                    | Builtin_Range | Builtin_Each
+                    | Builtin_Range | Builtin_Each | Builtin_Cons
                     | Builtin_Add | Builtin_Sub | Builtin_Mul | Builtin_Div | Builtin_Mod | Builtin_Sign
                     | Builtin_DeRef | Builtin_Def
                     | Builtin_Exec
@@ -175,6 +175,9 @@ execBuiltinImpl runExtra onComment = go
       st -> st
     go Builtin_Dup = stack =~ \st -> case st of x:t -> x:x:t ; _ -> st
     go Builtin_DupN = stack =~ \st -> case st of StackInt n:t | x:_ <- drop n t -> x:t ; _ -> st
+    go Builtin_Cons = stack =~ \case
+      x:StackList l:st' -> StackList (x:l):st'
+      st -> st
     go Builtin_Range = stack =~ \st -> case st of StackInt n:t -> StackList [StackInt i | i <- [0..n-1]]:t ; _ -> st
     go Builtin_Each = do
       st <- get
