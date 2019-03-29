@@ -70,7 +70,7 @@ showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
     in "{ "+showSteps p+" }"
   _ -> fromString $ show _x
 data COCBuiltin io str = COCB_Print | COCB_Quit
-                       | COCB_Open (ReadImpl io str str) | COCB_ExecModule (WriteImpl io str str)
+                       | COCB_Open (ReadImpl io str str)
                        | COCB_Cache (ReadImpl io str [Word8]) (WriteImpl io str [Word8])
 
                        | COCB_ToInt | COCB_Concat
@@ -329,19 +329,6 @@ runCOCBuiltin COCB_Pull = do
       | otherwise -> StackCOC COCNull:st
     st -> st
 
-runCOCBuiltin (COCB_ExecModule (WriteImpl writeResource)) = do
-  st <- runStackState get
-  case st of
-    StackSymbol f:StackProg p:t -> do
-      old <- runDictState get
-      oldH <- runExtraState (outputText <~ \x -> (id,x))
-      execProgram runCOCBuiltin outputComment p
-      new <- runDictState (id <~ (old,))
-      newH <- runExtraState (outputText <~ \x -> (oldH,x))
-      liftSubIO $ writeResource f (newH "")
-      runStackState $ put $ StackDict new:t
-    _ -> return ()
-
 runCOCBuiltin (COCB_Cache (ReadImpl getResource) (WriteImpl writeResource)) = do
   st <- runStackState get
   case st of
@@ -410,7 +397,7 @@ runCOCBuiltin COCB_InsertNodeDir = do
     st -> st
 
 cocDict :: forall io str. IsCapriconString str => str -> (str -> io (Maybe str)) -> (str -> io (Maybe [Word8])) -> (str -> str -> io ()) -> (str -> [Word8] -> io ()) -> COCDict io str
-cocDict version getResource getBResource writeResource writeBResource =
+cocDict version getResource getBResource _ writeBResource =
   mkDict ((".",StackProg []):("steps.",StackProg []):("mustache.",StackProg []):("version",StackSymbol version):
            [(x,StackBuiltin b) | (x,b) <- [
                ("def"                     , Builtin_Def                           ),
@@ -459,7 +446,6 @@ cocDict version getResource getBResource writeResource writeBResource =
                ("dict/insert"             , Builtin_Insert                        ),
                ("dict/delete"             , Builtin_Delete                        ),
                ("dict/keys"               , Builtin_Keys                          ),
-               ("dict/module"             , Builtin_Extra (COCB_ExecModule (WriteImpl writeResource))),
 
                ("term-index/pattern-index"     , Builtin_Extra COCB_GetShowDir         ),
                ("term-index/set-pattern-index" , Builtin_Extra COCB_SetShowDir         ),
