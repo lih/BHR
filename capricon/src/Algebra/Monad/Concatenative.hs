@@ -47,7 +47,9 @@ runClosure execBuiltin' onComment clos = do
   where flatten (StackClosure cs c) = do
           pref <- map fold $ for cs $ \(i,StackClosure _ p) -> (i+) <$> do
             traverse_ (runStep execBuiltin' onComment) p
-            stack <~ \(h:t) -> (t,[ConstStep h])
+            stack <~ \case
+              (h:t) -> (t,[ConstStep h])
+              [] -> ([],[])
           return (pref + c)
           
 runStep execBuiltin' onComment (VerbStep s) = getl (dict.at s) >>= \case
