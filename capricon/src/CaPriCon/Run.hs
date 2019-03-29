@@ -70,7 +70,7 @@ showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
     in "{ "+showSteps p+" }"
   _ -> fromString $ show _x
 data COCBuiltin io str = COCB_Print | COCB_Quit
-                       | COCB_Open (ReadImpl io str str)
+                       | COCB_Open (ReadImpl io str str) | COCB_Redirect (WriteImpl io str str)
                        | COCB_Cache (ReadImpl io str [Word8]) (WriteImpl io str [Word8])
 
                        | COCB_ToInt | COCB_Concat
@@ -329,6 +329,17 @@ runCOCBuiltin COCB_Pull = do
       | otherwise -> StackCOC COCNull:st
     st -> st
 
+runCOCBuiltin (COCB_Redirect (WriteImpl writeResource)) = do
+  st <- runStackState get
+  case st of
+    StackSymbol f:StackProg p:t -> do
+      oldH <- runExtraState (outputText <~ \x -> (id,x))
+      execProgram runCOCBuiltin outputComment p
+      newH <- runExtraState (outputText <~ \x -> (oldH,x))
+      liftSubIO $ writeResource f (newH "")
+      runStackState $ put t
+    _ -> return ()
+
 runCOCBuiltin (COCB_Cache (ReadImpl getResource) (WriteImpl writeResource)) = do
   st <- runStackState get
   case st of
@@ -397,7 +408,7 @@ runCOCBuiltin COCB_InsertNodeDir = do
     st -> st
 
 cocDict :: forall io str. IsCapriconString str => str -> (str -> io (Maybe str)) -> (str -> io (Maybe [Word8])) -> (str -> str -> io ()) -> (str -> [Word8] -> io ()) -> COCDict io str
-cocDict version getResource getBResource _ writeBResource =
+cocDict version getResource getBResource writeResource writeBResource =
   mkDict ((".",StackProg []):("steps.",StackProg []):("mustache.",StackProg []):("version",StackSymbol version):
            [(x,StackBuiltin b) | (x,b) <- [
                ("def"                     , Builtin_Def                           ),
@@ -405,6 +416,8 @@ cocDict version getResource getBResource _ writeBResource =
                ("lookup"                  , Builtin_Lookup                        ),
                ("exec"                    , Builtin_Exec                          ),
                ("quote"                   , Builtin_Quote                         ),
+               ("vocabulary"              , Builtin_CurrentDict                   ),
+               ("set-vocabulary"          , Builtin_SetCurrentDict                ),
 
                ("stack"                   , Builtin_Stack                         ),
                ("clear"                   , Builtin_Clear                         ),
@@ -425,7 +438,8 @@ cocDict version getResource getBResource _ writeBResource =
                ("io/print"                , Builtin_Extra COCB_Print              ),
                ("io/source"               , Builtin_Extra (COCB_Open (ReadImpl getResource))), 
                ("io/cache"                , Builtin_Extra (COCB_Cache (ReadImpl getBResource) (WriteImpl writeBResource))),
-                 
+               ("io/redirect"             , Builtin_Extra (COCB_Redirect (WriteImpl writeResource))),
+  
                ("string/format"           , Builtin_Extra COCB_Format             ),
                ("string/to-int"           , Builtin_Extra COCB_ToInt              ),
                
@@ -440,13 +454,11 @@ cocDict version getResource getBResource _ writeBResource =
                ("list/range"              , Builtin_Range                         ),
                ("list/cons"               , Builtin_Cons                          ),
 
-               ("dict/vocabulary"         , Builtin_CurrentDict                   ),
-               ("dict/set-vocabulary"     , Builtin_SetCurrentDict                ),
                ("dict/empty"              , Builtin_Empty                         ),
                ("dict/insert"             , Builtin_Insert                        ),
                ("dict/delete"             , Builtin_Delete                        ),
                ("dict/keys"               , Builtin_Keys                          ),
-
+               
                ("term-index/pattern-index"     , Builtin_Extra COCB_GetShowDir         ),
                ("term-index/set-pattern-index" , Builtin_Extra COCB_SetShowDir         ),
                ("term-index/index-insert"      , Builtin_Extra COCB_InsertNodeDir      ),
