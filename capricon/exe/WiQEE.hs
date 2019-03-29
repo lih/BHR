@@ -90,7 +90,7 @@ setBytes :: String -> [Word8] -> JS.CIO ()
 setBytes f v = setString f (map (toEnum . fromIntegral) v)
 
 hasteDict :: COCDict JS.CIO String
-hasteDict = cocDict ("0.10.1-js" :: String) getString getBytes setString setBytes
+hasteDict = cocDict ("0.11-js" :: String) getString getBytes setString setBytes
 
 main :: IO ()
 main = JS.concurrent $ void $ do
@@ -146,6 +146,7 @@ main = JS.concurrent $ void $ do
               [con] -> do
                 context <- JS.getProp con "textContent"
                 let text = pref+" "+context
+                -- JS.alert ("Running "+fromString text)
                 (state',_) <- runWordsState (stringWords text) state
                 let onEnter x = \case
                       JS.KeyData 13 False False False False -> x
