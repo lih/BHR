@@ -21,8 +21,8 @@ instance Format [Word8] (ReadImpl IO String [Word8]) where datum = return (ReadI
 instance Format [Word8] (WriteImpl IO String String) where datum = return (WriteImpl writeString)
 instance Format [Word8] (WriteImpl IO String [Word8]) where datum = return (WriteImpl (\x -> writeBytes x . pack))
 
-f_readString = (\x -> try (return Nothing) (Just<$>readString x))
-f_readBytes = (\x -> try (return Nothing) (Just . unpack<$>readBytes x))
+f_readString = (\x -> catch (return . Left . show) (Right<$>readString x))
+f_readBytes = (\x -> catch (return . Left . show) (Right . unpack<$>readBytes x))
 
 nativeDict = cocDict VERSION_capricon f_readString f_readBytes writeString (\x -> writeBytes x . pack)
 
