@@ -164,6 +164,7 @@ main = JS.concurrent $ void $ do
                   JS.setClass root' "active" True
                   JS.focus inp
                   JS.setProp inp "value" v
+                JS.setClass inpMain "ready" True
                 next state' ""
 
 cloneNode :: MonadIO m => JS.Elem -> m JS.Elem
