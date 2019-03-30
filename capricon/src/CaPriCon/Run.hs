@@ -90,7 +90,7 @@ data COCBuiltin io str = COCB_Print | COCB_Quit
                        | COCB_Format
                        
                        deriving (Show,Generic)
-data ReadImpl io str bytes = ReadImpl (str -> io (Maybe bytes))
+data ReadImpl io str bytes = ReadImpl (str -> io (String :+: bytes))
 data WriteImpl io str bytes = WriteImpl (str -> bytes -> io ())
 instance Show (ReadImpl io str bytes) where show _ = "#<open>"
 instance Show (WriteImpl io str bytes) where show _ = "#<write>"
@@ -216,7 +216,7 @@ runCOCBuiltin (COCB_Open (ReadImpl getResource)) = do
   case s of
     StackSymbol f:t -> do
       runStackState $ put t
-      xs <- liftSubIO (getResource (f+".md")) >>= maybe undefined return . matches Just literate . maybe "" toString
+      xs <- liftSubIO (getResource (f+".md")) >>= maybe undefined return . matches Just literate . (const "" <|> toString)
       let ex = execSymbol runCOCBuiltin outputComment
       ex "{" >> traverse_ ex xs >> ex "}"
     _ -> return ()
@@ -346,7 +346,7 @@ runCOCBuiltin (COCB_Cache (ReadImpl getResource) (WriteImpl writeResource)) = do
     StackSymbol f:StackProg p:t -> do
       runStackState (put t)
       liftSubIO (getResource (f+".blob")) >>= \case
-        Just res | Just v <- matches Just datum res -> runStackState $ modify $ (v:)
+        Right res | Just v <- matches Just datum res -> runStackState $ modify $ (v:)
         _ -> do
           execProgram runCOCBuiltin outputComment p
           st' <- runStackState get
@@ -407,7 +407,7 @@ runCOCBuiltin COCB_InsertNodeDir = do
       StackCOC (COCDir (insert e (map fst (takeLast d ctx),x) dir)):t
     st -> st
 
-cocDict :: forall io str. IsCapriconString str => str -> (str -> io (Maybe str)) -> (str -> io (Maybe [Word8])) -> (str -> str -> io ()) -> (str -> [Word8] -> io ()) -> COCDict io str
+cocDict :: forall io str. IsCapriconString str => str -> (str -> io (String :+: str)) -> (str -> io (String :+: [Word8])) -> (str -> str -> io ()) -> (str -> [Word8] -> io ()) -> COCDict io str
 cocDict version getResource getBResource writeResource writeBResource =
   mkDict ((".",StackProg []):("steps.",StackProg []):("mustache.",StackProg []):("version",StackSymbol version):
            [(x,StackBuiltin b) | (x,b) <- [
@@ -504,13 +504,14 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                              +fold [if isWord then let qw = htmlQuote w in "<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>"
                                     else w
                                    | (isWord,w) <- stringWordsAndSpaces (drop 2 c)]+"</pre>"+userInput+"</div>"+wrapEnd
-          'c':'s':_ -> wrapStart False 1+"<code class=\"capricon\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
+          'c':'s':_ -> wrapStart False 1+"<code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
           's':_ -> drop 1 c
           _ -> ""
 
         wrapStart isP nlines =
           let hide = if isP then "hideparagraph" else "hidestache"
-          in "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\" checked=\"checked\"/><span class=\"capricon-"
+              chk = if isP then "" else " checked=\"checked\""
+          in "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\""+chk+"/><span class=\"capricon-"
              + hide +"\"></span><span class=\"capricon-reveal\" data-linecount=\""
              + fromString (show nlines)+"\">"
         wrapEnd = "</span></label>"
