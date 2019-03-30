@@ -19,7 +19,7 @@ import qualified Haste.Concurrent as JS
 import qualified Haste.Ajax as JS
 import qualified Haste.JSString as JSS
 import qualified Haste.LocalStorage as JS
-import qualified Haste.Binary as JS
+import qualified Haste.Binary as JS hiding (get)
 import qualified Prelude as P
 import qualified Data.Array.Unboxed as Arr
 
@@ -59,113 +59,147 @@ toWordList = map (fromIntegral . fromEnum) . toString
 type ErrorMessage = String
 
 getString :: String -> JS.CIO (ErrorMessage :+: String)
-getString file = do
-  mres <- liftIO $ JS.getItem (fromString file)
+getString fileS = do
+  let file = fromString fileS :: JS.JSString
+  mres <- liftIO $ JS.getItem file
   case mres of
     Right res -> return (Right $ toString (res :: JS.JSString))
     Left _ -> do
-      here <- toString <$> JS.getLocationHref
+      here <- JS.getLocationHref
         
-      let url = fromString (dropFileName here</>file)
+      let url = JSS.replace here (JSS.regex "/.*$" "") ("/"+file)
       res <- JS.ajax JS.GET url
       case res of
         Left JS.NetworkError -> return $ Left . toString $ "Network error while retrieving "+url
         Left (JS.HttpError n msg) -> return $ Left . toString $ "HTTP error "+fromString (show n)+" while retrieving "+url+": "+msg
-        Right val -> map Right $ liftIO $ JS.setItem (fromString file) val >> return (toString (val :: JS.JSString))
+        Right val -> Right (toString (val :: JS.JSString)) <$ liftIO (JS.setItem file val)
 getBytes :: String -> JS.CIO (ErrorMessage :+: [Word8])
-getBytes file = do
-  mres <- liftIO $ JS.getItem (fromString file)
+getBytes fileS = do
+  let file = fromString fileS :: JS.JSString
+  mres <- liftIO $ JS.getItem file
   case mres of
     Right res -> return (Right $ toWordList (res :: JS.JSString))
     Left _ -> do
-      here <- toString <$> JS.getLocationHref
+      here <- JS.getLocationHref
         
-      let url = fromString (dropFileName here</>file)
+      let url = JSS.replace here (JSS.regex "/.*$" "") ("/"+file)
       res <- JS.ajax JS.GET url
       case res of
         Left JS.NetworkError -> return $ Left . toString $ "Network error while retrieving "+url
         Left (JS.HttpError n msg) -> return $ Left . toString $ "HTTP error "+fromString (show n)+" while retrieving "+url+": "+msg
-        Right val -> map Right $ liftIO $ JS.setItem (fromString file) val >> return (toWordList val)
+        Right val -> Right (toWordList val) <$ liftIO (JS.setItem file val)
 setString :: String -> String -> JS.CIO ()
 setString f v = liftIO $ JS.setItem (fromString f) (fromString v :: JS.JSString)
 setBytes :: String -> [Word8] -> JS.CIO ()
-setBytes f v = setString f (map (toEnum . fromIntegral) v)
+setBytes f v = setString (fromString f) (map (toEnum . fromIntegral) v)
 
 hasteDict :: COCDict JS.CIO String
 hasteDict = cocDict ("0.11-js" :: String) getString getBytes setString setBytes
 
+type WiQEEState = StackState (COCState String) String (COCBuiltin JS.CIO String) (COCValue JS.CIO String)
+runWordsState :: [String] -> WiQEEState -> JS.CIO (WiQEEState,String)
+runWordsState ws st = ($st) $ from (stateT.concatT) $^ do
+  foldr (\w tl -> do
+            x <- runExtraState (getl endState)
+            unless x $ do execSymbol runCOCBuiltin runComment w; tl) unit ws
+  out <- runExtraState (outputText <~ \x -> (id,x))
+  return (out "")
+        
 main :: IO ()
-main = JS.concurrent $ void $ do
-  maybe unit JS.focus =<< JS.elemById "content-scroll"
-  JS.wait 200
+main = do
+  Just msg <- JS.lookupAny capriconObject "event.data"
+  (req,reqID,stateID,code) <- JS.fromAny msg
+  sts <- JS.get capriconObject "states"
+  st <- case stateID of
+    0 -> return (defaultState hasteDict (COCState False [] zero id))
+    _ -> JS.fromOpaque <$> JS.index sts (stateID-1) 
+  case req :: Int of
+    -- run a block of code, and return a handle to a new state
+    0 -> JS.concurrent $ do
+      (st',_) <- runWordsState (map toString $ stringWords (code :: JS.JSString)) st
+      id <- appendState capriconObject st'
+      postMessage (reqID :: Int,id)
 
-  let runWordsState ws st = ($st) $ from (stateT.concatT) $^ do
-        foldr (\w tl -> do
-                  x <- runExtraState (getl endState)
-                  unless x $ do execSymbol runCOCBuiltin runComment w; tl) unit ws
-        out <- runExtraState (outputText <~ \x -> (id,x))
-        return (out "")
-      withSubElem root cl = JS.withElemsQS root ('.':cl) . traverse_
-      withSubElems _ [] k = k []
-      withSubElems root (h:t) k = withSubElem root h $ \h' -> withSubElems root t $ \t' -> k (h':t')
+    -- run a block of code, and return its output, discarding the new state
+    1 -> JS.concurrent $ do
+      (_,out) <- runWordsState (map toString $ stringWords (code :: JS.JSString)) st
+      postMessage (reqID :: Int,fromString out :: JS.JSString)
+
+    _ -> error "Unhandled request type"
   
-  prelude <- JS.withElem "capricon-prelude" (\e -> JS.getProp e "textContent")
-  (initState,_) <- runWordsState (map fromString $ stringWords prelude) (defaultState hasteDict (COCState False [] zero id))
+appendState :: MonadIO m => JS.JSAny -> a -> m Int
+appendState obj x = liftIO $ JS.ffi "(function (o,a) { o.states.push(a); return o.states.length; })" obj (JS.toOpaque x)
 
-  roots <- JS.elemsByQS JS.documentBody ".capricon-steps, code.capricon"
-  Just console <- JS.elemById "capricon-console"
+postMessage :: (MonadIO m,JS.ToAny a) => a -> m ()
+postMessage msg = liftIO $ JS.ffi "(function (m) { postMessage(m); })" (JS.toAny msg)
 
-  (\k -> foldr k (\_ _ -> unit) roots initState "") $ \root next state pref -> do
-    isCode <- JS.hasClass root "capricon"
-
-    if isCode
-      then do
-      p <- JS.getProp root "textContent"
-      next state (pref+p+" pop ")
-      else do
-        JS.wait 10
+capriconObject :: JS.JSAny
+capriconObject = JS.constant "CaPriCon"
     
-        root' <- cloneNode root
-        JS.toggleClass root' "capricon-frame"
-        rootChildren <- JS.getChildren root'
-        rootTitle <- JS.newElem "h3" <*= \head -> JS.appendChild head =<< JS.newTextElem "CaPriCon Console"
-        closeBtn <- JS.newElem "button" <*= \but -> JS.appendChild but =<< JS.newTextElem "Close"
-        JS.appendChild rootTitle closeBtn
-        JS.appendChild console root'
-        JS.setChildren root' (rootTitle:rootChildren)
+  -- maybe unit JS.focus =<< JS.elemById "content-scroll"
+  -- JS.wait 200
 
-        withSubElems root ["capricon-trigger"] $ \[trig] -> void $ do
-          withSubElems root' ["capricon-input"] $ \[inpCons] -> void $ do
-            let toggleActive = do
-                  JS.toggleClass root' "active"
-                  JS.focus inpCons
-            JS.onEvent closeBtn JS.Click (const toggleActive)
-            JS.onEvent trig JS.Click $ \_ -> toggleActive
+  -- let withSubElem root cl = JS.withElemsQS root ('.':cl) . traverse_
+  --     withSubElems _ [] k = k []
+  --     withSubElems root (h:t) k = withSubElem root h $ \h' -> withSubElems root t $ \t' -> k (h':t')
+  
+  -- prelude <- JS.withElem "capricon-prelude" (\e -> JS.getProp e "textContent")
+  -- (initState,_) <- runWordsState (map fromString $ stringWords prelude) (defaultState hasteDict (COCState False [] zero id))
+
+  -- roots <- JS.elemsByQS JS.documentBody ".capricon-steps, code.capricon"
+  -- Just console <- JS.elemById "capricon-console"
+
+  -- (\k -> foldr k (\_ _ -> unit) roots initState "") $ \root next state pref -> do
+  --   isCode <- JS.hasClass root "capricon"
+
+  --   if isCode
+  --     then do
+  --     p <- JS.getProp root "textContent"
+  --     next state (pref+p+" pop ")
+  --     else do
+  --       JS.wait 10
+    
+  --       root' <- cloneNode root
+  --       JS.toggleClass root' "capricon-frame"
+  --       rootChildren <- JS.getChildren root'
+  --       rootTitle <- JS.newElem "h3" <*= \head -> JS.appendChild head =<< JS.newTextElem "CaPriCon Console"
+  --       closeBtn <- JS.newElem "button" <*= \but -> JS.appendChild but =<< JS.newTextElem "Close"
+  --       JS.appendChild rootTitle closeBtn
+  --       JS.appendChild console root'
+  --       JS.setChildren root' (rootTitle:rootChildren)
+
+  --       withSubElems root ["capricon-trigger"] $ \[trig] -> void $ do
+  --         withSubElems root' ["capricon-input"] $ \[inpCons] -> void $ do
+  --           let toggleActive = do
+  --                 JS.toggleClass root' "active"
+  --                 JS.focus inpCons
+  --           JS.onEvent closeBtn JS.Click (const toggleActive)
+  --           JS.onEvent trig JS.Click $ \_ -> toggleActive
             
-        withSubElems root ["capricon-input"] $ \[inpMain] -> do
-          withSubElems root' ["capricon-input","capricon-output"] $ \[inp,out] -> do
-            JS.withElemsQS root' ".capricon-context" $ \case
-              [con] -> do
-                context <- JS.getProp con "textContent"
-                let text = pref+" "+context
-                -- JS.alert ("Running "+fromString text)
-                (state',_) <- runWordsState (stringWords text) state
-                let onEnter x = \case
-                      JS.KeyData 13 False False False False -> x
-                      _ -> return ()
-                    runCode inp = do
-                      Just v <- JS.getValue inp
-                      (_,x) <- runWordsState (stringWords v) state'
-                      JS.setProp out "textContent" (toString x)
-                      return v
-                JS.onEvent inp JS.KeyPress $ onEnter $ void $ runCode inp
-                JS.onEvent inpMain JS.KeyPress $ onEnter $ do
-                  v <- runCode inpMain
-                  JS.setClass root' "active" True
-                  JS.focus inp
-                  JS.setProp inp "value" v
-                JS.setClass inpMain "ready" True
-                next state' ""
+  --       withSubElems root ["capricon-input"] $ \[inpMain] -> do
+  --         withSubElems root' ["capricon-input","capricon-output"] $ \[inp,out] -> do
+  --           JS.withElemsQS root' ".capricon-context" $ \case
+  --             [con] -> do
+  --               context <- JS.getProp con "textContent"
+  --               let text = pref+" "+context
+  --               -- JS.alert ("Running "+fromString text)
+  --               (state',_) <- runWordsState (stringWords text) state
+  --               let onEnter x = \case
+  --                     JS.KeyData 13 False False False False -> x
+  --                     _ -> return ()
+  --                   runCode inp = do
+  --                     Just v <- JS.getValue inp
+  --                     (_,x) <- runWordsState (stringWords v) state'
+  --                     JS.setProp out "textContent" (toString x)
+  --                     return v
+  --               JS.onEvent inp JS.KeyPress $ onEnter $ void $ runCode inp
+  --               JS.onEvent inpMain JS.KeyPress $ onEnter $ do
+  --                 v <- runCode inpMain
+  --                 JS.setClass root' "active" True
+  --                 JS.focus inp
+  --                 JS.setProp inp "value" v
+  --               JS.setClass inpMain "ready" True
+  --               next state' ""
 
-cloneNode :: MonadIO m => JS.Elem -> m JS.Elem
-cloneNode x = liftIO $ JS.ffi "(function (n) { return n.cloneNode(true); })" x
+-- cloneNode :: MonadIO m => JS.Elem -> m JS.Elem
+-- cloneNode x = liftIO $ JS.ffi "(function (n) { return n.cloneNode(true); })" x
