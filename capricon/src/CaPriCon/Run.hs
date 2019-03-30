@@ -510,7 +510,7 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
 
         wrapStart isP nlines =
           let hide = if isP then "hideparagraph" else "hidestache"
-          in "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\" checked=\"checked\"/><span class=\"capricon-"
+          in "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\"/><span class=\"capricon-"
              + hide +"\"></span><span class=\"capricon-reveal\" data-linecount=\""
              + fromString (show nlines)+"\">"
         wrapEnd = "</span></label>"

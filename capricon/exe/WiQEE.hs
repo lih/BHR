@@ -62,15 +62,15 @@ getString :: String -> JS.CIO (ErrorMessage :+: String)
 getString file = do
   mres <- liftIO $ JS.getItem (fromString file)
   case mres of
-    Right res -> return (Just $ toString (res :: JS.JSString))
+    Right res -> return (Right $ toString (res :: JS.JSString))
     Left _ -> do
       here <- toString <$> JS.getLocationHref
         
       let url = fromString (dropFileName here</>file)
       res <- JS.ajax JS.GET url
       case res of
-        Left JS.NetworkError -> return $ Left $ "Network error while retrieving "+url
-        Left (JS.HttpError n msg) -> return $ Left $ "HTTP error "+fromString (show n)+" while retrieving "+url+": "+msg
+        Left JS.NetworkError -> return $ Left . toString $ "Network error while retrieving "+url
+        Left (JS.HttpError n msg) -> return $ Left . toString $ "HTTP error "+fromString (show n)+" while retrieving "+url+": "+msg
         Right val -> map Right $ liftIO $ JS.setItem (fromString file) val >> return (toString (val :: JS.JSString))
 getBytes :: String -> JS.CIO (ErrorMessage :+: [Word8])
 getBytes file = do
@@ -83,8 +83,8 @@ getBytes file = do
       let url = fromString (dropFileName here</>file)
       res <- JS.ajax JS.GET url
       case res of
-        Left JS.NetworkError -> return $ Left $ "Network error while retrieving "+url
-        Left (JS.HttpError n msg) -> return $ Left $ "HTTP error "+fromString (show n)+" while retrieving "+url+": "+msg
+        Left JS.NetworkError -> return $ Left . toString $ "Network error while retrieving "+url
+        Left (JS.HttpError n msg) -> return $ Left . toString $ "HTTP error "+fromString (show n)+" while retrieving "+url+": "+msg
         Right val -> map Right $ liftIO $ JS.setItem (fromString file) val >> return (toWordList val)
 setString :: String -> String -> JS.CIO ()
 setString f v = liftIO $ JS.setItem (fromString f) (fromString v :: JS.JSString)
