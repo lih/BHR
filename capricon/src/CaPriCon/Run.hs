@@ -132,15 +132,15 @@ stringWordsAndSpaces = map (second fromString) . fromBlank id . toString
 literate :: forall str. IsCapriconString str => Parser String [str]
 literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> " "$>? " <+? commentline) (single '\n')
   where
-    wrapResult :: Maybe [str] -> [str] -> [str]
+    wrapResult :: Bool -> [str] -> [str]
     wrapResult isParagraph l = case isParagraph of
-      Nothing -> ":rbs":l+[":res"]
-      Just [] -> ":rbp":l+[":rep"]
-      Just exs -> ":rbp":l+(":rxb":[":rxo"+ex | ex <- exs])+[":rxe",":rep"]
+      True -> ":rp[":l+[":rp]"]
+      False -> ":rs[":l+[":rs]"]
     cmdline :: Parser String () -> Parser String () -> Parser String [str]
-    cmdline pre pre_ex = map (\(x,exs) -> [":cp"+intercalate "\n" (map fst x)]
-                                          + wrapResult (Just exs) (foldMap snd x))
-                         ((,) <$> sepBy1' go (single '\n') <*> option' [] ("\n" >> sepBy1' go_ex (single '\n')))
+    cmdline pre pre_ex = map (\(x,exs) -> [":cp[",":cp="+intercalate "\n" (map fst x)]
+                                          + (":rx[":[":rx*"+ex | ex <- exs]+[":rx]",":cp]"])
+                                          + wrapResult True (foldMap snd x))
+                                          ((,) <$> sepBy1' go (single '\n') <*> option' [] ("\n" >> sepBy1' go_ex (single '\n')))
       where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x+["steps."]))
             go_ex = do pre_ex; many' (noneOf ['\n']) <&> fromString
     commentline = map (foldMap (pure . (":s"+) <|> \(x,t) -> t+[":cs"+x])) $ (<* lookingAt eol)
@@ -148,7 +148,7 @@ literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> "
                                                 (fill '{' $ single '{' <* lookingAt (noneOf ['{']))))
                 <+? map Right (between "{{" "}}"
                                 (many1' (noneOf ['}'] <+? fill '}' (single '}' <* lookingAt (noneOf ['}'])))
-                                 <&> \x -> (fromString x,wrapResult Nothing (stringWords (fromString x)+["mustache."])))))
+                                 <&> \x -> (fromString x,wrapResult False (stringWords (fromString x)+["mustache."])))))
 
 data COCState str = COCState {
   _endState :: Bool,
