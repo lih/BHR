@@ -510,7 +510,10 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
           'c':'p':'=':_ -> fold [if isWord then let qw = htmlQuote w in "<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>"
                                     else w
                                 | (isWord,w) <- stringWordsAndSpaces (drop 3 c)]+"</pre><div class=\"user-input interactive\">"
-          'c':'p':']':[] -> userInput+"</div>"+wrapEnd
+          'c':'p':']':[] -> "<button class=\"capricon-trigger\">Try It Out</button>"
+                            +"<label class=\"capricon-input-prefix\">&gt;&nbsp;<input type=\"text\" class=\"capricon-input\" /></label>"
+                            +"<pre class=\"capricon-output\"></pre></div>"
+                            +"</div>"+wrapEnd
           'c':'s':_ -> wrapStart False 1+"<code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
           's':_ -> drop 1 c
           _ -> ""
@@ -531,5 +534,4 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
              + hide +"\"></span><span class=\"capricon-reveal\" data-linecount=\""
              + fromString (show nlines)+"\">"
         wrapEnd = "</span></label>"
-        userInput = "<button class=\"capricon-trigger\">Try It Out</button><label class=\"capricon-input-prefix\">&gt;&nbsp;<input type=\"text\" class=\"capricon-input\" /></label><pre class=\"capricon-output\"></pre></div>"
   
