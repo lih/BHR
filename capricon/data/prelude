@@ -12,47 +12,25 @@
   dup dict-keys import-keys 
 } def
 
-[ dict term-index term context io list arith string ] { import } each
-
-'Type { 0 universe } def
-
-'times { range { pop dup exec } each pop } def
-
-'foralls { { extro-forall } swap times } def
-'lambdas { { extro-lambda } swap times } def
-'applys { range { pop apply } each } def
-'applyl { { swap apply } each } def
+[ dict term-index construction query context io list arith string ] { import } each
 
 'printf { format print pop } def
 'show { "%v\n" printf } def
 'show-stack { stack { show } each } def
-'show-context { "" hypotheses { dup variable type swap "%s : %v\n%s" format } each print pop } def
-
-'showdef { pattern-index 1 swapn swap index-insert set-pattern-index } def
-
-'external { dup open swap "%s.html" format module } def
-'stache { "%v" printf } def
-
-'vis { show-context "-------\n" printf show-stack } def
-
-'-> { dup 1 swapn swap intro { {@ dup @} variable } def } def
-'! 'extro-lambda $ def
-'? 'extro-forall $ def
-
-'use {
-  dup open swap
-  cache-dir "%s/%s.mdc" format module
-  dup 'exports { import-keys } { pop } lookup
-} def
-'export { 'exports swap def } def
-
-'( '[ $ def
-') { ] applyl } def
-
-'defconstr { 1 dupn swap showdef def } def
+'times { range { pop dup exec } each pop } def
+'reverse { [ ] swap { cons } each } def
 
 'mustache. { show } def
 'tex { 'mustache. { "$%l$\n" printf 'mustache. {@ dup $ @} def } def } def
+'svg { 'mustache. { "<svg class='formula' width='150px' height='2em' viewBox='0 0 100 100' xmlns=\"http://www.w3.org/2000/svg\"><text class='formula-text' x='0' y='100'>%g</text></svg>" printf 'mustache. {@ dup $ @} def } def } def
 'raw { 'mustache. { "%s\n" printf 'mustache. {@ dup $ @} def } def } def
 
-'recursor { dup 2 shaft -> variable mu ! } def
+'collect { { 'exports empty def {@ @} exec exports {@ vocabulary @} set-vocabulary } exec } def
+'exports empty def
+'export { exports swap dup $ insert 'exports swap def } def
+
+[ 'source-dir 'output-dir 'cache-dir ] { "" def } each
+
+'module { dup source-dir "%s%s" format source swap output-dir "%s%s.mdc" format redirect } def
+'require { dup dup "  * Required module: [%s]\(%s.html\)\n" printf { {@ dup @} { module } collect } swap cache-dir "%s%s.mdo" format cache } def
+
