@@ -1,0 +1,21 @@
+#!/bin/bash
+commit="$1"
+
+set -ue
+
+git checkout history
+git merge "$commit"
+
+git checkout master-new
+git reset --hard history 
+git rebase -i master
+
+git checkout master
+git merge master-new
+
+git checkout history
+git merge master
+
+git checkout autocommit
+git rebase history
+
