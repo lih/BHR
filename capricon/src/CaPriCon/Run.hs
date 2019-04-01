@@ -130,15 +130,19 @@ stringWordsAndSpaces = map (second fromString) . fromBlank id . toString
         fromWChar k "" = [(True,k "")]
 
 literate :: forall str. IsCapriconString str => Parser String [str]
-literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " <+? cmdline "$> " <+? commentline) (single '\n')
+literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> " "$>? " <+? commentline) (single '\n')
   where
     wrapResult :: Bool -> [str] -> [str]
-    wrapResult isParagraph l = (if isParagraph then ":rbp" else ":rbs") : l + [if isParagraph then ":rep" else ":res"]
-    cmdline :: Parser String () -> Parser String [str]
-    cmdline pre = map (\x -> [":cp"+intercalate "\n" (map fst x)]
-                             + wrapResult True (foldMap snd x))
-                  (sepBy1' go (single '\n'))
+    wrapResult isParagraph l = case isParagraph of
+      True -> ":p[":l+[":p]"]
+      False -> ":s[":l+[":s]"]
+    cmdline :: Parser String () -> Parser String () -> Parser String [str]
+    cmdline pre pre_ex = map (\(x,exs) -> [":cp["+fromString (show (length x,if nonempty exs then True else False)),":cp="+intercalate "\n" (map fst x)]
+                                          + (if nonempty exs then ":x[":[":x="+ex | ex <- exs]+[":x]"] else [])
+                                          + (":cp]":wrapResult True (foldMap snd x)))
+                                          ((,) <$> sepBy1' go (single '\n') <*> option' [] ("\n" >> sepBy1' go_ex (single '\n')))
       where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x+["steps."]))
+            go_ex = do pre_ex; many' (noneOf ['\n']) <&> fromString
     commentline = map (foldMap (pure . (":s"+) <|> \(x,t) -> t+[":cs"+x])) $ (<* lookingAt eol)
       $ many' (map (Left . fromString) (many1' (noneOf ['{','\n'] <+?
                                                 (fill '{' $ single '{' <* lookingAt (noneOf ['{']))))
@@ -495,25 +499,41 @@ cocDict version getResource getBResource writeResource writeBResource =
 
 outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
   where commentText = case toString c of
-          'r':'b':p:[] -> let x = if p=='p' then "paragraph" else ""
-                              tag = if p=='p' then "div" else "span"
-                          in "<"+tag+" class=\"capricon-"+x+"result\">"
-          'r':'e':p:[] -> "</"+(if p=='p' then "div" else "span")+">"
-          'c':'p':code -> let nlines = length (lines code)
-                          in wrapStart True nlines+"<div class=\"capricon-steps\"><pre class=\"capricon capricon-paragraph capricon-context\">"
-                             +fold [if isWord then let qw = htmlQuote w in "<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>"
+          p:'[':[] -> "<"+codeTag p+codeAttrs p+">"
+          p:']':[] -> "</"+codeTag p+">"
+          'x':'=':_ -> let qcode = htmlQuote (drop 2 c) in
+                         "<button class=\"capricon-example\" data-code=\""+qcode+"\">"+qcode+"</button>"
+          'c':'p':'[':n ->
+            let (nlines,hasExamples) = read n :: (Int,Bool)
+            in wrapStart True nlines hasExamples+"<div class=\"capricon-steps\">"
+                      +"<pre class=\"capricon capricon-paragraph capricon-context\">"
+            
+          'c':'p':'=':_ -> fold [if isWord then let qw = htmlQuote w in "<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>"
                                     else w
-                                   | (isWord,w) <- stringWordsAndSpaces (drop 2 c)]+"</pre>"+userInput+"</div>"+wrapEnd
-          'c':'s':_ -> wrapStart False 1+"<code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
+                                | (isWord,w) <- stringWordsAndSpaces (drop 3 c)]+"</pre>"
+          'c':'p':']':[] -> "<div class=\"user-input interactive\">"
+                            +"<button class=\"capricon-trigger\">Try It Out</button>"
+                            +"<label class=\"capricon-input-prefix\">&gt;&nbsp;<input type=\"text\" class=\"capricon-input\" /></label>"
+                            +"<pre class=\"capricon-output\"></pre></div>"
+                            +"</div>"+wrapEnd
+          'c':'s':_ -> wrapStart False 1 False+"<code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
           's':_ -> drop 1 c
           _ -> ""
 
-        wrapStart isP nlines =
+        codeTag 'p' = "div"
+        codeTag 's' = "span"
+        codeTag 'x' = "div"
+        codeTag _ = ""
+        codeAttrs 'p' = " class=\"capricon-paragraphresult\""
+        codeAttrs 's' = " class=\"capricon-result\""
+        codeAttrs 'x' = " class=\"capricon-examples\""
+        codeAttrs _ = ""
+        
+        wrapStart isP nlines hasExamples =
           let hide = if isP then "hideparagraph" else "hidestache"
               chk = if isP then "" else " checked=\"checked\""
           in "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\""+chk+"/><span class=\"capricon-"
-             + hide +"\"></span><span class=\"capricon-reveal\" data-linecount=\""
+             + hide +"\"></span><span class=\"capricon-reveal"+(if hasExamples then " capricon-with-examples" else "")+"\" data-linecount=\""
              + fromString (show nlines)+"\">"
         wrapEnd = "</span></label>"
-        userInput = "<div class=\"user-input interactive\"><button class=\"capricon-trigger\">Try It Out</button><label class=\"capricon-input-prefix\">&gt;&nbsp;<input type=\"text\" class=\"capricon-input\" /></label><pre class=\"capricon-output\"></pre></div>"
   
