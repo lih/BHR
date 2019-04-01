@@ -505,11 +505,13 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                          "<option class=\"capricon-example\" value=\""+qcode+"\">"+qcode+"</option>"
           'c':'p':'[':n ->
             let nlines = read n :: Int
-            in wrapStart True nlines+"<div class=\"capricon-steps\"><pre class=\"capricon capricon-paragraph capricon-context\">"
+            in wrapStart True nlines+"<div class=\"capricon-steps\">"
+                      +"<pre class=\"capricon capricon-paragraph capricon-context\">"
             
           'c':'p':'=':_ -> fold [if isWord then let qw = htmlQuote w in "<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>"
                                     else w
-                                | (isWord,w) <- stringWordsAndSpaces (drop 3 c)]+"</pre><div class=\"user-input interactive\">"
+                                | (isWord,w) <- stringWordsAndSpaces (drop 3 c)]+"</pre>"
+                           +"<div class=\"user-input interactive\">"
           'c':'p':']':[] -> "<button class=\"capricon-trigger\">Try It Out</button>"
                             +"<label class=\"capricon-input-prefix\">&gt;&nbsp;<input type=\"text\" class=\"capricon-input\" /></label>"
                             +"<pre class=\"capricon-output\"></pre></div>"
