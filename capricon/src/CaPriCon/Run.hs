@@ -135,7 +135,8 @@ literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> "
     wrapResult :: Maybe [str] -> [str] -> [str]
     wrapResult isParagraph l = case isParagraph of
       Nothing -> ":rbs":l+[":res"]
-      Just exs -> ":rbp":l+[":rx"+ex | ex <- exs]+[":rep"]
+      Just [] -> ":rbp":l+[":rep"]
+      Just exs -> ":rbp":l+(":rxb":[":rxo"+ex | ex <- exs])+[":rxe",":rep"]
     cmdline :: Parser String () -> Parser String () -> Parser String [str]
     cmdline pre pre_ex = map (\(x,exs) -> [":cp"+intercalate "\n" (map fst x)]
                                           + wrapResult (Just exs) (foldMap snd x))
@@ -502,6 +503,10 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                               tag = if p=='p' then "div" else "span"
                           in "<"+tag+" class=\"capricon-"+x+"result\">"
           'r':'e':p:[] -> "</"+(if p=='p' then "div" else "span")+">"
+          'r':'x':'b':[] -> "<select class=\"capricon-examples\">"
+          'r':'x':'o':code -> let qcode = htmlQuote (fromString code) in
+                                "<option class=\"capricon-example\" value=\""+qcode+"\">"+qcode+"</option>"
+          'r':'x':'e':[] -> "</select>"
           'c':'p':code -> let nlines = length (lines code)
                           in wrapStart True nlines+"<div class=\"capricon-steps\"><pre class=\"capricon capricon-paragraph capricon-context\">"
                              +fold [if isWord then let qw = htmlQuote w in "<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>"
