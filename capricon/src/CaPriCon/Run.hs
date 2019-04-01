@@ -137,7 +137,7 @@ literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> "
       True -> ":p[":l+[":p]"]
       False -> ":s[":l+[":s]"]
     cmdline :: Parser String () -> Parser String () -> Parser String [str]
-    cmdline pre pre_ex = map (\(x,exs) -> [":cp["+fromString (show (length x)),":cp="+intercalate "\n" (map fst x)]
+    cmdline pre pre_ex = map (\(x,exs) -> [":cp["+fromString (show (length x+if nonempty exs then 1 else 0)),":cp="+intercalate "\n" (map fst x)]
                                           + (if nonempty exs then ":x[":[":x="+ex | ex <- exs]+[":x]"] else [])
                                           + (":cp]":wrapResult True (foldMap snd x)))
                                           ((,) <$> sepBy1' go (single '\n') <*> option' [] ("\n" >> sepBy1' go_ex (single '\n')))
@@ -511,8 +511,8 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
           'c':'p':'=':_ -> fold [if isWord then let qw = htmlQuote w in "<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>"
                                     else w
                                 | (isWord,w) <- stringWordsAndSpaces (drop 3 c)]+"</pre>"
-                           +"<div class=\"user-input interactive\">"
-          'c':'p':']':[] -> "<button class=\"capricon-trigger\">Try It Out</button>"
+          'c':'p':']':[] -> "<div class=\"user-input interactive\">"
+                            +"<button class=\"capricon-trigger\">Try It Out</button>"
                             +"<label class=\"capricon-input-prefix\">&gt;&nbsp;<input type=\"text\" class=\"capricon-input\" /></label>"
                             +"<pre class=\"capricon-output\"></pre></div>"
                             +"</div>"+wrapEnd
@@ -522,11 +522,11 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
 
         codeTag 'p' = "div"
         codeTag 's' = "span"
-        codeTag 'x' = "label"
+        codeTag 'x' = "div"
         codeTag _ = ""
         codeAttrs 'p' = " class=\"capricon-paragraphresult\""
         codeAttrs 's' = " class=\"capricon-result\""
-        codeAttrs 'x' = " class=\"capricon-examples\">Examples<input type=\"checkbox\" class=\"capricon-open-examples\"></input"
+        codeAttrs 'x' = " class=\"capricon-examples\""
         codeAttrs _ = ""
         
         wrapStart isP nlines =
