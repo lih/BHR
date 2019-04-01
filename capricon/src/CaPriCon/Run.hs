@@ -502,7 +502,7 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
           p:'[':[] -> "<"+codeTag p+codeAttrs p+">"
           p:']':[] -> "</"+codeTag p+">"
           'x':'=':_ -> let qcode = htmlQuote (drop 2 c) in
-                         "<option class=\"capricon-example\" value=\""+qcode+"\">"+qcode+"</option>"
+                         "<button class=\"capricon-example\" value=\""+qcode+"\">"+qcode+"</button>"
           'c':'p':'[':n ->
             let nlines = read n :: Int
             in wrapStart True nlines+"<div class=\"capricon-steps\">"
@@ -522,11 +522,11 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
 
         codeTag 'p' = "div"
         codeTag 's' = "span"
-        codeTag 'x' = "select"
+        codeTag 'x' = "label"
         codeTag _ = ""
         codeAttrs 'p' = " class=\"capricon-paragraphresult\""
         codeAttrs 's' = " class=\"capricon-result\""
-        codeAttrs 'x' = " class=\"capricon-examples\"><option value=\"\" selected=\"selected\">Choose an Example</option"
+        codeAttrs 'x' = " class=\"capricon-examples\"><input type=\"checkbox\" class=\"capricon-open-examples\" /"
         codeAttrs _ = ""
         
         wrapStart isP nlines =
