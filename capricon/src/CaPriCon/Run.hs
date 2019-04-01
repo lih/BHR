@@ -134,11 +134,11 @@ literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> "
   where
     wrapResult :: Bool -> [str] -> [str]
     wrapResult isParagraph l = case isParagraph of
-      True -> ":rp[":l+[":rp]"]
-      False -> ":rs[":l+[":rs]"]
+      True -> ":p[":l+[":p]"]
+      False -> ":s[":l+[":s]"]
     cmdline :: Parser String () -> Parser String () -> Parser String [str]
-    cmdline pre pre_ex = map (\(x,exs) -> [":cp[",":cp="+intercalate "\n" (map fst x)]
-                                          + (":rx[":[":rx*"+ex | ex <- exs]+[":rx]",":cp]"])
+    cmdline pre pre_ex = map (\(x,exs) -> [":cp["+fromString (show (length x)),":cp="+intercalate "\n" (map fst x)]
+                                          + (":x[":[":x="+ex | ex <- exs]+[":x]",":cp]"])
                                           + wrapResult True (foldMap snd x))
                                           ((,) <$> sepBy1' go (single '\n') <*> option' [] ("\n" >> sepBy1' go_ex (single '\n')))
       where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x+["steps."]))
@@ -499,23 +499,31 @@ cocDict version getResource getBResource writeResource writeBResource =
 
 outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
   where commentText = case toString c of
-          'r':'b':p:[] -> let x = if p=='p' then "paragraph" else ""
-                              tag = if p=='p' then "div" else "span"
-                          in "<"+tag+" class=\"capricon-"+x+"result\">"
-          'r':'e':p:[] -> "</"+(if p=='p' then "div" else "span")+">"
-          'r':'x':'b':[] -> "<select class=\"capricon-examples\">"
-          'r':'x':'o':code -> let qcode = htmlQuote (fromString code) in
-                                "<option class=\"capricon-example\" value=\""+qcode+"\">"+qcode+"</option>"
-          'r':'x':'e':[] -> "</select>"
-          'c':'p':code -> let nlines = length (lines code)
-                          in wrapStart True nlines+"<div class=\"capricon-steps\"><pre class=\"capricon capricon-paragraph capricon-context\">"
-                             +fold [if isWord then let qw = htmlQuote w in "<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>"
+          p:'[':[] -> "<"+codeTag p+codeAttrs p+">"
+          p:']':[] -> "</"+codeTag p+">"
+          'x':'=':_ -> let qcode = htmlQuote (drop 2 c) in
+                         "<option class=\"capricon-example\" value=\""+qcode+"\">"+qcode+"</option>"
+          'c':'p':'[':n ->
+            let nlines = read n :: Int
+            in wrapStart True nlines+"<div class=\"capricon-steps\"><pre class=\"capricon capricon-paragraph capricon-context\">"
+            
+          'c':'p':'=':_ -> fold [if isWord then let qw = htmlQuote w in "<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>"
                                     else w
-                                   | (isWord,w) <- stringWordsAndSpaces (drop 2 c)]+"</pre>"+userInput+"</div>"+wrapEnd
+                                | (isWord,w) <- stringWordsAndSpaces (drop 3 c)]+"</pre>"
+          'c':'p':']':[] -> userInput+"</div>"+wrapEnd
           'c':'s':_ -> wrapStart False 1+"<code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
           's':_ -> drop 1 c
           _ -> ""
 
+        codeTag 'p' = "div"
+        codeTag 's' = "span"
+        codeTag 'x' = "select"
+        codeTag _ = ""
+        codeAttrs 'p' = " class=\"capricon-paragraphresult\""
+        codeAttrs 's' = " class=\"capricon-result\""
+        codeAttrs 'x' = " class=\"capricon-examples\""
+        codeAttrs _ = ""
+        
         wrapStart isP nlines =
           let hide = if isP then "hideparagraph" else "hidestache"
               chk = if isP then "" else " checked=\"checked\""
