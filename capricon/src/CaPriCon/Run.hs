@@ -502,7 +502,7 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
           p:'[':[] -> "<"+codeTag p+codeAttrs p+">"
           p:']':[] -> "</"+codeTag p+">"
           'x':'=':_ -> let qcode = htmlQuote (drop 2 c) in
-                         "<button class=\"capricon-example\" value=\""+qcode+"\">"+qcode+"</button>"
+                         "<button class=\"capricon-example\" data-code=\""+qcode+"\">"+qcode+"</button>"
           'c':'p':'[':n ->
             let nlines = read n :: Int
             in wrapStart True nlines+"<div class=\"capricon-steps\">"
