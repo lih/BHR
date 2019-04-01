@@ -137,7 +137,7 @@ literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> "
       True -> ":p[":l+[":p]"]
       False -> ":s[":l+[":s]"]
     cmdline :: Parser String () -> Parser String () -> Parser String [str]
-    cmdline pre pre_ex = map (\(x,exs) -> [":cp["+fromString (show (length x+if nonempty exs then 1 else 0)),":cp="+intercalate "\n" (map fst x)]
+    cmdline pre pre_ex = map (\(x,exs) -> [":cp["+fromString (show (length x,if nonempty exs then True else False)),":cp="+intercalate "\n" (map fst x)]
                                           + (if nonempty exs then ":x[":[":x="+ex | ex <- exs]+[":x]"] else [])
                                           + (":cp]":wrapResult True (foldMap snd x)))
                                           ((,) <$> sepBy1' go (single '\n') <*> option' [] ("\n" >> sepBy1' go_ex (single '\n')))
@@ -504,8 +504,8 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
           'x':'=':_ -> let qcode = htmlQuote (drop 2 c) in
                          "<button class=\"capricon-example\" data-code=\""+qcode+"\">"+qcode+"</button>"
           'c':'p':'[':n ->
-            let nlines = read n :: Int
-            in wrapStart True nlines+"<div class=\"capricon-steps\">"
+            let (nlines,hasExamples) = read n :: (Int,Bool)
+            in wrapStart True nlines hasExamples+"<div class=\"capricon-steps\">"
                       +"<pre class=\"capricon capricon-paragraph capricon-context\">"
             
           'c':'p':'=':_ -> fold [if isWord then let qw = htmlQuote w in "<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>"
@@ -516,7 +516,7 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                             +"<label class=\"capricon-input-prefix\">&gt;&nbsp;<input type=\"text\" class=\"capricon-input\" /></label>"
                             +"<pre class=\"capricon-output\"></pre></div>"
                             +"</div>"+wrapEnd
-          'c':'s':_ -> wrapStart False 1+"<code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
+          'c':'s':_ -> wrapStart False 1 False+"<code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
           's':_ -> drop 1 c
           _ -> ""
 
@@ -529,11 +529,11 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
         codeAttrs 'x' = " class=\"capricon-examples\""
         codeAttrs _ = ""
         
-        wrapStart isP nlines =
+        wrapStart isP nlines hasExamples =
           let hide = if isP then "hideparagraph" else "hidestache"
               chk = if isP then "" else " checked=\"checked\""
           in "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\""+chk+"/><span class=\"capricon-"
-             + hide +"\"></span><span class=\"capricon-reveal\" data-linecount=\""
+             + hide +"\"></span><span class=\"capricon-reveal"+(if hasExamples then "-with-examples" else "")+"\" data-linecount=\""
              + fromString (show nlines)+"\">"
         wrapEnd = "</span></label>"
   
