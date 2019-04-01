@@ -138,8 +138,8 @@ literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> "
       False -> ":s[":l+[":s]"]
     cmdline :: Parser String () -> Parser String () -> Parser String [str]
     cmdline pre pre_ex = map (\(x,exs) -> [":cp["+fromString (show (length x)),":cp="+intercalate "\n" (map fst x)]
-                                          + (":x[":[":x="+ex | ex <- exs]+[":x]",":cp]"])
-                                          + wrapResult True (foldMap snd x))
+                                          + (if nonempty exs then ":x[":[":x="+ex | ex <- exs]+[":x]"] else [])
+                                          + (":cp]":wrapResult True (foldMap snd x)))
                                           ((,) <$> sepBy1' go (single '\n') <*> option' [] ("\n" >> sepBy1' go_ex (single '\n')))
       where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x+["steps."]))
             go_ex = do pre_ex; many' (noneOf ['\n']) <&> fromString
