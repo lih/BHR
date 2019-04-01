@@ -526,7 +526,7 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
         codeTag _ = ""
         codeAttrs 'p' = " class=\"capricon-paragraphresult\""
         codeAttrs 's' = " class=\"capricon-result\""
-        codeAttrs 'x' = " class=\"capricon-examples\"><input type=\"checkbox\" class=\"capricon-open-examples\" /"
+        codeAttrs 'x' = " class=\"capricon-examples\">Examples<input type=\"checkbox\" class=\"capricon-open-examples\"></input"
         codeAttrs _ = ""
         
         wrapStart isP nlines =
