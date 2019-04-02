@@ -17,7 +17,7 @@ import GHC.Generics (Generic)
 newtype Opaque a = Opaque a
                  deriving (Generic)
 instance Show (Opaque a) where show _ = "#<opaque>"
-data StackStep s b a = VerbStep s | ConstStep (StackVal s b a) | CommentStep s | ClosureStep Bool (StackClosure s b a)
+data StackStep s b a = VerbStep s | ConstStep (StackVal s b a) | ExecStep (StackVal s b a) | CommentStep s | ClosureStep Bool (StackClosure s b a)
                      deriving (Show,Generic)
 data StackClosure s b a = StackClosure [(StackProgram s b a,StackClosure s b a)] (StackProgram s b a)
                         deriving (Show,Generic)
@@ -53,12 +53,12 @@ runClosure execBuiltin' onComment clos = do
           return (pref + c)
           
 runStep execBuiltin' onComment (VerbStep s) = getl (dict.at s) >>= \case
-  Just v -> runVal v
+  Just v -> runStep execBuiltin' onComment (ExecStep v)
   Nothing -> stack =~ (StackSymbol s:)
-  where runVal (StackBuiltin b) = execBuiltin' b
-        runVal (StackProg p) = traverse_ (runStep execBuiltin' onComment) p
-        runVal x = stack =~ (x:)
 runStep _ _ (ConstStep v) = stack =~ (v:)
+runStep execBuiltin' onComment (ExecStep (StackProg p)) = traverse_ (runStep execBuiltin' onComment) p
+runStep execBuiltin' _ (ExecStep (StackBuiltin b)) = execBuiltin' b
+runStep _ _ (ExecStep x) = stack =~ (x:)
 runStep _ onComment (CommentStep c) = onComment c
 runStep _ _ (ClosureStep True (StackClosure _ p)) = stack =~ (StackProg p:)
 runStep execBuiltin' onComment (ClosureStep _ c) = runClosure execBuiltin' onComment c
