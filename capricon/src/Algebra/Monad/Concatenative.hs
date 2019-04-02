@@ -1,12 +1,12 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, GeneralizedNewtypeDeriving, LambdaCase, DeriveGeneric #-}
 module Algebra.Monad.Concatenative(
   -- * Extensible stack types
-  StackBuiltin(..),StackSymbol(..),StackVal(..),StackStep(..),StackClosure(..),execValue,
+  StackBuiltin(..),StackSymbol(..),StackVal(..),StackStep(..),ClosureAction(..),StackClosure(..),execValue,
   t'StackDict,
   -- * The MonadStack class
   StackState,defaultState,
   MonadStack(..),
-  AtomClass(..),
+  BraceKind(..),AtomClass(..),
   -- ** A concrete implementation
   ConcatT,concatT,Opaque(..)) where
 
@@ -17,14 +17,16 @@ import GHC.Generics (Generic)
 newtype Opaque a = Opaque a
                  deriving (Generic)
 instance Show (Opaque a) where show _ = "#<opaque>"
-data StackStep s b a = VerbStep s | ConstStep (StackVal s b a) | CommentStep s | ClosureStep Bool (StackClosure s b a)
+data StackStep s b a = VerbStep s | ConstStep (StackVal s b a) | ExecStep (StackVal s b a) | CommentStep s | ClosureStep Bool (StackClosure s b a)
                      deriving (Show,Generic)
-data StackClosure s b a = StackClosure [(StackProgram s b a,StackClosure s b a)] (StackProgram s b a)
+data ClosureAction = CloseConstant | CloseExec
+                   deriving (Show,Generic)
+data StackClosure s b a = StackClosure ClosureAction [(StackProgram s b a,StackClosure s b a)] (StackProgram s b a)
                         deriving (Show,Generic)
 type StackProgram s b a = [StackStep s b a]
 
-i'StackClosure :: Iso' ([(StackProgram s b a,StackClosure s b a)],StackProgram s b a) (StackClosure s b a)
-i'StackClosure = iso (\(cs,c) -> StackClosure cs c) (\(StackClosure cs c) -> (cs,c))
+i'StackClosure :: Iso' ([(StackProgram s b a,StackClosure s b a)],StackProgram s b a,ClosureAction) (StackClosure s b a)
+i'StackClosure = iso (\(cs,c,act) -> StackClosure act cs c) (\(StackClosure act cs c) -> (cs,c,act))
 
 t'ClosureStep :: Traversal' (StackStep s b a) (StackClosure s b a)
 t'ClosureStep k (ClosureStep b c) = ClosureStep b<$>k c
@@ -41,26 +43,26 @@ closureSplices :: Fold' (StackClosure s b a) (StackClosure s b a)
 closureSplices = allSteps.t'ClosureStep.subClosure (1::Int)
                
 runClosure execBuiltin' onComment clos = do
-  p <- flatten =<< forl closureSplices clos (\c -> StackClosure [] <$> flatten c)
+  (_,p) <- flatten =<< forl closureSplices clos (\c -> flatten c <&> \(act,p) -> StackClosure act [] p)
   stack =~ (StackProg p:)
   
-  where flatten (StackClosure cs c) = do
-          pref <- map fold $ for cs $ \(i,StackClosure _ p) -> (i+) <$> do
+  where flatten (StackClosure act cs c) = do
+          pref <- map fold $ for cs $ \(i,StackClosure act' _ p) -> (i+) <$> do
             traverse_ (runStep execBuiltin' onComment) p
             stack <~ \case
-              (h:t) -> (t,[ConstStep h])
+              (h:t) -> (t,[case act' of CloseConstant -> ConstStep h ; CloseExec -> ExecStep h])
               [] -> ([],[])
-          return (pref + c)
+          return (act,pref + c)
           
 runStep execBuiltin' onComment (VerbStep s) = getl (dict.at s) >>= \case
-  Just v -> runVal v
+  Just v -> runStep execBuiltin' onComment (ExecStep v)
   Nothing -> stack =~ (StackSymbol s:)
-  where runVal (StackBuiltin b) = execBuiltin' b
-        runVal (StackProg p) = traverse_ (runStep execBuiltin' onComment) p
-        runVal x = stack =~ (x:)
 runStep _ _ (ConstStep v) = stack =~ (v:)
+runStep execBuiltin' onComment (ExecStep (StackProg p)) = traverse_ (runStep execBuiltin' onComment) p
+runStep execBuiltin' _ (ExecStep (StackBuiltin b)) = execBuiltin' b
+runStep _ _ (ExecStep x) = stack =~ (x:)
 runStep _ onComment (CommentStep c) = onComment c
-runStep _ _ (ClosureStep True (StackClosure _ p)) = stack =~ (StackProg p:)
+runStep _ _ (ClosureStep True (StackClosure _ _ p)) = stack =~ (StackProg p:)
 runStep execBuiltin' onComment (ClosureStep _ c) = runClosure execBuiltin' onComment c
 
 data StackBuiltin b = Builtin_ListBegin | Builtin_ListEnd
@@ -91,9 +93,10 @@ t'StackDict :: Traversal' (StackVal s b a) (Map s (StackVal s b a))
 t'StackDict k (StackDict d) = StackDict <$> k d
 t'StackDict _ x = return x
 
+data BraceKind = Brace | Splice ClosureAction
 data StackState st s b a = StackState {
   _stack :: [StackVal s b a],
-  _progStack :: [StackClosure s b a],
+  _progStack :: [(BraceKind,StackClosure s b a)],
   _dict :: Map s (StackVal s b a),
   _extraState :: st
   }
@@ -101,20 +104,20 @@ data StackState st s b a = StackState {
 
 stack :: Lens' (StackState st s b a) [StackVal s b a]
 stack = lens _stack (\x y -> x { _stack = y })
-progStack :: Lens' (StackState st s b a) [StackClosure s b a]
+progStack :: Lens' (StackState st s b a) [(BraceKind,StackClosure s b a)]
 progStack = lens _progStack (\x y -> x { _progStack = y })
 dict :: Lens' (StackState st s b a) (Map s (StackVal s b a))
 dict = lens _dict (\x y -> x { _dict = y })
 extraState :: Lens st st' (StackState st s b a) (StackState st' s b a)
 extraState = lens _extraState (\x y -> x { _extraState = y })
 
-data AtomClass s = OpenBrace | CloseBrace | OpenSplice | CloseSplice | Number Int | Quoted s | Comment s | Other s
+data AtomClass s = Close | Open BraceKind | Number Int | Quoted s | Comment s | Other s
 class Ord s => StackSymbol s where atomClass :: s -> AtomClass s
 instance StackSymbol String where
-  atomClass "{" = OpenBrace
-  atomClass "{@" = OpenSplice
-  atomClass "}" = CloseBrace
-  atomClass "@}" = CloseSplice
+  atomClass "{" = Open Brace
+  atomClass ",{" = Open (Splice CloseConstant)
+  atomClass "${" = Open (Splice CloseExec)
+  atomClass "}" = Close
   atomClass ('\'':t) = Quoted t
   atomClass ('"':t) = Quoted (init t)
   atomClass (':':t) = Comment t
@@ -124,27 +127,26 @@ execSymbolImpl :: (StackSymbol s, MonadState (StackState st s b a) m) => (StackB
 execSymbolImpl execBuiltin' onComment atom = do
   st <- get
   case (atomClass atom,st^.progStack) of
-    (OpenBrace,_) -> progStack =~ (StackClosure [] []:)
+    (Open Brace,_) -> progStack =~ ((Brace,StackClosure CloseExec [] []):)
+    (Open s@(Splice act),(k,StackClosure act' cs p):ps) ->
+      progStack =- (s,StackClosure act [] []):(k,StackClosure act' ((reverse p,StackClosure act [] []):cs) []):ps
+    (Open (Splice _),[]) -> unit
+    
+    (Close,(Splice _,StackClosure act cs p):(k,StackClosure act' cs' p'):ps) ->
+      progStack =- (k,StackClosure act' (set (t'1.l'2) (StackClosure act (reverse cs) (reverse p)) cs') p'):ps
 
-    (OpenSplice,StackClosure cs p:ps) ->
-      progStack =- StackClosure [] []:StackClosure ((reverse p,StackClosure [] []):cs) []:ps
-    (CloseSplice,StackClosure cs p:StackClosure cs' p':ps) ->
-      progStack =- StackClosure (set (t'1.l'2) (StackClosure (reverse cs) (reverse p)) cs') p':ps
-
-    (CloseBrace,StackClosure cs p:ps) -> do
+    (Close,(Brace,StackClosure act cs p):ps) -> do
       progStack =- ps
-      let c = StackClosure (reverse cs) (reverse p)
+      let c = StackClosure act (reverse cs) (reverse p)
       execStep ps (ClosureStep (not $ has (closureSplices .+ (from i'StackClosure.l'1.each.l'2)) c) c)
-    (CloseBrace,[]) -> unit
-    (OpenSplice,[]) -> unit
-    (CloseSplice,_) -> unit
+    (Close,_) -> unit
 
     (Quoted a,ps) -> execStep ps (ConstStep (StackSymbol a))
     (Comment a,ps) -> execStep ps (CommentStep a)
     (Number n,ps) -> execStep ps (ConstStep (StackInt n))
     (Other s,ps) -> execStep ps (VerbStep s)
   where execStep [] stp = runStep execBuiltin' onComment stp
-        execStep (StackClosure cs p:ps) stp = progStack =- (StackClosure cs (stp:p):ps)
+        execStep ((k,StackClosure act cs p):ps) stp = progStack =- ((k,StackClosure act cs (stp:p)):ps)
 
 execBuiltinImpl :: (StackSymbol s, MonadState (StackState st s b a) m) => (b -> m ()) -> (s -> m ()) -> StackBuiltin b -> m ()
 execBuiltinImpl runExtra onComment = go

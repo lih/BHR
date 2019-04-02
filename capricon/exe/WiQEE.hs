@@ -27,8 +27,9 @@ instance Monoid JS.JSString where zero = JSS.empty
 instance Sequence JS.JSString where splitAt = JSS.splitAt
 instance StackSymbol JS.JSString where
   atomClass c = case c JSS.! 0 of
-    '{' | JSS.length c==1 -> OpenBrace
-    '}' | JSS.length c==1 -> CloseBrace
+    '{' | JSS.length c==1 -> Open Brace
+    ',' | JSS.length c==2 && c JSS.! 1 == '{' -> Open Splice
+    '}' | JSS.length c==1 -> Close
     '\'' -> Quoted (drop 1 c)
     '"' -> Quoted (take (JSS.length c-2) (drop 1 c))
     ':' -> Comment (drop 1 c)
@@ -152,7 +153,7 @@ runWordsState ws st = ($st) $ from (stateT.concatT) $^ do
 runWithFS :: JS.JSString -> FSIO a -> JS.CIO a
 runWithFS fsname (FSIO r) = newFS fsname >>= r^..readerT
 
-hasteDict = cocDict ("0.11-js" :: String) getString getBytes setString setBytes
+hasteDict = cocDict ("0.12-js" :: String) getString getBytes setString setBytes
 
 main :: IO ()
 main = do

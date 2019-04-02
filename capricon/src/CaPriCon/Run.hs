@@ -27,6 +27,7 @@ data COCValue io str = COCExpr (ContextNode str (COCAxiom str))
                      | COCAlgebraic (Algebraic str)
                      | COCDir (NodeDir str (COCAxiom str) ([str],StackVal str (COCBuiltin io str) (COCValue io str)))
                      deriving Generic
+instance ListSerializable ClosureAction ; instance ListFormat ClosureAction
 instance (ListSerializable s,ListSerializable b,ListSerializable a) => ListSerializable (StackStep s b a)
 instance (ListSerializable s,ListSerializable b,ListSerializable a) => ListSerializable (StackClosure s b a)
 instance (ListSerializable s,ListSerializable b,ListSerializable a) => ListSerializable (StackVal s b a)
@@ -62,11 +63,14 @@ showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
   StackDict d -> "[<"+intercalate "," (map (\(k,v) -> k+": "+go v) (d^.ascList))+">]"
   StackProg p ->
     let showStep (ConstStep x) = go x
+        showStep (ExecStep x) = "$("+go x+")"
         showStep (ClosureStep b c) = fromString (show b)+":"+showClosure c
         showStep (VerbStep v) = v
         showStep (CommentStep x) = ":"+x
         showSteps p' = intercalate " " (map showStep p')
-        showClosure (StackClosure cs c) = "{ "+intercalate " " (map (\(i,c') -> showSteps i+" "+showClosure c') cs + map showStep c)+" }"
+        showClosure (StackClosure act cs c) =
+          (case act of CloseExec -> "$" ; _ -> ",")
+          +"{ "+intercalate " " (map (\(i,c') -> showSteps i+" "+showClosure c') cs + map showStep c)+" }"
     in "{ "+showSteps p+" }"
   _ -> fromString $ show _x
 data COCBuiltin io str = COCB_Print | COCB_Quit

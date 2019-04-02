@@ -3,7 +3,7 @@ IFSBAK="$IFS"
 declare -A PKGS
 while read pkg ver; do
     PKGS[$pkg]="$ver"
-done < <(stack ls dependencies)
+done < <(stack ls dependencies "$@")
 for file in */*.cabal; do
     while IFS= read line; do
         case "$line" in
