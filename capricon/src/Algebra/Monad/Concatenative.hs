@@ -66,7 +66,7 @@ runStep _ _ (ClosureStep True (StackClosure _ _ p)) = stack =~ (StackProg p:)
 runStep execBuiltin' onComment (ClosureStep _ c) = runClosure execBuiltin' onComment c
 
 data StackBuiltin b = Builtin_ListBegin | Builtin_ListEnd
-                    | Builtin_Clear | Builtin_Stack
+                    | Builtin_Clear | Builtin_Stack | Builtin_SetStack
                     | Builtin_Pick | Builtin_Shift | Builtin_Shaft
                     | Builtin_Pop  | Builtin_PopN
                     | Builtin_Dup  | Builtin_DupN
@@ -163,6 +163,9 @@ execBuiltinImpl runExtra onComment = go
                                              ex acc [] = (acc,[])
                                          in let (h,t) = ex [] st in StackList h:t
     go Builtin_Stack = stack =~ \x -> StackList x:x
+    go Builtin_SetStack = stack =~ \case
+      (StackList s:_) -> s
+      st -> st
     go Builtin_Clear = stack =- []
     go Builtin_Pick = stack =~ \st -> case st of StackInt i:StackInt n:t | i<n, x:t' <- drop i t -> x:drop (n-i-1) t'
                                                  _ -> st
