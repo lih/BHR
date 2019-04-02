@@ -28,7 +28,8 @@ instance Sequence JS.JSString where splitAt = JSS.splitAt
 instance StackSymbol JS.JSString where
   atomClass c = case c JSS.! 0 of
     '{' | JSS.length c==1 -> Open Brace
-    ',' | JSS.length c==2 && c JSS.! 1 == '{' -> Open Splice
+    ',' | JSS.length c==2 && c JSS.! 1 == '{' -> Open (Splice CloseConstant)
+    '$' | JSS.length c==2 && c JSS.! 1 == '{' -> Open (Splice CloseExec)
     '}' | JSS.length c==1 -> Close
     '\'' -> Quoted (drop 1 c)
     '"' -> Quoted (take (JSS.length c-2) (drop 1 c))
