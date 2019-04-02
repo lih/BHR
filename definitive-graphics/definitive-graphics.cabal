@@ -53,7 +53,7 @@ library
   -- other-modules:
   default-extensions: RebindableSyntax, NoMonomorphismRestriction, TypeOperators, ViewPatterns, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, TupleSections, RankNTypes, ExistentialQuantification, GeneralizedNewtypeDeriving, RecursiveDo, ImplicitParams
   -- other-extensions:
-  build-depends:       base >=4.9 && <4.10, definitive-base, definitive-parser, OpenGL, OpenGLRaw, JuicyPixels, GLFW, StateVar
+  build-depends: base,definitive-base,definitive-parser,GLFW,JuicyPixels,OpenGL,OpenGLRaw,StateVar
   hs-source-dirs:      source
   pkgconfig-depends:     gtk+-3.0, vte-2.90
   ghc-options: -pgmP cpp

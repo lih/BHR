@@ -33,6 +33,6 @@ executable curly-gui
                       GeneralizedNewtypeDeriving
                       RecursiveDo
                       ImplicitParams
-  build-depends:       base >=4.9 && <4.10, definitive-base, definitive-graphics, curly-core, curly, definitive-network, definitive-parser
+  build-depends: base,curly,curly-core,definitive-base,definitive-graphics,definitive-network,definitive-parser
   hs-source-dirs:      exe
   default-language:    Haskell2010
