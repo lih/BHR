@@ -428,6 +428,7 @@ cocDict version getResource getBResource writeResource writeBResource =
                ("set-vocabulary"          , Builtin_SetCurrentDict                ),
 
                ("stack"                   , Builtin_Stack                         ),
+               ("set-stack"               , Builtin_SetStack                      ),
                ("clear"                   , Builtin_Clear                         ),
                ("shift"                   , Builtin_Shift                         ),
                ("shaft"                   , Builtin_Shaft                         ),
