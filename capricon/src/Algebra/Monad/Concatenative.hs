@@ -6,7 +6,7 @@ module Algebra.Monad.Concatenative(
   -- * The MonadStack class
   StackState,defaultState,
   MonadStack(..),
-  AtomClass(..),
+  BraceKind(..),AtomClass(..),
   -- ** A concrete implementation
   ConcatT,concatT,Opaque(..)) where
 
