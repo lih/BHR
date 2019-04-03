@@ -507,22 +507,13 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
           p:'[':[] -> "<"+codeTag p+codeAttrs p+">"
           p:']':[] -> "</"+codeTag p+">"
           'x':'=':_ -> let qcode = htmlQuote (drop 2 c) in
-                         "<button class=\"capricon-example\" data-code=\""+qcode+"\">"+qcode+"</button>"
+                         "<button class=\"capricon-example\" data-code=\""+qcode+"\"><code class=\"capricon\">"+markSyntax (drop 2 c)+"</code></button>"
           'c':'p':'[':n ->
             let (nlines,hasExamples) = read n :: (Int,Bool)
             in wrapStart True nlines hasExamples+"<div class=\"capricon-steps\">"
                       +"<pre class=\"capricon capricon-paragraph capricon-context\">"
             
-          'c':'p':'=':_ -> fold [if isWord then
-                                    let qw = htmlQuote w
-                                        withSpans | w=="{" = \x -> "<span class=\"quote quote-brace\">"+x
-                                                  | w==",{" = \x -> "<span class=\"quote quote-splice\">"+x
-                                                  | w=="${" = \x -> "<span class=\"quote quote-exec\">"+x
-                                                  | w=="}" = \x -> x+"</span>"
-                                                  | otherwise = \x -> x
-                                    in withSpans ("<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>")
-                                  else w
-                                | (isWord,w) <- stringWordsAndSpaces (drop 3 c)]+"</pre>"
+          'c':'p':'=':_ -> markSyntax (drop 3 c)+"</pre>"
           'c':'p':']':[] -> "<div class=\"user-input interactive\">"
                             +"<button class=\"capricon-trigger\">Try It Out</button>"
                             +"<label class=\"capricon-input-prefix\">&gt;&nbsp;<input type=\"text\" class=\"capricon-input\" /></label>"
@@ -540,7 +531,18 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
         codeAttrs 's' = " class=\"capricon-result\""
         codeAttrs 'x' = " class=\"capricon-examples\""
         codeAttrs _ = ""
-        
+
+        markSyntax str = fold [if isWord then
+                                 let qw = htmlQuote w
+                                     withSpans | w=="{" = \x -> "<span class=\"quote quote-brace\">"+x
+                                               | w==",{" = \x -> "<span class=\"quote quote-splice\">"+x
+                                               | w=="${" = \x -> "<span class=\"quote quote-exec\">"+x
+                                               | w=="}" = \x -> x+"</span>"
+                                               | otherwise = \x -> x
+                                 in withSpans ("<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>")
+                               else w
+                             | (isWord,w) <- stringWordsAndSpaces str]
+          
         wrapStart isP nlines hasExamples =
           let hide = if isP then "hideparagraph" else "hidestache"
               chk = if isP then "" else " checked=\"checked\""
