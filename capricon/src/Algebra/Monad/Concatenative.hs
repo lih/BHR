@@ -43,7 +43,7 @@ subClosure n = \k (StackClosure act ps p) ->
                             (traversel (subClosure (n-1)) k px)) ps
   <*> traversel (each.t'ClosureStep.subClosure (n+1)) k p
 
-closureSplices :: Fold' (StackClosure s b a) (StackClosure s b a)
+closureSplices :: Traversal' (StackClosure s b a) (StackClosure s b a)
 closureSplices = allSteps.t'ClosureStep.subClosure (1::Int)
                
 runClosure execBuiltin' onComment clos = do
