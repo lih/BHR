@@ -33,11 +33,15 @@ t'ClosureStep k (ClosureStep b c) = ClosureStep b<$>k c
 t'ClosureStep _ x = pure x
 
 allSteps :: Traversal' (StackClosure s b a) (StackStep s b a)
-allSteps k (StackClosure act ps p) = StackClosure act<$>(traverse.traversel (l'1.each)) k ps<*>traverse k p
-subClosure :: Int -> Fold' (StackClosure s b a) (StackClosure s b a)
+allSteps k (StackClosure act ps p) = StackClosure act<$>(each.traversel (l'1.each)) k ps<*>traverse k p
+subClosure :: Int -> Traversal' (StackClosure s b a) (StackClosure s b a)
 subClosure 0 = id
-subClosure n = (allSteps.t'ClosureStep.subClosure (n+1))
-               .+ (from i'StackClosure.l'1.each.l'2.subClosure (n-1))
+subClosure n = \k (StackClosure act ps p) ->
+  StackClosure act
+  <$> traverse (\(ph,px) -> liftA2 (,)
+                            (traversel (each.t'ClosureStep.subClosure (n+1)) k ph)
+                            (traversel (subClosure (n-1)) k px)) ps
+  <*> traversel (each.t'ClosureStep.subClosure (n+1)) k p
 
 closureSplices :: Fold' (StackClosure s b a) (StackClosure s b a)
 closureSplices = allSteps.t'ClosureStep.subClosure (1::Int)
