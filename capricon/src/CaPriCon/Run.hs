@@ -116,16 +116,16 @@ htmlQuote = fromString . foldMap qChar . toString
         qChar '"' = "&quot;"
         qChar c = [c]
 stringWords :: IsCapriconString str => str -> [str]
-stringWords x = [w | (True,w) <- stringWordsAndSpaces x]
+stringWords x = [w | (True,w) <- stringWordsAndSpaces True x]
 
-stringWordsAndSpaces :: IsCapriconString str => str -> [(Bool,str)]
-stringWordsAndSpaces = map (second fromString) . fromBlank id . toString
+stringWordsAndSpaces :: IsCapriconString str => Bool -> str -> [(Bool,str)]
+stringWordsAndSpaces unquoteStrings = map (second fromString) . fromBlank id . toString
   where fromBlank k (c:t) | c `elem` [' ', '\t', '\r', '\n'] = fromBlank (k.(c:)) t
                           | c == '"' = (False,k ""):fromQuote id t
                           | otherwise = (False,k ""):fromWChar (c:) t
         fromBlank k "" = [(False,k "")]
         fromQuote k ('"':t) = (True,'"':k "\""):fromBlank id t
-        fromQuote k ('\\':c:t) = fromQuote (k.(qChar c:)) t
+        fromQuote k ('\\':c:t) | unquoteStrings = fromQuote (k.(qChar c:)) t
           where qChar 'n' = '\n' ; qChar 't' = '\t' ; qChar x = x
         fromQuote k (c:t) = fromQuote (k.(c:)) t
         fromQuote k "" = [(True,'"':k "\"")]
@@ -541,7 +541,7 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                                                | otherwise = \x -> x
                                  in withSpans ("<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>")
                                else w
-                             | (isWord,w) <- stringWordsAndSpaces str]
+                             | (isWord,w) <- stringWordsAndSpaces False str]
           
         wrapStart isP nlines hasExamples =
           let hide = if isP then "hideparagraph" else "hidestache"
