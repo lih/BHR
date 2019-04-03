@@ -32,27 +32,36 @@ t'ClosureStep :: Traversal' (StackStep s b a) (StackClosure s b a)
 t'ClosureStep k (ClosureStep b c) = ClosureStep b<$>k c
 t'ClosureStep _ x = pure x
 
-allSteps :: Fold' (StackClosure s b a) (StackStep s b a)
-allSteps = from i'StackClosure.(l'1.each.l'1.each .+ l'2.each)
-subClosure :: Int -> Fold' (StackClosure s b a) (StackClosure s b a)
+subClosure :: Int -> Traversal' (StackClosure s b a) (StackClosure s b a)
 subClosure 0 = id
-subClosure n = (allSteps.t'ClosureStep.subClosure (n+1))
-               .+ (from i'StackClosure.l'1.each.l'2.subClosure (n-1))
+subClosure n = \k (StackClosure act ps p) ->
+  StackClosure act
+  <$> traverse (\(ph,px) -> liftA2 (,)
+                            (traversel (each.t'ClosureStep.subClosure (n+1)) k ph)
+                            (traversel (subClosure (n-1)) k px)) ps
+  <*> traversel (each.t'ClosureStep.subClosure (n+1)) k p
 
-closureSplices :: Fold' (StackClosure s b a) (StackClosure s b a)
-closureSplices = allSteps.t'ClosureStep.subClosure (1::Int)
+allSteps :: (forall f. Applicative f => StackClosure s b a -> f (StackClosure s b a))
+         -> Traversal' (StackClosure s b a) (StackStep s b a)
+allSteps sub k (StackClosure act ps p) =
+  StackClosure act<$>traverse (\(ph,c) -> liftA2 (,) (each k ph) (sub c)) ps<*>traverse k p
+
+closureSplices :: Traversal' (StackClosure s b a) (StackClosure s b a)
+closureSplices = allSteps pure.t'ClosureStep.subClosure (1::Int)
                
 runClosure execBuiltin' onComment clos = do
-  (_,p) <- flatten =<< forl closureSplices clos (\c -> flatten c <&> \(act,p) -> StackClosure act [] p)
+  (_,p) <- flatten clos
   stack =~ (StackProg p:)
   
-  where flatten (StackClosure act cs c) = do
-          pref <- map fold $ for cs $ \(i,StackClosure act' _ p) -> (i+) <$> do
-            traverse_ (runStep execBuiltin' onComment) p
-            stack <~ \case
-              (h:t) -> (t,[case act' of CloseConstant -> ConstStep h ; CloseExec -> ExecStep h])
-              [] -> ([],[])
-          return (act,pref + c)
+  where flattenSteps = traversel (each.t'ClosureStep.subClosure 1)
+                       (\c -> flatten c <&> \(act,p) -> StackClosure act [] p)
+        flatten (StackClosure act cs c) = (act,) <$> liftA2 (+)
+          (map fold $ for cs $ \(i,StackClosure act' _ p) -> (+) <$> flattenSteps i <*> do
+              traverse_ (runStep execBuiltin' onComment) p
+              stack <~ \case
+                (h:t) -> (t,[case act' of CloseConstant -> ConstStep h ; CloseExec -> ExecStep h])
+                [] -> ([],[]))
+          (flattenSteps c)
           
 runStep execBuiltin' onComment (VerbStep s) = getl (dict.at s) >>= \case
   Just v -> runStep execBuiltin' onComment (ExecStep v)
