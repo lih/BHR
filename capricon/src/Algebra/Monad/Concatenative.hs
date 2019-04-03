@@ -32,8 +32,8 @@ t'ClosureStep :: Traversal' (StackStep s b a) (StackClosure s b a)
 t'ClosureStep k (ClosureStep b c) = ClosureStep b<$>k c
 t'ClosureStep _ x = pure x
 
-allSteps :: Fold' (StackClosure s b a) (StackStep s b a)
-allSteps = from i'StackClosure.(l'1.each.l'1.each .+ l'2.each)
+allSteps :: Traversal' (StackClosure s b a) (StackStep s b a)
+allSteps k (StackClosure act ps p) = StackClosure act<$>(traverse.traversel (l'1.each)) k ps<*>traverse k p
 subClosure :: Int -> Fold' (StackClosure s b a) (StackClosure s b a)
 subClosure 0 = id
 subClosure n = (allSteps.t'ClosureStep.subClosure (n+1))
