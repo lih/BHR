@@ -515,9 +515,9 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
             
           'c':'p':'=':_ -> fold [if isWord then
                                     let qw = htmlQuote w
-                                        withSpans | w=="{" = \x -> "<span class=\"quote\">"+x
-                                                  | w==",{" = \x -> "<span class=\"unquote\">"+x
-                                                  | w=="${" = \x -> "<span class=\"splice\">"+x
+                                        withSpans | w=="{" = \x -> "<span class=\"quote quote-brace\">"+x
+                                                  | w==",{" = \x -> "<span class=\"quote quote-splice\">"+x
+                                                  | w=="${" = \x -> "<span class=\"quote quote-exec\">"+x
                                                   | w=="}" = \x -> x+"</span>"
                                                   | otherwise = \x -> x
                                     in withSpans ("<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>")
