@@ -1,0 +1,15 @@
+#!/bin/bash
+set -ue
+commit="$1"
+git checkout master
+git checkout -b master-new
+git merge "$commit"
+git rebase -i master
+git checkout history
+git merge "$commit"
+git merge --no-ff -m "Commit-burger from master" master-new
+git checkout autocommit
+git rebase history
+git checkout master
+git merge master-new
+git branch -d master-new
