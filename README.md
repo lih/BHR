@@ -1,6 +1,8 @@
 Marc's Big Haskell Repository
 =============================
 
+![BHR.svg](https://travis-ci.org/lih/BHR.svg?branch=master)
+
 This BHR serves as the entire collection of all the Haskell packages
 I've written over the years. There are some libraries (definitive-*),
 some serious executables (curly), and some random unfinished wankery
