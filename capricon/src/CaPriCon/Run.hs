@@ -544,10 +544,12 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                              | (isWord,w) <- stringWordsAndSpaces False str]
           
         wrapStart isP nlines hasExamples =
-          let hide = if isP then "hideparagraph" else "hidestache"
+          let hide = if isP then "box" else "inline"
               chk = if isP then "" else " checked=\"checked\""
-          in "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\""+chk+"/><span class=\"capricon-"
-             + hide +"\"></span><span class=\"capricon-reveal"+(if hasExamples then " capricon-with-examples" else "")+"\" data-linecount=\""
+          in "<label class=\"expansible "+hide+
+             "\"><input type=\"checkbox\""+chk+
+             "/><span class=\"expand-else capricon-show\"></span><span class=\"expand-then capricon-hide\"></span>"
+             +"\"></span><span class=\"expand-then"+(if hasExamples then " capricon-with-examples" else "")+"\" style=\"--num-lines: "
              + fromString (show nlines)+"\">"
         wrapEnd = "</span></label>"
   
