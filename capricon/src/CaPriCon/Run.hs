@@ -551,6 +551,6 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
              "<span class=\"expand-else capricon-show\"></span>"+
              "<span class=\"expand-then capricon-hide\"></span>"+
              "<span class=\"expand-then"+(if hasExamples then " capricon-with-examples" else "")+"\" style=\"--num-lines: "
-             + fromString (show nlines)+"\">"
+             + fromString (show (1+nlines :: Int))+"\">"
         wrapEnd = "</span></label>"
   
