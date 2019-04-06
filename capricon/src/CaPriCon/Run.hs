@@ -147,12 +147,12 @@ literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> "
                                           ((,) <$> sepBy1' go (single '\n') <*> option' [] ("\n" >> sepBy1' go_ex (single '\n')))
       where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x+["steps."]))
             go_ex = do pre_ex; many' (noneOf ['\n']) <&> fromString
-    commentline = map (foldMap (pure . (":s"+) <|> \(x,t) -> t+[":cs"+x])) $ (<* lookingAt eol)
+    commentline = map (foldMap (pure . (":s"+) <|> \(x,t) -> ":s[":t+[":cs"+x,":s]" :: str])) $ (<* lookingAt eol)
       $ many' (map (Left . fromString) (many1' (noneOf ['{','\n'] <+?
                                                 (fill '{' $ single '{' <* lookingAt (noneOf ['{']))))
                 <+? map Right (between "{{" "}}"
                                 (many1' (noneOf ['}'] <+? fill '}' (single '}' <* lookingAt (noneOf ['}'])))
-                                 <&> \x -> (fromString x,wrapResult False (stringWords (fromString x)+["mustache."])))))
+                                 <&> \x -> (fromString x,stringWords (fromString x)+["mustache."]))))
 
 data COCState str = COCState {
   _endState :: Bool,
@@ -504,8 +504,6 @@ cocDict version getResource getBResource writeResource writeBResource =
 
 outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
   where commentText = case toString c of
-          p:'[':[] -> "<"+codeTag p+codeAttrs p+">"
-          p:']':[] -> "</"+codeTag p+">"
           'x':'=':_ -> let qcode = htmlQuote (drop 2 c) in
                          "<button class=\"capricon-example\" data-code=\""+qcode+"\"><pre class=\"capricon\">"+markSyntax (drop 2 c)+"</pre></button>"
           'c':'p':'[':n ->
@@ -519,7 +517,12 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                             +"<label class=\"capricon-input-prefix\">&gt;&nbsp;<input type=\"text\" class=\"capricon-input\" /></label>"
                             +"<pre class=\"capricon-output\"></pre></div>"
                             +"</div>"+wrapEnd
-          'c':'s':_ -> wrapStart False 1 False+"<code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"+wrapEnd
+          's':'[':[] -> wrapStart False 1 False 
+          'c':'s':_ -> "</span><input type=\"checkbox\"/>"+
+                      "<span class=\"expand-then\"><code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"
+          's':']':[] -> wrapEnd
+          p:'[':[] -> "<"+codeTag p+codeAttrs p+">"
+          p:']':[] -> "</"+codeTag p+">"
           's':_ -> drop 1 c
           _ -> ""
 
@@ -544,10 +547,15 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                              | (isWord,w) <- stringWordsAndSpaces False str]
           
         wrapStart isP nlines hasExamples =
-          let hide = if isP then "hideparagraph" else "hidestache"
-              chk = if isP then "" else " checked=\"checked\""
-          in "<label class=\"hide-label\"><input type=\"checkbox\" class=\"capricon-hide\""+chk+"/><span class=\"capricon-"
-             + hide +"\"></span><span class=\"capricon-reveal"+(if hasExamples then " capricon-with-examples" else "")+"\" data-linecount=\""
-             + fromString (show nlines)+"\">"
+          let hide = if isP then "box" else "inline"
+          in "<label class=\"expansible "+hide+"\">"+
+             if isP then
+               "<input type=\"checkbox\" checked=\"checked\"/>"+
+               "<span class=\"expand-else capricon-show\"></span>"+
+               "<span class=\"expand-then capricon-hide\"></span>"+
+               "<span class=\"expand-then"+(if hasExamples then " capricon-with-examples" else "")+"\" style=\"--num-lines: "
+               + fromString (show (1.25 + (if hasExamples then 1.25 else 0) + fromIntegral nlines :: Float))+"\">"
+             else
+               "<span>"
         wrapEnd = "</span></label>"
   
