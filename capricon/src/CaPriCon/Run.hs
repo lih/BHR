@@ -546,10 +546,11 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
         wrapStart isP nlines hasExamples =
           let hide = if isP then "box" else "inline"
               chk = if isP then "" else " checked=\"checked\""
-          in "<label class=\"expansible "+hide+
-             "\"><input type=\"checkbox\""+chk+
-             "/><span class=\"expand-else capricon-show\"></span><span class=\"expand-then capricon-hide\"></span>"
-             +"\"></span><span class=\"expand-then"+(if hasExamples then " capricon-with-examples" else "")+"\" style=\"--num-lines: "
+          in "<label class=\"expansible "+hide+"\">"+
+             "<input type=\"checkbox\""+chk+"/>"+
+             "<span class=\"expand-else capricon-show\"></span>"+
+             "<span class=\"expand-then capricon-hide\"></span>"+
+             "<span class=\"expand-then"+(if hasExamples then " capricon-with-examples" else "")+"\" style=\"--num-lines: "
              + fromString (show nlines)+"\">"
         wrapEnd = "</span></label>"
   
