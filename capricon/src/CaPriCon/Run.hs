@@ -545,7 +545,7 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
           
         wrapStart isP nlines hasExamples =
           let hide = if isP then "box" else "inline"
-              chk = if isP then "" else " checked=\"checked\""
+              chk = if isP then " checked=\"checked\"" else ""
           in "<label class=\"expansible "+hide+"\">"+
              "<input type=\"checkbox\""+chk+"/>"+
              "<span class=\"expand-else capricon-show\"></span>"+
