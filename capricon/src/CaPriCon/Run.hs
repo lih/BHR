@@ -518,7 +518,7 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                             +"<pre class=\"capricon-output\"></pre></div>"
                             +"</div>"+wrapEnd
           's':'[':[] -> wrapStart False 1 False 
-          'c':'s':_ -> "<code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"
+          'c':'s':_ -> "</span><span class=\"expand-then\"><code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"
           's':']':[] -> wrapEnd
           p:'[':[] -> "<"+codeTag p+codeAttrs p+">"
           p:']':[] -> "</"+codeTag p+">"
@@ -550,9 +550,12 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
               chk = if isP then " checked=\"checked\"" else ""
           in "<label class=\"expansible "+hide+"\">"+
              "<input type=\"checkbox\""+chk+"/>"+
-             "<span class=\"expand-else capricon-show\"></span>"+
-             "<span class=\"expand-then capricon-hide\"></span>"+
-             "<span class=\"expand-then"+(if hasExamples then " capricon-with-examples" else "")+"\" style=\"--num-lines: "
-             + fromString (show ((if isP then 1.25 + (if hasExamples then 1.25 else 0) else 0) + fromIntegral nlines :: Float))+"\">"
+             if isP then
+               "<span class=\"expand-else capricon-show\"></span>"+
+               "<span class=\"expand-then capricon-hide\"></span>"+
+               "<span class=\"expand-then"+(if hasExamples then " capricon-with-examples" else "")+"\" style=\"--num-lines: "
+               + fromString (show (1.25 + (if hasExamples then 1.25 else 0) + fromIntegral nlines :: Float))+"\">"
+             else
+               "<span class=\"expand-else capricon-show\">"
         wrapEnd = "</span></label>"
   
