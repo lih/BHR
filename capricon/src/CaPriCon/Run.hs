@@ -518,7 +518,8 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                             +"<pre class=\"capricon-output\"></pre></div>"
                             +"</div>"+wrapEnd
           's':'[':[] -> wrapStart False 1 False 
-          'c':'s':_ -> "</span><span class=\"expand-then\"><code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"
+          'c':'s':_ -> "</span><input type=\"checkbox\" checked=\"checked\"/>"+
+                      "<span class=\"expand-then\"><code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"
           's':']':[] -> wrapEnd
           p:'[':[] -> "<"+codeTag p+codeAttrs p+">"
           p:']':[] -> "</"+codeTag p+">"
@@ -547,10 +548,9 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
           
         wrapStart isP nlines hasExamples =
           let hide = if isP then "box" else "inline"
-              chk = if isP then " checked=\"checked\"" else ""
           in "<label class=\"expansible "+hide+"\">"+
-             "<input type=\"checkbox\""+chk+"/>"+
              if isP then
+               "<input type=\"checkbox\" checked=\"checked\"/>"+
                "<span class=\"expand-else capricon-show\"></span>"+
                "<span class=\"expand-then capricon-hide\"></span>"+
                "<span class=\"expand-then"+(if hasExamples then " capricon-with-examples" else "")+"\" style=\"--num-lines: "
