@@ -518,7 +518,7 @@ outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
                             +"<pre class=\"capricon-output\"></pre></div>"
                             +"</div>"+wrapEnd
           's':'[':[] -> wrapStart False 1 False 
-          'c':'s':_ -> "</span><input type=\"checkbox\" checked=\"checked\"/>"+
+          'c':'s':_ -> "</span><input type=\"checkbox\"/>"+
                       "<span class=\"expand-then\"><code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"
           's':']':[] -> wrapEnd
           p:'[':[] -> "<"+codeTag p+codeAttrs p+">"
