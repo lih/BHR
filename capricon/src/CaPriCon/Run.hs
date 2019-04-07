@@ -134,17 +134,22 @@ stringWordsAndSpaces unquoteStrings = map (second fromString) . fromBlank id . t
         fromWChar k "" = [(True,k "")]
 
 literate :: forall str. IsCapriconString str => Parser String [str]
-literate = intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> " "$>? " <+? commentline) (single '\n')
+literate = liftA2 (\pref r -> pref + [":s"+fromString r])
+           (intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> " "$>? " <+? commentline) (single '\n'))
+           remaining
   where
     wrapResult :: Bool -> [str] -> [str]
     wrapResult isParagraph l = case isParagraph of
       True -> ":p[":l+[":p]"]
       False -> ":s[":l+[":s]"]
     cmdline :: Parser String () -> Parser String () -> Parser String [str]
-    cmdline pre pre_ex = map (\(x,exs) -> [":cp["+fromString (show (length x,if nonempty exs then True else False)),":cp="+intercalate "\n" (map fst x)]
-                                          + (if nonempty exs then ":x[":[":x="+ex | ex <- exs]+[":x]"] else [])
-                                          + (":cp]":wrapResult True (foldMap snd x)))
-                                          ((,) <$> sepBy1' go (single '\n') <*> option' [] ("\n" >> sepBy1' go_ex (single '\n')))
+    cmdline pre pre_ex = do
+      indent <- many' (oneOf [' ','\t'])
+      map (\(x,exs) -> [":s"+fromString indent
+                       ,":cp["+fromString (show (length x,if nonempty exs then True else False)),":cp="+intercalate "\n" (map fst x)]
+                       + (if nonempty exs then ":x[":[":x="+ex | ex <- exs]+[":x]"] else [])
+                       + (":cp]":wrapResult True (foldMap snd x)))
+        ((,) <$> sepBy1' go (single '\n') <*> option' [] ("\n" >> sepBy1' go_ex (single '\n')))
       where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x+["steps."]))
             go_ex = do pre_ex; many' (noneOf ['\n']) <&> fromString
     commentline = map (foldMap (pure . (":s"+) <|> \(x,t) -> ":s[":t+[":cs"+x,":s]" :: str])) $ (<* lookingAt eol)
