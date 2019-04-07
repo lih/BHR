@@ -39,10 +39,10 @@ executable capricon
   ghc-options: -Wincomplete-patterns -Wname-shadowing -W -Werror
   hs-source-dirs:      exe
   default-language:    Haskell2010
-executable WiQEE.js
+executable capricon-engine.js
   if !impl(haste)
     buildable: False
-  main-is:             WiQEE.hs
+  main-is:             CaPriCon_Engine.hs
   default-extensions: RebindableSyntax, ViewPatterns, TupleSections, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, LambdaCase, TypeOperators, RankNTypes, GeneralizedNewtypeDeriving, TypeFamilies
   -- other-modules:       
   -- other-extensions:    
