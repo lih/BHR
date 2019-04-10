@@ -534,6 +534,11 @@ cocDict version getResource getBResource writeResource writeBResource =
         atP (h,[]) = at h
         atP (h,x:t) = at h.l'Just (StackDict zero).t'StackDict.atP (x,t)
 
+outputComment :: forall str io m.
+                 (MonadSubIO io m,IsCapriconString str,
+                  MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m,
+                  IOListFormat io str,ListFormat str) =>
+                 StackComment str -> m ()
 outputComment c = execProgram runCOCBuiltin (\_ -> unit) (renderComment c)
 
 markSyntax str = fold [if isWord then
