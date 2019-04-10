@@ -197,6 +197,8 @@ modifyCOCEnv (Just (modE,ctx)) = do
   runExtraState (context =- ctx)
   modifyAllExprs modE
 
+execSymbolOrComment x = execSymbol runCOCBuiltin outputComment $ (Comment <|> atomClass) x
+
 runCOCBuiltin :: forall str io m.
                  (MonadSubIO io m,IsCapriconString str,
                   MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m,
@@ -233,8 +235,7 @@ runCOCBuiltin (COCB_Open (ReadImpl getResource)) = do
     StackSymbol f:t -> do
       runStackState $ put t
       xs <- liftSubIO (getResource (f+".md")) >>= maybe undefined return . matches Just literate . (const "" <|> toString)
-      let ex x = execSymbol runCOCBuiltin outputComment $ (Comment <|> atomClass) x
-      ex (Right "{") >> traverse_ ex xs >> ex (Right "}")
+      execSymbolOrComment (Right "{") >> traverse_ execSymbolOrComment xs >> execSymbolOrComment (Right "}")
     _ -> return ()
                      
 runCOCBuiltin COCB_ToInt = runStackState $ modify $ \case
