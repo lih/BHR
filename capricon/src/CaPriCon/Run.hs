@@ -216,7 +216,8 @@ runCOCBuiltin COCB_Axiom = runStackState $ modify $ \case
 runCOCBuiltin COCB_Format = do
   ex <- runExtraState get
   let format ('%':'s':s) (StackSymbol h:t) = first (h+) (format s t)
-      format ('%':'q':s) (StackSymbol h:t) = first (htmlQuote h+) (format s t)
+      format ('%':'a':s) (StackSymbol h:t) = first (htmlQuote h+) (format s t)
+      format ('%':'n':s) (StackSymbol h:t) = first (markSyntax h+) (format s t)
       format ('%':'v':s) (x:t) = first (showStackVal doc2raw (ex^.showDir) (ex^.context) x+) (format s t)
       format ('%':'g':s) (x:t) = first (showStackVal doc2svg (ex^.showDir) (ex^.context) x+) (format s t)
       format ('%':'l':s) (x:t) = first (showStackVal doc2latex (ex^.showDir) (ex^.context) x+) (format s t)
@@ -528,4 +529,14 @@ cocDict version getResource getBResource writeResource writeBResource =
         atP (h,x:t) = at h.l'Just (StackDict zero).t'StackDict.atP (x,t)
 
 outputComment c = execProgram runCOCBuiltin (\_ -> unit) (renderComment c)
-  
+
+markSyntax str = fold [if isWord then
+                          let qw = htmlQuote w
+                              withSpans | w=="{" = \x -> "<span class=\"quote quote-brace\">"+x
+                                        | w==",{" = \x -> "<span class=\"quote quote-splice\">"+x
+                                        | w=="${" = \x -> "<span class=\"quote quote-exec\">"+x
+                                        | w=="}" = \x -> x+"</span>"
+                                        | otherwise = \x -> x
+                          in withSpans ("<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>")
+                        else w
+                      | (isWord,w) <- stringWordsAndSpaces False str]
