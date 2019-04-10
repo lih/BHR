@@ -216,6 +216,7 @@ runCOCBuiltin COCB_Axiom = runStackState $ modify $ \case
 runCOCBuiltin COCB_Format = do
   ex <- runExtraState get
   let format ('%':'s':s) (StackSymbol h:t) = first (h+) (format s t)
+      format ('%':'q':s) (StackSymbol h:t) = first (htmlQuote h+) (format s t)
       format ('%':'v':s) (x:t) = first (showStackVal doc2raw (ex^.showDir) (ex^.context) x+) (format s t)
       format ('%':'g':s) (x:t) = first (showStackVal doc2svg (ex^.showDir) (ex^.context) x+) (format s t)
       format ('%':'l':s) (x:t) = first (showStackVal doc2latex (ex^.showDir) (ex^.context) x+) (format s t)
