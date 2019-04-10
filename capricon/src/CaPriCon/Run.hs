@@ -197,6 +197,11 @@ modifyCOCEnv (Just (modE,ctx)) = do
   runExtraState (context =- ctx)
   modifyAllExprs modE
 
+execSymbolOrComment :: forall str io m.
+                       (MonadSubIO io m,IsCapriconString str,
+                        MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m,
+                        IOListFormat io str,ListFormat str) =>
+                       StackComment str :+: str -> m ()
 execSymbolOrComment x = execSymbol runCOCBuiltin outputComment $ (Comment <|> atomClass) x
 
 runCOCBuiltin :: forall str io m.
