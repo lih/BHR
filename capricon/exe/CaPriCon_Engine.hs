@@ -33,7 +33,7 @@ instance StackSymbol JS.JSString where
     '}' | JSS.length c==1 -> Close
     '\'' -> Quoted (drop 1 c)
     '"' -> Quoted (take (JSS.length c-2) (drop 1 c))
-    ':' -> Comment (drop 1 c)
+    ':' -> Comment (TextComment $ drop 1 c)
     _ -> maybe (Other c) Number $ matches Just readable (toString c)
 instance IsCapriconString JS.JSString where
   toString = JSS.unpack
