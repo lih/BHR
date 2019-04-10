@@ -69,6 +69,7 @@ showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
         showStep (ClosureStep b c) = fromString (show b)+":"+showClosure c
         showStep (VerbStep v) = v
         showStep (CommentStep (TextComment x)) = ":"+x
+        showStep (CommentStep c) = ":<"+fromString (show c)+">"
         showSteps p' = intercalate " " (map showStep p')
         showClosure (StackClosure act cs c) =
           (case act of CloseExec -> "$" ; _ -> ",")
@@ -135,26 +136,24 @@ stringWordsAndSpaces unquoteStrings = map (second fromString) . fromBlank id . t
                           | otherwise = fromWChar (k.(c:)) t
         fromWChar k "" = [(True,k "")]
 
-literate :: forall str. IsCapriconString str => Parser String [str]
-literate = liftA2 (\pref r -> pref + [":s"+fromString r])
-           (intercalate [":s\n"] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> " "$>? " <+? commentline) (single '\n'))
+literate :: forall str. IsCapriconString str => Parser String [StackComment str :+: str]
+literate = liftA2 (\pref r -> pref + [Left (TextComment $ fromString r)])
+           (intercalate [Left (TextComment "\n")] <$> sepBy' (cmdline "> " ">? " <+? cmdline "$> " "$>? " <+? commentline) (single '\n'))
            remaining
   where
-    wrapResult :: Bool -> [str] -> [str]
-    wrapResult isParagraph l = case isParagraph of
-      True -> ":p[":l+[":p]"]
-      False -> ":s[":l+[":s]"]
-    cmdline :: Parser String () -> Parser String () -> Parser String [str]
+    cmdline :: Parser String () -> Parser String () -> Parser String [StackComment str :+: str]
     cmdline pre pre_ex = do
       indent <- many' (oneOf [' ','\t'])
-      map (\(x,exs) -> [":s"+fromString indent
-                       ,":cp["+fromString (show (length x,if nonempty exs then True else False)),":cp="+intercalate "\n" (map fst x)]
-                       + (if nonempty exs then ":x[":[":x="+ex | ex <- exs]+[":x]"] else [])
-                       + (":cp]":wrapResult True (foldMap snd x)))
+      map (\(x,exs) -> [Left (TextComment $ fromString indent)
+                       ,Left (BeginCodeParagraph (length x) (intercalate "\n" (map fst x)) exs)]
+                       + map Right (foldMap snd x)
+                       + [Left EndCodeParagraph])
         ((,) <$> sepBy1' go (single '\n') <*> option' [] ("\n" >> sepBy1' go_ex (single '\n')))
-      where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x+["steps."]))
-            go_ex = do pre_ex; many' (noneOf ['\n']) <&> fromString
-    commentline = map (foldMap (pure . (":s"+) <|> \(x,t) -> ":s[":t+[":cs"+x,":s]" :: str])) $ (<* lookingAt eol)
+      where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x+["eol."]))
+            go_ex = do pre_ex; many' (noneOf ['\n']) <&> fromString 
+    commentline :: Parser String [StackComment str :+: str]
+    commentline = map (foldMap (pure . (Left . TextComment) <|>
+                                \(x,t) -> Left (BeginCodeSpan x):map Right t+[Left (EndCodeSpan x)])) $ (<* lookingAt eol)
       $ many' (map (Left . fromString) (many1' (noneOf ['{','\n'] <+?
                                                 (fill '{' $ single '{' <* lookingAt (noneOf ['{']))))
                 <+? map Right (between "{{" "}}"
@@ -232,8 +231,8 @@ runCOCBuiltin (COCB_Open (ReadImpl getResource)) = do
     StackSymbol f:t -> do
       runStackState $ put t
       xs <- liftSubIO (getResource (f+".md")) >>= maybe undefined return . matches Just literate . (const "" <|> toString)
-      let ex = execSymbol runCOCBuiltin outputComment
-      ex "{" >> traverse_ ex xs >> ex "}"
+      let ex = execProgram runCOCBuiltin outputComment . renderComment <|> execSymbol runCOCBuiltin outputComment
+      ex (Right "{") >> traverse_ ex xs >> ex (Right "}")
     _ -> return ()
                      
 runCOCBuiltin COCB_ToInt = runStackState $ modify $ \case
@@ -428,10 +427,16 @@ runCOCBuiltin COCB_Render = runStackState $ modify $ \case
   where renderStep (VerbStep v) = [VerbStep v]
         renderStep (ExecStep x) = [ExecStep x]
         renderStep (ConstStep c) = [ConstStep c]
-        renderStep (CommentStep (TextComment s)) = [ConstStep (StackSymbol s), VerbStep "render-comment"]
+        renderStep (CommentStep c) = renderComment c
         renderStep (ClosureStep closed cl) = [ClosureStep closed (renderClos cl)]
         renderClos (StackClosure act ps pt) = StackClosure act [(foldMap renderStep p,renderClos cl)
                                                                | (p,cl) <- ps] (foldMap renderStep pt)
+
+renderComment (TextComment s) = [ConstStep (StackSymbol s), VerbStep "comment"]
+renderComment (BeginCodeParagraph l code exs) = [ConstStep (StackInt l),ConstStep (StackSymbol code),ConstStep (StackList (map StackSymbol exs)), VerbStep "begin-code-paragraph"]
+renderComment EndCodeParagraph = [VerbStep "end-code-paragraph"]
+renderComment (BeginCodeSpan s) = [ConstStep (StackSymbol s),VerbStep "begin-code-span"]
+renderComment (EndCodeSpan s) = [ConstStep (StackSymbol s),VerbStep "end-code-span"]
 
 cocDict :: forall io str. IsCapriconString str => str -> (str -> io (String :+: str)) -> (str -> io (String :+: [Word8])) -> (str -> str -> io ()) -> (str -> [Word8] -> io ()) -> COCDict io str
 cocDict version getResource getBResource writeResource writeBResource =
@@ -521,60 +526,5 @@ cocDict version getResource getBResource writeResource writeBResource =
         atP (h,[]) = at h
         atP (h,x:t) = at h.l'Just (StackDict zero).t'StackDict.atP (x,t)
 
-outputComment (TextComment c) = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
-  where commentText = case toString c of
-          'x':'=':_ -> let qcode = htmlQuote (drop 2 c) in
-                         "<button class=\"capricon-example\" data-code=\""+qcode+"\"><pre class=\"capricon\">"+markSyntax (drop 2 c)+"</pre></button>"
-          'c':'p':'[':n ->
-            let (nlines,hasExamples) = read n :: (Int,Bool)
-            in wrapStart True nlines hasExamples+"<div class=\"capricon-steps\">"
-                      +"<pre class=\"capricon capricon-paragraph capricon-context\">"
-            
-          'c':'p':'=':_ -> markSyntax (drop 3 c)+"</pre>"
-          'c':'p':']':[] -> "<div class=\"user-input interactive\">"
-                            +"<button class=\"capricon-trigger\">Try It Out</button>"
-                            +"<label class=\"capricon-input-prefix\">&gt;&nbsp;<input type=\"text\" class=\"capricon-input\" /></label>"
-                            +"<pre class=\"capricon-output\"></pre></div>"
-                            +"</div>"+wrapEnd
-          's':'[':[] -> wrapStart False 1 False 
-          'c':'s':_ -> "</span><input type=\"checkbox\"/>"+
-                      "<span class=\"expand-then\"><code class=\"capricon capricon-steps\">"+htmlQuote (drop 2 c)+"</code>"
-          's':']':[] -> wrapEnd
-          p:'[':[] -> "<"+codeTag p+codeAttrs p+">"
-          p:']':[] -> "</"+codeTag p+">"
-          's':_ -> drop 1 c
-          _ -> ""
-
-        codeTag 'p' = "div"
-        codeTag 's' = "span"
-        codeTag 'x' = "div"
-        codeTag _ = ""
-        codeAttrs 'p' = " class=\"capricon-paragraphresult\""
-        codeAttrs 's' = " class=\"capricon-result\""
-        codeAttrs 'x' = " class=\"capricon-examples\""
-        codeAttrs _ = ""
-
-        markSyntax str = fold [if isWord then
-                                 let qw = htmlQuote w
-                                     withSpans | w=="{" = \x -> "<span class=\"quote quote-brace\">"+x
-                                               | w==",{" = \x -> "<span class=\"quote quote-splice\">"+x
-                                               | w=="${" = \x -> "<span class=\"quote quote-exec\">"+x
-                                               | w=="}" = \x -> x+"</span>"
-                                               | otherwise = \x -> x
-                                 in withSpans ("<span class=\"symbol\" data-symbol-name=\""+qw+"\">"+qw+"</span>")
-                               else w
-                             | (isWord,w) <- stringWordsAndSpaces False str]
-          
-        wrapStart isP nlines hasExamples =
-          let hide = if isP then "box" else "inline"
-          in "<label class=\"expansible "+hide+"\">"+
-             if isP then
-               "<input type=\"checkbox\" checked=\"checked\"/>"+
-               "<span class=\"expand-else capricon-show\"></span>"+
-               "<span class=\"expand-then capricon-hide\"></span>"+
-               "<span class=\"expand-then"+(if hasExamples then " capricon-with-examples" else "")+"\" style=\"--num-lines: "
-               + fromString (show (1.25 + (if hasExamples then 1.25 else 0) + fromIntegral nlines :: Float))+"\">"
-             else
-               "<span>"
-        wrapEnd = "</span></label>"
+outputComment c = execProgram runCOCBuiltin (\_ -> unit) (renderComment c)
   

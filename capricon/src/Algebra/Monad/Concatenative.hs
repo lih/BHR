@@ -19,6 +19,10 @@ newtype Opaque a = Opaque a
 instance Show (Opaque a) where show _ = "#<opaque>"
 
 data StackComment s = TextComment s
+                    | BeginCodeParagraph Int s [s]
+                    | EndCodeParagraph 
+                    | BeginCodeSpan s
+                    | EndCodeSpan s
                deriving (Show,Generic)
 data StackStep s b a = VerbStep s | ConstStep (StackVal s b a) | ExecStep (StackVal s b a) | CommentStep (StackComment s) | ClosureStep Bool (StackClosure s b a)
                      deriving (Show,Generic)
