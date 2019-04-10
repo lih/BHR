@@ -139,10 +139,10 @@ instance StackSymbol String where
   atomClass (':':t) = Comment (TextComment t)
   atomClass x = maybe (Other x) Number (matches Just readable x)
 
-execSymbolImpl :: (StackSymbol s, MonadState (StackState st s b a) m) => (StackBuiltin b -> m ()) -> (StackComment s -> m ()) -> s -> m ()
+execSymbolImpl :: (StackSymbol s, MonadState (StackState st s b a) m) => (StackBuiltin b -> m ()) -> (StackComment s -> m ()) -> AtomClass s -> m ()
 execSymbolImpl execBuiltin' onComment atom = do
   st <- get
-  case (atomClass atom,st^.progStack) of
+  case (atom,st^.progStack) of
     (Open Brace,_) -> progStack =~ ((Brace,StackClosure CloseExec [] []):)
     (Open s@(Splice act),(k,StackClosure act' cs p):ps) ->
       progStack =- (s,StackClosure act [] []):(k,StackClosure act' ((reverse p,StackClosure act [] []):cs) []):ps
@@ -264,7 +264,7 @@ execBuiltinImpl runExtra onComment = go
     execVal _ = return ()
 
 class (StackSymbol s,Monad m) => MonadStack st s b a m | m -> st s b a where
-  execSymbol :: (b -> m ()) -> (StackComment s -> m ()) -> s -> m ()
+  execSymbol :: (b -> m ()) -> (StackComment s -> m ()) -> AtomClass s -> m ()
   execProgram :: (b -> m ()) -> (StackComment s -> m ()) -> StackProgram s b a -> m ()
   execBuiltin :: (b -> m ()) -> (StackComment s -> m ()) -> StackBuiltin b -> m ()
   runStackState :: State [StackVal s b a] x -> m x

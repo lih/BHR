@@ -45,7 +45,7 @@ main = do
   str <- stringWords <$> if isTerm then getAll else readHString stdin
   args <- (foldMap (\x -> [libdir</>x,x]) <$> getArgs) >>= map (stringWords . fold) . traverse (try (return []) . readString)
   execS (foldr (\sym mr -> do
-                   execSymbol runCOCBuiltin outputComment sym
+                   execSymbol runCOCBuiltin outputComment (atomClass sym)
                    (hasQuit,out) <- runExtraState (liftA2 (,) (getl endState) (getl outputText) <* (outputText =- id))
                    d <- runDictState get
                    lift (writeIORef symList (keys d))

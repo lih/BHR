@@ -231,7 +231,7 @@ runCOCBuiltin (COCB_Open (ReadImpl getResource)) = do
     StackSymbol f:t -> do
       runStackState $ put t
       xs <- liftSubIO (getResource (f+".md")) >>= maybe undefined return . matches Just literate . (const "" <|> toString)
-      let ex = execProgram runCOCBuiltin outputComment . renderComment <|> execSymbol runCOCBuiltin outputComment
+      let ex = execSymbol runCOCBuiltin outputComment . (Comment <|> atomClass)
       ex (Right "{") >> traverse_ ex xs >> ex (Right "}")
     _ -> return ()
                      
