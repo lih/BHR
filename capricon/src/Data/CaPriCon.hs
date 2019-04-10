@@ -530,7 +530,10 @@ type_of = yb maybeT . go
                   rec_subst subs (subst (Cons a') preret)
                 go' (Ap (Axiom t _) subs) = rec_subst subs t
                     
-                rec_subst (y:t) (Bind Prod _ _ e) = rec_subst t (subst y e)
+                rec_subst (y:t) (Bind Prod _ tx e) = do
+                  ty <- go y
+                  _ <- return (convertible tx ty)^.maybeT
+                  rec_subst t (subst y e)
                 rec_subst [] x = return x
                 rec_subst _ _ = zero
 
