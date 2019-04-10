@@ -233,10 +233,7 @@ runCOCBuiltin (COCB_Open (ReadImpl getResource)) = do
     StackSymbol f:t -> do
       runStackState $ put t
       xs <- liftSubIO (getResource (f+".md")) >>= maybe undefined return . matches Just literate . (const "" <|> toString)
-      let ex :: forall n. (MonadSubIO io n,IsCapriconString str,
-                           MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) n,
-                           IOListFormat io str,ListFormat str) => StackComment str :+: str -> n ()
-          ex x = execSymbol runCOCBuiltin outputComment $ (Comment <|> atomClass) x
+      let ex x = execSymbol runCOCBuiltin outputComment $ (Comment <|> atomClass) x
       ex (Right "{") >> traverse_ ex xs >> ex (Right "}")
     _ -> return ()
                      
