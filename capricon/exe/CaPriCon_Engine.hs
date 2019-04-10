@@ -33,7 +33,7 @@ instance StackSymbol JS.JSString where
     '}' | JSS.length c==1 -> Close
     '\'' -> Quoted (drop 1 c)
     '"' -> Quoted (take (JSS.length c-2) (drop 1 c))
-    ':' -> Comment (drop 1 c)
+    ':' -> Comment (TextComment $ drop 1 c)
     _ -> maybe (Other c) Number $ matches Just readable (toString c)
 instance IsCapriconString JS.JSString where
   toString = JSS.unpack
@@ -147,7 +147,7 @@ runWordsState :: [String] -> WiQEEState -> FSIO (WiQEEState,String)
 runWordsState ws st = ($st) $ from (stateT.concatT) $^ do
   foldr (\w tl -> do
             x <- runExtraState (getl endState)
-            unless x $ do execSymbol runCOCBuiltin runComment w; tl) unit ws
+            unless x $ do execSymbol runCOCBuiltin runComment (atomClass w); tl) unit ws
   out <- runExtraState (outputText <~ \x -> (id,x))
   return (out "")
 

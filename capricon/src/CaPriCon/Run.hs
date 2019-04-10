@@ -197,6 +197,13 @@ modifyCOCEnv (Just (modE,ctx)) = do
   runExtraState (context =- ctx)
   modifyAllExprs modE
 
+execSymbolOrComment :: forall str io m.
+                       (MonadSubIO io m,IsCapriconString str,
+                        MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m,
+                        IOListFormat io str,ListFormat str) =>
+                       StackComment str :+: str -> m ()
+execSymbolOrComment x = execSymbol (\b -> runCOCBuiltin b) outputComment $ (Comment <|> atomClass) x
+
 runCOCBuiltin :: forall str io m.
                  (MonadSubIO io m,IsCapriconString str,
                   MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m,
@@ -233,8 +240,7 @@ runCOCBuiltin (COCB_Open (ReadImpl getResource)) = do
     StackSymbol f:t -> do
       runStackState $ put t
       xs <- liftSubIO (getResource (f+".md")) >>= maybe undefined return . matches Just literate . (const "" <|> toString)
-      let ex = execSymbol runCOCBuiltin outputComment . (Comment <|> atomClass)
-      ex (Right "{") >> traverse_ ex xs >> ex (Right "}")
+      execSymbolOrComment (Right "{") >> traverse_ execSymbolOrComment xs >> execSymbolOrComment (Right "}")
     _ -> return ()
                      
 runCOCBuiltin COCB_ToInt = runStackState $ modify $ \case
@@ -528,6 +534,11 @@ cocDict version getResource getBResource writeResource writeBResource =
         atP (h,[]) = at h
         atP (h,x:t) = at h.l'Just (StackDict zero).t'StackDict.atP (x,t)
 
+outputComment :: forall str io m.
+                 (MonadSubIO io m,IsCapriconString str,
+                  MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m,
+                  IOListFormat io str,ListFormat str) =>
+                 StackComment str -> m ()
 outputComment c = execProgram runCOCBuiltin (\_ -> unit) (renderComment c)
 
 markSyntax str = fold [if isWord then
