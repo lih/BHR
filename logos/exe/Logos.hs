@@ -430,7 +430,7 @@ main = between (void GLFW.initialize) GLFW.terminate $ do
     
   let go = while $ do
         ws <- liftIO (readChan wordChan)
-        (traverse_ (execSymbol runLogos (\_ -> unit)) <|> execProgram runLogos (\_ -> unit)) ws
+        (traverse_ (execSymbol runLogos (\_ -> unit) . atomClass) <|> execProgram runLogos (\_ -> unit)) ws
         runDictState get >>= \d -> liftIO (writeIORef symList (keys d))
         runExtraState $ getl running
         

@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, GeneralizedNewtypeDeriving, LambdaCase, DeriveGeneric #-}
 module Algebra.Monad.Concatenative(
   -- * Extensible stack types
-  StackBuiltin(..),StackSymbol(..),StackVal(..),StackStep(..),ClosureAction(..),StackClosure(..),execValue,
+  StackBuiltin(..),StackSymbol(..),StackVal(..),StackStep(..),StackComment(..),ClosureAction(..),StackClosure(..),execValue,
   t'StackDict,
   -- * The MonadStack class
   StackState,defaultState,
@@ -17,7 +17,14 @@ import GHC.Generics (Generic)
 newtype Opaque a = Opaque a
                  deriving (Generic)
 instance Show (Opaque a) where show _ = "#<opaque>"
-data StackStep s b a = VerbStep s | ConstStep (StackVal s b a) | ExecStep (StackVal s b a) | CommentStep s | ClosureStep Bool (StackClosure s b a)
+
+data StackComment s = TextComment s
+                    | BeginCodeParagraph Int s [s]
+                    | EndCodeParagraph 
+                    | BeginCodeSpan s
+                    | EndCodeSpan s
+               deriving (Show,Generic)
+data StackStep s b a = VerbStep s | ConstStep (StackVal s b a) | ExecStep (StackVal s b a) | CommentStep (StackComment s) | ClosureStep Bool (StackClosure s b a)
                      deriving (Show,Generic)
 data ClosureAction = CloseConstant | CloseExec
                    deriving (Show,Generic)
@@ -120,7 +127,7 @@ dict = lens _dict (\x y -> x { _dict = y })
 extraState :: Lens st st' (StackState st s b a) (StackState st' s b a)
 extraState = lens _extraState (\x y -> x { _extraState = y })
 
-data AtomClass s = Close | Open BraceKind | Number Int | Quoted s | Comment s | Other s
+data AtomClass s = Close | Open BraceKind | Number Int | Quoted s | Comment (StackComment s) | Other s
 class Ord s => StackSymbol s where atomClass :: s -> AtomClass s
 instance StackSymbol String where
   atomClass "{" = Open Brace
@@ -129,13 +136,13 @@ instance StackSymbol String where
   atomClass "}" = Close
   atomClass ('\'':t) = Quoted t
   atomClass ('"':t) = Quoted (init t)
-  atomClass (':':t) = Comment t
+  atomClass (':':t) = Comment (TextComment t)
   atomClass x = maybe (Other x) Number (matches Just readable x)
 
-execSymbolImpl :: (StackSymbol s, MonadState (StackState st s b a) m) => (StackBuiltin b -> m ()) -> (s -> m ()) -> s -> m ()
+execSymbolImpl :: (StackSymbol s, MonadState (StackState st s b a) m) => (StackBuiltin b -> m ()) -> (StackComment s -> m ()) -> AtomClass s -> m ()
 execSymbolImpl execBuiltin' onComment atom = do
   st <- get
-  case (atomClass atom,st^.progStack) of
+  case (atom,st^.progStack) of
     (Open Brace,_) -> progStack =~ ((Brace,StackClosure CloseExec [] []):)
     (Open s@(Splice act),(k,StackClosure act' cs p):ps) ->
       progStack =- (s,StackClosure act [] []):(k,StackClosure act' ((reverse p,StackClosure act [] []):cs) []):ps
@@ -157,7 +164,7 @@ execSymbolImpl execBuiltin' onComment atom = do
   where execStep [] stp = runStep execBuiltin' onComment stp
         execStep ((k,StackClosure act cs p):ps) stp = progStack =- ((k,StackClosure act cs (stp:p)):ps)
 
-execBuiltinImpl :: (StackSymbol s, MonadState (StackState st s b a) m) => (b -> m ()) -> (s -> m ()) -> StackBuiltin b -> m ()
+execBuiltinImpl :: (StackSymbol s, MonadState (StackState st s b a) m) => (b -> m ()) -> (StackComment s -> m ()) -> StackBuiltin b -> m ()
 execBuiltinImpl runExtra onComment = go
   where 
     go Builtin_Def = get >>= \st -> case st^.stack of
@@ -257,9 +264,9 @@ execBuiltinImpl runExtra onComment = go
     execVal _ = return ()
 
 class (StackSymbol s,Monad m) => MonadStack st s b a m | m -> st s b a where
-  execSymbol :: (b -> m ()) -> (s -> m ()) -> s -> m ()
-  execProgram :: (b -> m ()) -> (s -> m ()) -> StackProgram s b a -> m ()
-  execBuiltin :: (b -> m ()) -> (s -> m ()) -> StackBuiltin b -> m ()
+  execSymbol :: (b -> m ()) -> (StackComment s -> m ()) -> AtomClass s -> m ()
+  execProgram :: (b -> m ()) -> (StackComment s -> m ()) -> StackProgram s b a -> m ()
+  execBuiltin :: (b -> m ()) -> (StackComment s -> m ()) -> StackBuiltin b -> m ()
   runStackState :: State [StackVal s b a] x -> m x
   runExtraState :: State st x -> m x
   runDictState :: State (Map s (StackVal s b a)) x -> m x
