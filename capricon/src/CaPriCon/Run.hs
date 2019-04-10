@@ -457,7 +457,7 @@ cocDict version getResource getBResource writeResource writeBResource =
                ("swap"                    , Builtin_Swap                          ),
                ("swapn"                   , Builtin_SwapN                         ),
                ("pick"                    , Builtin_Pick                          ),
-               ("--render"                , Builtin_Extra COCB_Render             ),
+               ("pre-render"              , Builtin_Extra COCB_Render             ),
 
                ("["                       , Builtin_ListBegin                     ),
                ("]"                       , Builtin_ListEnd                       ),
