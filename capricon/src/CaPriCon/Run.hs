@@ -38,6 +38,8 @@ instance (ListSerializable b) => ListSerializable (StackBuiltin b)
 instance (ListFormat b) => ListFormat (StackBuiltin b)
 instance (ListSerializable a) => ListSerializable (Opaque a)
 instance (ListFormat a) => ListFormat (Opaque a)
+instance (ListSerializable s) => ListSerializable (StackComment s)
+instance (ListFormat s) => ListFormat (StackComment s)
 
 instance ListSerializable str => ListSerializable (COCValue io str)
 instance (IsCapriconString str,ListFormat str,IOListFormat io str) => ListFormat (COCValue io str)
@@ -66,7 +68,7 @@ showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
         showStep (ExecStep x) = "$("+go x+")"
         showStep (ClosureStep b c) = fromString (show b)+":"+showClosure c
         showStep (VerbStep v) = v
-        showStep (CommentStep x) = ":"+x
+        showStep (CommentStep (TextComment x)) = ":"+x
         showSteps p' = intercalate " " (map showStep p')
         showClosure (StackClosure act cs c) =
           (case act of CloseExec -> "$" ; _ -> ",")
@@ -91,7 +93,7 @@ data COCBuiltin io str = COCB_Print | COCB_Quit
                        | COCB_ContextVars
                        | COCB_GetShowDir | COCB_SetShowDir | COCB_InsertNodeDir
 
-                       | COCB_Format
+                       | COCB_Format | COCB_Render
                        
                        deriving (Show,Generic)
 data ReadImpl io str bytes = ReadImpl (str -> io (String :+: bytes))
@@ -420,6 +422,17 @@ runCOCBuiltin COCB_InsertNodeDir = do
       StackCOC (COCDir (insert e (map fst (takeLast d ctx),x) dir)):t
     st -> st
 
+runCOCBuiltin COCB_Render = runStackState $ modify $ \case
+  StackProg p:st -> StackProg (foldMap renderStep p):st
+  st -> st
+  where renderStep (VerbStep v) = [VerbStep v]
+        renderStep (ExecStep x) = [ExecStep x]
+        renderStep (ConstStep c) = [ConstStep c]
+        renderStep (CommentStep (TextComment s)) = [ConstStep (StackSymbol s), VerbStep "render-comment"]
+        renderStep (ClosureStep closed cl) = [ClosureStep closed (renderClos cl)]
+        renderClos (StackClosure act ps pt) = StackClosure act [(foldMap renderStep p,renderClos cl)
+                                                               | (p,cl) <- ps] (foldMap renderStep pt)
+
 cocDict :: forall io str. IsCapriconString str => str -> (str -> io (String :+: str)) -> (str -> io (String :+: [Word8])) -> (str -> str -> io ()) -> (str -> [Word8] -> io ()) -> COCDict io str
 cocDict version getResource getBResource writeResource writeBResource =
   mkDict ((".",StackProg []):("steps.",StackProg []):("mustache.",StackProg []):("version",StackSymbol version):
@@ -507,7 +520,7 @@ cocDict version getResource getBResource writeResource writeBResource =
         atP (h,[]) = at h
         atP (h,x:t) = at h.l'Just (StackDict zero).t'StackDict.atP (x,t)
 
-outputComment c = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
+outputComment (TextComment c) = (runExtraState $ do outputText =~ (\o t -> o (commentText+t)))
   where commentText = case toString c of
           'x':'=':_ -> let qcode = htmlQuote (drop 2 c) in
                          "<button class=\"capricon-example\" data-code=\""+qcode+"\"><pre class=\"capricon\">"+markSyntax (drop 2 c)+"</pre></button>"
