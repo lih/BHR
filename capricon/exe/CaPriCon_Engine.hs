@@ -147,7 +147,7 @@ runWordsState :: [String] -> WiQEEState -> FSIO (WiQEEState,String)
 runWordsState ws st = ($st) $ from (stateT.concatT) $^ do
   foldr (\w tl -> do
             x <- runExtraState (getl endState)
-            unless x $ do execSymbol runCOCBuiltin runComment w; tl) unit ws
+            unless x $ do execSymbol runCOCBuiltin runComment (atomClass w); tl) unit ws
   out <- runExtraState (outputText <~ \x -> (id,x))
   return (out "")
 
