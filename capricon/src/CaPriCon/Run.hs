@@ -152,13 +152,23 @@ literate = liftA2 (\pref r -> pref + [Left (TextComment $ fromString r)])
       where go = do pre; many' (noneOf ['\n']) <&> \x -> (fromString x,map fromString (stringWords x+["eol."]))
             go_ex = do pre_ex; many' (noneOf ['\n']) <&> fromString 
     commentline :: Parser String [StackComment str :+: str]
-    commentline = map (foldMap (pure . (Left . TextComment) <|>
-                                \(x,t) -> Left (BeginCodeSpan x):map Right t+[Left (EndCodeSpan x)])) $ (<* lookingAt eol)
-      $ many' (map (Left . fromString) (many1' (noneOf ['{','\n'] <+?
-                                                (fill '{' $ single '{' <* lookingAt (noneOf ['{']))))
-                <+? map Right (between "{{" "}}"
-                                (many1' (noneOf ['}'] <+? fill '}' (single '}' <* lookingAt (noneOf ['}'])))
-                                 <&> \x -> (fromString x,stringWords (fromString x)+["mustache."]))))
+    commentline = map (foldMap ((pure . (Left . TextComment) <|>
+                                 \(x,t) -> Left (BeginCodeSpan x):map Right t+[Left (EndCodeSpan x)])
+                                <|> map Right))
+      $ (<* lookingAt eol)
+      $ many' (map (Left . Left . fromString)
+                (many1' (noneOf ['{','\n']
+                         <+? fill '{' (single '{' <* lookingAt (noneOf ['{','.']))))
+               <+?
+               map (Left . Right)
+                (between "{{" "}}"
+                  (many1' (noneOf ['}'] <+? fill '}' (single '}' <* lookingAt (noneOf ['}'])))
+                   <&> \x -> (fromString x,stringWords (fromString x)+["mustache."])))
+               <+?
+               map Right
+                (between "{." ".}"
+                  (many1' (noneOf ['.'] <+? fill '.' (single '.' <* lookingAt (noneOf ['}']))))
+                  <&> \x -> map fromString (stringWords x)))
 
 data COCState str = COCState {
   _endState :: Bool,
