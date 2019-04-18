@@ -32,37 +32,37 @@ instance Serializable bytes str => Serializable bytes (AType str)
 instance Format bytes str => Format bytes (Algebraic str)
 instance Format bytes str => Format bytes (AType str)
 
-fromNode :: (Show ax,IsCapriconString str,MonadReader ([Bool],Env str ax) m) => Node str ax -> m (Algebraic str)
-fromNode (Bind Lambda x tx e) = do
+fromTerm :: (Show ax,IsCapriconString str,MonadReader ([Bool],Env str (Term str ax)) m) => Term str ax -> m (Algebraic str)
+fromTerm (Bind Lambda x tx e) = do
   let isT = isTypeType tx
-  e' <- local ((not isT:)<#>((x,tx):)) (fromNode e)
+  e' <- local ((not isT:)<#>((x,tx):)) (fromTerm e)
   if isT then return e'
-    else AFun x <$> fromTypeNode tx <*> pure e'
-fromNode (Cons a) = fromApplication a
-fromNode _ = error "Cannot produce a type-term in a language without first-class types"
+    else AFun x <$> fromTypeTerm tx <*> pure e'
+fromTerm (Cons a) = fromApplication a
+fromTerm _ = error "Cannot produce a type-term in a language without first-class types"
 
-fromApplication :: (Show ax,IsCapriconString str, MonadReader ([Bool],Env str ax) m) => Application str ax -> m (Algebraic str)
+fromApplication :: (Show ax,IsCapriconString str, MonadReader ([Bool],Env str (Term str ax)) m) => Application str ax -> m (Algebraic str)
 fromApplication (Ap ah args) = do
   (varKinds,env) <- ask
   let concreteArgs = [arg | (arg,Just t) <- map (\x -> (x,(checkType x^..maybeT) env)) args
                           , not (isTypeType t)]
   case ah of
-    Sym s -> foldl' (liftA2 AApply) (pure $ AVar $ sum [if isV then 1 else 0 | isV <- take s varKinds]) (map fromNode concreteArgs)
-    Mu _ _ a -> foldl' (liftA2 AApply) (fromApplication a) (map fromNode concreteArgs)
+    Sym s -> foldl' (liftA2 AApply) (pure $ AVar $ sum [if isV then 1 else 0 | isV <- take s varKinds]) (map fromTerm concreteArgs)
+    Mu _ _ a -> foldl' (liftA2 AApply) (fromApplication a) (map fromTerm concreteArgs)
     Axiom _ _ -> undefined
   
-fromTypeNode :: MonadReader ([Bool],Env str ax) m => Node str ax -> m (AType str)
-fromTypeNode (Bind Prod x tx e) = do
+fromTypeTerm :: MonadReader ([Bool],Env str (Term str ax)) m => Term str ax -> m (AType str)
+fromTypeTerm (Bind Prod x tx e) = do
   let isT = isTypeType tx
-  e' <- local ((not isT:)<#>((x,tx):)) (fromTypeNode e)
+  e' <- local ((not isT:)<#>((x,tx):)) (fromTypeTerm e)
   if isT then return AAny
-    else AArr <$> fromTypeNode tx <*> pure e' 
-fromTypeNode (Cons (Ap (Sym s) [])) = do
+    else AArr <$> fromTypeTerm tx <*> pure e' 
+fromTypeTerm (Cons (Ap (Sym s) [])) = do
   (varKinds,_) <- ask
   pure $ ATVar $ sum [if isV then 0 else 1 | isV <- take s varKinds]
-fromTypeNode _ = pure AAny
+fromTypeTerm _ = pure AAny
 
-isTypeType :: Node str ax -> Bool
+isTypeType :: Term str ax -> Bool
 isTypeType (Universe _) = True
 isTypeType (Bind Prod _ _ e) = isTypeType e
 isTypeType _ = False
