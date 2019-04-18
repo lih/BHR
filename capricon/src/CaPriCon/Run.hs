@@ -178,7 +178,7 @@ data COCState str = COCState {
   }
 endState :: Lens' (COCState str) Bool
 endState = lens _endState (\x y -> x { _endState = y })
-context :: Lens' (COCState str) [(str,Term str (COCAxiom str))]
+context :: Lens' (COCState str) (Env str (ContextTerm str (COCAxiom str)))
 context = lens _context (\x y -> x { _context = y })
 showDir :: Lens' (COCState str) (NodeDir str (COCAxiom str) ([str],StringPattern str))
 showDir = lens _showDir (\x y -> x { _showDir = y })
