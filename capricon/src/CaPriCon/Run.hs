@@ -5,7 +5,7 @@ import Definitive
 import Language.Format
 import Algebra.Monad.Concatenative
 import Data.CaPriCon
-import Data.CaPriCon.Extraction (Algebraic(..),fromNode)
+import Data.CaPriCon.Extraction (Algebraic(..),fromTerm)
 import GHC.Generics (Generic)
 
 class Monad m => MonadSubIO io m where
@@ -21,7 +21,7 @@ data UniverseConstraints = UniverseConstraints [UniverseConstraint]
 instance Semigroup UniverseConstraints where
   UniverseConstraints x + UniverseConstraints y = UniverseConstraints $ zipWith (zipWith (\_x _y -> zipWith max _x _y + _x + _y)) x y
 instance Monoid UniverseConstraints where zero = UniverseConstraints (repeat (repeat Nothing))
-data COCValue io str = COCExpr (ContextNode str (COCAxiom str))
+data COCValue io str = COCExpr (ContextTerm str (COCAxiom str))
                      | COCNull | COCError str
                      | COCConvertible (Maybe (Int,Int))
                      | COCAlgebraic (Algebraic str)
@@ -49,10 +49,10 @@ pattern StackCOC v = StackExtra (Opaque v)
 
 takeLast n l = drop (length l-n) l
 
-showStackVal :: IsCapriconString str => (NodeDoc str -> str) -> NodeDir str (COCAxiom str) ([str],StringPattern str) -> [(str,Node str (COCAxiom str))] -> StackVal str (COCBuiltin io str) (COCValue io str) -> str
+showStackVal :: IsCapriconString str => (NodeDoc str -> str) -> NodeDir str (COCAxiom str) ([str],StringPattern str) -> [(str,Term str (COCAxiom str))] -> StackVal str (COCBuiltin io str) (COCValue io str) -> str
 showStackVal toRaw dir ctx = fix $ \go _x -> case _x of
   StackCOC _x -> case _x of
-    COCExpr (ContextNode d e) -> -- "<"+show d+">:"+
+    COCExpr (ContextTerm d e) -> -- "<"+show d+">:"+
       toRaw $ showNode' dir (map (second snd) $ takeLast d (freshContext ctx)) e
     COCNull -> "(null)"
     COCError e -> "<!"+e+"!>"
@@ -172,13 +172,13 @@ literate = liftA2 (\pref r -> pref + [Left (TextComment $ fromString r)])
 
 data COCState str = COCState {
   _endState :: Bool,
-  _context :: [(str,Node str (COCAxiom str))],
+  _context :: [(str,Term str (COCAxiom str))],
   _showDir :: NodeDir str (COCAxiom str) ([str],StringPattern str),
   _outputText :: str -> str
   }
 endState :: Lens' (COCState str) Bool
 endState = lens _endState (\x y -> x { _endState = y })
-context :: Lens' (COCState str) [(str,Node str (COCAxiom str))]
+context :: Lens' (COCState str) [(str,Term str (COCAxiom str))]
 context = lens _context (\x y -> x { _context = y })
 showDir :: Lens' (COCState str) (NodeDir str (COCAxiom str) ([str],StringPattern str))
 showDir = lens _showDir (\x y -> x { _showDir = y })
@@ -188,11 +188,11 @@ outputText = lens _outputText (\x y -> x { _outputText = y })
 pushError :: MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m => str -> m ()
 pushError s = runStackState $ modify $ (StackCOC (COCError s):)
 
-runInContext :: Env str ax -> MaybeT ((->) (Env str ax)) a -> Maybe a
+runInContext :: ax -> MaybeT ((->) ax) a -> Maybe a
 runInContext c v = (v^..maybeT) c
 
 modifyAllExprs :: MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m
-               => (ContextNode str (COCAxiom str) -> ContextNode str (COCAxiom str)) -> m ()
+               => (ContextTerm str (COCAxiom str) -> ContextTerm str (COCAxiom str)) -> m ()
 modifyAllExprs f = do
   let modStack (StackCOC (COCExpr e)) = StackCOC (COCExpr (f e))
       modStack (StackDict d) = StackDict (map modStack d)
@@ -201,7 +201,7 @@ modifyAllExprs f = do
   runStackState $ modify $ map modStack
   runDictState $ modify $ map modStack
 modifyCOCEnv :: MonadStack (COCState str) str (COCBuiltin io str) (COCValue io str) m
-          => Maybe (ContextNode str (COCAxiom str) -> ContextNode str (COCAxiom str),Env str (COCAxiom str)) -> m ()
+          => Maybe (ContextTerm str (COCAxiom str) -> ContextTerm str (COCAxiom str),Env str (ContextTerm str (COCAxiom str))) -> m ()
 modifyCOCEnv Nothing = unit
 modifyCOCEnv (Just (modE,ctx)) = do
   runExtraState (context =- ctx)
@@ -227,7 +227,7 @@ runCOCBuiltin COCB_Print = do
     _ -> return ()
 
 runCOCBuiltin COCB_Axiom = runStackState $ modify $ \case
-  StackCOC (COCExpr (ContextNode 0 e)):StackSymbol s:st -> StackCOC (COCExpr (ContextNode 0 (Cons (Ap (Axiom e s) [])))):st
+  StackCOC (COCExpr (ContextTerm 0 e)):StackSymbol s:st -> StackCOC (COCExpr (ContextTerm 0 (Cons (Ap (Axiom e s) [])))):st
   st -> st
 
 runCOCBuiltin COCB_Format = do
@@ -279,7 +279,7 @@ runCOCBuiltin COCB_Ap = do
 runCOCBuiltin (COCB_Bind close bt) = do
   ctx <- runExtraState (getl context) 
   let dctx = length ctx
-      setVal (StackCOC (COCExpr e@(ContextNode d _)))
+      setVal (StackCOC (COCExpr e@(ContextTerm d _)))
         | d==dctx || not close
         , Just e' <- runInContext ctx (mkBind bt e) = StackCOC (COCExpr e')
       setVal (StackDict dict) = StackDict (map setVal dict)
@@ -307,13 +307,13 @@ runCOCBuiltin COCB_MatchTerm = do
         case e of
           Bind Lambda x tx e' -> tailCall onLambda $ do
             runExtraState $ context =~ ((x,tx):)
-            runStackState $ put (StackCOC (COCExpr (ContextNode (d+1) (Cons (Ap (Sym 0) []))))
-                                 :StackCOC (COCExpr (ContextNode (d+1) e'))
+            runStackState $ put (StackCOC (COCExpr (ContextTerm (d+1) (Cons (Ap (Sym 0) []))))
+                                 :StackCOC (COCExpr (ContextTerm (d+1) e'))
                                  :st')
           Bind Prod x tx e' -> tailCall onProduct $ do
             runExtraState $ context =~ ((x,tx):)
-            runStackState $ put (StackCOC (COCExpr (ContextNode (d+1) (Cons (Ap (Sym 0) []))))
-                                 :StackCOC (COCExpr (ContextNode (d+1) e'))
+            runStackState $ put (StackCOC (COCExpr (ContextTerm (d+1) (Cons (Ap (Sym 0) []))))
+                                 :StackCOC (COCExpr (ContextTerm (d+1) e'))
                                  :st')
           Cons (Ap h []) -> do
             case h of
@@ -321,21 +321,21 @@ runCOCBuiltin COCB_MatchTerm = do
                     | otherwise -> tailCall onVar $ runStackState $ put (StackSymbol ("#"+fromString (show i)):st')
               Mu ctx _ a -> do
                 let a' = foldl' (\e' (x,tx,_) -> Bind Lambda x tx e') (Cons a) ctx
-                tailCall onMu $ runStackState $ put (StackCOC (COCExpr (ContextNode d a'))
+                tailCall onMu $ runStackState $ put (StackCOC (COCExpr (ContextTerm d a'))
                                                      :st')
               Axiom t a -> tailCall onAxiom $ do
                 runStackState $ put (StackSymbol a
-                                     :StackCOC (COCExpr (ContextNode 0 t))
+                                     :StackCOC (COCExpr (ContextTerm 0 t))
                                      :st')
           Cons (Ap h args) -> tailCall onApply $ do
-            runStackState $ put (StackList (map (StackCOC . COCExpr . ContextNode d) args)
-                                 :StackCOC (COCExpr (ContextNode d (Cons (Ap h []))))
+            runStackState $ put (StackList (map (StackCOC . COCExpr . ContextTerm d) args)
+                                 :StackCOC (COCExpr (ContextTerm d (Cons (Ap h []))))
                                  :st')
           Universe n -> tailCall onUniverse $ runStackState $ put (StackInt n:st')
 
   case st of
-    StackList [onUniverse,onLambda,onProduct,onApply,onMu,onVar,onAxiom]:StackCOC (COCExpr (ContextNode d e)):st' -> runMatch onUniverse onLambda onProduct onApply onMu onVar onAxiom d e st'
-    onUniverse:onLambda:onProduct:onApply:onMu:onVar:onAxiom:StackCOC (COCExpr (ContextNode d e)):st' -> runMatch onUniverse onLambda onProduct onApply onMu onVar onAxiom d e st'
+    StackList [onUniverse,onLambda,onProduct,onApply,onMu,onVar,onAxiom]:StackCOC (COCExpr (ContextTerm d e)):st' -> runMatch onUniverse onLambda onProduct onApply onMu onVar onAxiom d e st'
+    onUniverse:onLambda:onProduct:onApply:onMu:onVar:onAxiom:StackCOC (COCExpr (ContextTerm d e)):st' -> runMatch onUniverse onLambda onProduct onApply onMu onVar onAxiom d e st'
     _ -> unit
 
 runCOCBuiltin COCB_TypeOf = do
@@ -418,7 +418,7 @@ runCOCBuiltin COCB_ContextVars = do
 runCOCBuiltin COCB_Extract = do
   ctx <- runExtraState (getl context)
   runStackState $ modify $ \case
-    StackCOC (COCExpr (ContextNode d e)):t -> StackCOC (COCAlgebraic (fromNode e ([],takeLast d ctx))):t
+    StackCOC (COCExpr (ContextTerm d e)):t -> StackCOC (COCAlgebraic (fromTerm e ([],takeLast d ctx))):t
     st -> st
 
 runCOCBuiltin COCB_GetShowDir = do
@@ -435,7 +435,7 @@ runCOCBuiltin COCB_SetShowDir = do
 runCOCBuiltin COCB_InsertNodeDir = do
   ctx <- runExtraState (getl context)
   runStackState $ modify $ \case
-    x:StackCOC (COCExpr (ContextNode d e)):StackCOC (COCDir dir):t ->
+    x:StackCOC (COCExpr (ContextTerm d e)):StackCOC (COCDir dir):t ->
       StackCOC (COCDir (insert e (map fst (takeLast d ctx),x) dir)):t
     st -> st
 

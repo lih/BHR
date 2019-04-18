@@ -1,7 +1,7 @@
 {-# LANGUAGE UndecidableInstances, OverloadedStrings, NoMonomorphismRestriction, DeriveGeneric, ConstraintKinds #-}
 module Data.CaPriCon(
   -- * Expression nodes
-  IsCapriconString(..),BindType(..),Node(..),ApHead(..),Application(..),ContextNode(..),Env,COCExpression(..),
+  IsCapriconString(..),BindType(..),Term(..),ApHead(..),Application(..),ContextTerm(..),Env,DependentLogic(..),
   -- ** Managing De Bruijin indices
   adjust_depth,adjust_telescope_depth,inc_depth,free_vars,is_free_in,
   -- ** Expression directories
@@ -51,30 +51,31 @@ type UniverseSize = Int
 type SymbolRef = Int
 data BindType = Lambda | Prod
               deriving (Show,Eq,Ord,Generic)
-data Node str a = Bind BindType str (NodeType str a) (Node str a)
+data Term str a = Bind BindType str (TypeTerm str a) (Term str a)
                 | Cons (Application str a)
                 | Universe UniverseSize
           deriving (Show,Generic)
-type NodeType str a = Node str a
-data ApHead str a = Sym SymbolRef | Mu [(str,Node str a,Node str a)] [Node str a] (Application str a) | Axiom (Node str a) a
+type TypeTerm str a = Term str a
+data ApHead str a = Sym SymbolRef | Mu [(str,TypeTerm str a,TypeTerm str a)] [Term str a] (Application str a) | Axiom (Term str a) a
             deriving (Show,Generic)
-data Application str a = Ap (ApHead str a) [Node str a]
+data Application str a = Ap (ApHead str a) [Term str a]
                  deriving (Show,Generic) 
-type Env str a = [(str,NodeType str a)]
 
 type ListSerializable a = (Serializable ListStream a)
 type ListFormat a = (Format ListStream a)
 instance ListSerializable BindType
 instance ListFormat BindType
-instance (ListSerializable a,ListSerializable str) => ListSerializable (Node str a)
-instance (ListFormat a,ListFormat str) => ListFormat (Node str a)
+instance (ListSerializable a,ListSerializable str) => ListSerializable (Term str a)
+instance (ListFormat a,ListFormat str) => ListFormat (Term str a)
 instance (ListSerializable a,ListSerializable str) => ListSerializable (ApHead str a)
 instance (ListFormat a,ListFormat str) => ListFormat (ApHead str a)
 instance (ListSerializable a,ListSerializable str) => ListSerializable (Application str a)
 instance (ListFormat a,ListFormat str) => ListFormat (Application str a)
 
-class Monad m => COCExpression str m e | e -> str where
+type Env str e = [(str,Binding e)]
+class Monad m => DependentLogic str m e | e -> str where
   type Axiom e :: *
+  type Binding e :: *
   
   mkUniverse :: UniverseSize -> m e
   mkVariable :: str -> m e
@@ -84,11 +85,18 @@ class Monad m => COCExpression str m e | e -> str where
   checkType :: e -> m e
   conversionDelta :: e -> e -> m (UniverseSize,UniverseSize)
 
-  substHyp :: str -> e -> m (e -> e,Env str (Axiom e))
+  substHyp :: str -> e -> m (e -> e,Env str e)
   pullTerm :: Maybe str -> e -> m e
-  insertHypBefore :: Maybe str -> str -> e -> m (e -> e,Env str (Axiom e))
-instance (Show a,IsCapriconString str,Monad m,MonadReader (Env str a) m) => COCExpression str (MaybeT m) (Node str a) where
-  type Axiom (Node str a) = a
+  insertHypBefore :: Maybe str -> str -> e -> m (e -> e,Env str e)
+
+hypIndex :: (IsCapriconString str,MonadReader [(str,a)] m) => str -> MaybeT m Int
+hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
+  i:_ -> return i
+  _ -> zero
+
+instance (Show a,IsCapriconString str,Monad m,MonadReader (Env str (Term str a)) m) => DependentLogic str (MaybeT m) (Term str a) where
+  type Axiom (Term str a) = a
+  type Binding (Term str a) = TypeTerm str a
 
   mkUniverse = pure . Universe
   mkVariable v = hypIndex v <&> \i -> Cons (Ap (Sym i) [])
@@ -103,7 +111,7 @@ instance (Show a,IsCapriconString str,Monad m,MonadReader (Env str a) m) => COCE
         args _ = []
     return (subst e (Cons (Ap (Mu [] (args mte) (Ap (Sym 0) [])) [])))
   checkType e = type_of e^.maybeT
-  conversionDelta a b = return (convertible a b)^.maybeT
+  conversionDelta a b = return (convertDelta a b)^.maybeT
 
   substHyp h x = do
     i <- hypIndex h
@@ -127,54 +135,51 @@ instance (Show a,IsCapriconString str,Monad m,MonadReader (Env str a) m) => COCE
                            GT -> second (adjust_depth (adj i)) x:k (i+1))
           (\_ -> []) ctx 0)
 
-hypIndex :: (IsCapriconString str,MonadReader (Env str a) m) => str -> MaybeT m Int
-hypIndex h = ask >>= \l -> case [i | (i,x) <- zip [0..] l, fst x==h] of
-  i:_ -> return i
-  _ -> zero
-    
-data ContextNode str a = ContextNode SymbolRef (Node str a)
+
+data ContextTerm str a = ContextTerm SymbolRef (Term str a)
                        deriving (Show,Generic)
-instance (ListSerializable a,ListSerializable str) => ListSerializable (ContextNode str a)
-instance (ListFormat a,ListFormat str) => ListFormat (ContextNode str a)
-restrictEnv :: SymbolRef -> Env str a -> Env str a
+instance (ListSerializable a,ListSerializable str) => ListSerializable (ContextTerm str a)
+instance (ListFormat a,ListFormat str) => ListFormat (ContextTerm str a)
+restrictEnv :: SymbolRef -> [a] -> [a]
 restrictEnv n e = drop (length e-n) e
 
-instance (Show a,IsCapriconString str,MonadReader (Env str a) m,Monad m) => COCExpression str (MaybeT m) (ContextNode str a) where
-  type Axiom (ContextNode str a) = a
+instance (Show a,IsCapriconString str,MonadReader (Env str (Term str a)) m,Monad m) => DependentLogic str (MaybeT m) (ContextTerm str a) where
+  type Axiom (ContextTerm str a) = a
+  type Binding (ContextTerm str a) = Term str a
 
-  mkUniverse u = ask >>= \ctx -> ContextNode (length ctx)<$>mkUniverse u
-  mkVariable i = local (dropWhile ((/=i) . fst)) (ask >>= \ctx -> ContextNode (length ctx)<$>mkVariable i)
-  mkBind t ce@(ContextNode de e) | de>0 = ContextNode (de-1) <$> local (restrictEnv de) (mkBind t e)
+  mkUniverse u = ask >>= \ctx -> ContextTerm (length ctx)<$>mkUniverse u
+  mkVariable i = local (dropWhile ((/=i) . fst)) (ask >>= \ctx -> ContextTerm (length ctx)<$>mkVariable i)
+  mkBind t ce@(ContextTerm de e) | de>0 = ContextTerm (de-1) <$> local (restrictEnv de) (mkBind t e)
                                  | otherwise = return ce
-  mkApply (ContextNode df f) (ContextNode dx x) = do
+  mkApply (ContextTerm df f) (ContextTerm dx x) = do
     let dm = max df dx
-    ContextNode dm <$> mkApply (inc_depth (dm-df) f) (inc_depth (dm-dx) x)
-  mkMu (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (mkMu e)
-  checkType (ContextNode d e) = ContextNode d <$> local (restrictEnv d) (checkType e)
-  conversionDelta (ContextNode da a) (ContextNode db b) =
+    ContextTerm dm <$> mkApply (inc_depth (dm-df) f) (inc_depth (dm-dx) x)
+  mkMu (ContextTerm d e) = ContextTerm d <$> local (restrictEnv d) (mkMu e)
+  checkType (ContextTerm d e) = ContextTerm d <$> local (restrictEnv d) (checkType e)
+  conversionDelta (ContextTerm da a) (ContextTerm db b) =
     let dm = max da db in
       local (restrictEnv dm)
       $ conversionDelta (inc_depth (dm-da) a) (inc_depth (dm-db) b)
   
-  pullTerm Nothing (ContextNode d e) = ask <&> \l -> ContextNode (length l) (inc_depth (length l-d) e)
-  pullTerm (Just v) (ContextNode d e) = do
+  pullTerm Nothing (ContextTerm d e) = ask <&> \l -> ContextTerm (length l) (inc_depth (length l-d) e)
+  pullTerm (Just v) (ContextTerm d e) = do
     nctx <- length <$> ask
     i <- hypIndex v
     let d' = nctx-(i+1)
     guard (d'>=d || all (\j -> d'+j >= d) (free_vars e))
-    return (ContextNode d' $ inc_depth (d'-d) e)
+    return (ContextTerm d' $ inc_depth (d'-d) e)
 
   substHyp h vh = do
-    ContextNode dm vh' <- pullTerm (Just h) vh
-    first (\f cv@(ContextNode d v) ->
+    ContextTerm dm vh' <- pullTerm (Just h) vh
+    first (\f cv@(ContextTerm d v) ->
              if d <= dm then cv
-             else ContextNode (d-1) (inc_depth (d-dm) $ f $ inc_depth (dm-d) v)) <$>
+             else ContextTerm (d-1) (inc_depth (d-dm) $ f $ inc_depth (dm-d) v)) <$>
       substHyp h vh'
   insertHypBefore h h' cth' = do
-    ContextNode dh th' <- pullTerm h cth'
-    first (\f cx@(ContextNode d x) ->
+    ContextTerm dh th' <- pullTerm h cth'
+    first (\f cx@(ContextTerm d x) ->
              if d <= dh then cx
-             else ContextNode (d+1) (inc_depth (d-dh) $ f $ inc_depth (dh-d) x))
+             else ContextTerm (d+1) (inc_depth (d-dh) $ f $ inc_depth (dh-d) x))
             <$> insertHypBefore h h' th'
 
 data NodeDir str ax a = NodeDir
@@ -227,7 +232,7 @@ i'Cofree = iso (uncurry Step) (\(Step x y) -> (x,y))
 
 instance Ord ax => Semigroup (NodeDir str ax a) where NodeDir a b c + NodeDir a' b' c' = NodeDir (a+a') (b+b') (c+c')
 instance Ord ax => Monoid (NodeDir str ax a) where zero = NodeDir zero zero zero
-instance Ord ax => DataMap (NodeDir str ax a) (Node str ax) a where
+instance Ord ax => DataMap (NodeDir str ax a) (Term str ax) a where
   at (Bind t _ tx e) = from i'NodeDir.l'1.at t.l'Just zero.at tx.l'Just zero.at e
   at (Cons a) = from i'NodeDir.l'2.atAp a
   at (Universe u) = from i'NodeDir.l'3.at u
@@ -250,11 +255,11 @@ mayChoose Nothing = zero
 (<++>) :: WriterT w [] a -> WriterT w [] a -> WriterT w [] a
 a <++> b = a & from writerT %~ (+ b^..writerT)
 
-findPattern :: Ord ax => NodeDir str ax a -> Node str ax -> [([([(str,Node str ax)],Int,Node str ax)],a)]
+findPattern :: Ord ax => NodeDir str ax a -> Term str ax -> [([([(str,Term str ax)],Int,Term str ax)],a)]
 findPattern = \x y -> go [] x y^..writerT
-  where go :: Ord ax => [(str,Node str ax)] -> NodeDir str ax a -> Node str ax -> WriterT [([(str,Node str ax)],Int,Node str ax)] [] a
-        go_a :: Ord ax => [(str,Node str ax)] -> ApDir str ax a -> Application str ax -> WriterT [([(str,Node str ax)],Int,Node str ax)] [] a
-        go_ah :: Ord ax => [(str,Node str ax)] -> AHDir str ax a -> ApHead str ax -> WriterT [([(str,Node str ax)],Int,Node str ax)] [] a
+  where go :: Ord ax => [(str,Term str ax)] -> NodeDir str ax a -> Term str ax -> WriterT [([(str,Term str ax)],Int,Term str ax)] [] a
+        go_a :: Ord ax => [(str,Term str ax)] -> ApDir str ax a -> Application str ax -> WriterT [([(str,Term str ax)],Int,Term str ax)] [] a
+        go_ah :: Ord ax => [(str,Term str ax)] -> AHDir str ax a -> ApHead str ax -> WriterT [([(str,Term str ax)],Int,Term str ax)] [] a
         withEnv env d x m = foldr (\(i,as) ma -> ma <++> (foldl'.foldl') (\l a -> (tell [(env,i-length env,x)] >> return a) <++> l) zero as)
                             m (d^??from i'NodeDir.l'2.from i'AHDir.l'1.ascList.each.sat ((>=length env) . fst))
         go env d wh@(Bind t x tx e) = withEnv env d wh $ do
@@ -304,7 +309,7 @@ adjust_depth f = go 0
 inc_depth 0 = \x -> x
 inc_depth dx = adjust_depth (+dx)
 adjust_telescope_depth field f = zipWith (field . adjust_depth . \i j -> if j<i then j else i+f (j-i)) [0..]
-free_vars :: Node str a -> Set Int
+free_vars :: Term str a -> Set Int
 free_vars (Bind _ _ tx e) = free_vars tx + delete (-1) (map (subtract 1) (free_vars e))
 free_vars (Cons a) = freeA a
   where freeA (Ap (Sym i) xs) = singleton' i + foldMap free_vars xs
@@ -314,7 +319,7 @@ free_vars (Cons a) = freeA a
         freeA (Ap (Axiom _ _) xs) = foldMap free_vars xs
 free_vars _ = zero
 
-is_free_in :: Int -> Node str a -> Bool
+is_free_in :: Int -> Term str a -> Bool
 is_free_in = map2 not go
   where go v (Bind _ _ t e) = go v t && go (v+1) e
         go v (Cons a) = go_a v a
@@ -323,9 +328,9 @@ is_free_in = map2 not go
         go_a v (Ap (Mu env _ a) subs) = go_a (v+length env) a && all (go v) subs
         go_a v (Ap (Axiom _ _) subs) = all (go v) subs
         
-subst :: (Show str,Show a) => Node str a -> Node str a -> Node str a
+subst :: (Show str,Show a) => Term str a -> Term str a -> Term str a
 subst = flip substn 0
-substn :: (Show str,Show a) => Node str a -> Int -> Node str a -> Node str a
+substn :: (Show str,Show a) => Term str a -> Int -> Term str a -> Term str a
 substn val n | n>=0 = getId . go n
              | otherwise = error "'subst' should not be called with a negative index"
   where go d (Bind t x tx e) = do
@@ -462,7 +467,7 @@ latexName s = fromString $ go $ toString s
                                       _ -> "_{"+n+"}"
 
 showNode = showNode' zero
-showNode' :: (IsCapriconString str,Show ax,Ord ax) => NodeDir str ax ([str],StringPattern str) -> [(str,Node str ax)] -> Node str ax -> NodeDoc str
+showNode' :: (IsCapriconString str,Show ax,Ord ax) => NodeDir str ax ([str],StringPattern str) -> [(str,Term str ax)] -> Term str ax -> NodeDoc str
 showNode' dir = go 0
   where go d env x | Just ret <- toPat d env x = ret
         go _ _ (Universe u) = DocSubscript "Set" (fromString (show u))
@@ -508,7 +513,7 @@ showNode' dir = go 0
                 | word <- k]
           | otherwise = Nothing
 
-type_of :: (Show a,IsCapriconString str,MonadReader (Env str a) m) => Node str a -> m (Maybe (Node str a))
+type_of :: (Show a,IsCapriconString str,MonadReader (Env str (Term str a)) m) => Term str a -> m (Maybe (Term str a))
 type_of = yb maybeT . go
   where go (Bind Lambda x tx e) = Bind Prod x tx <$> local ((x,tx):) (go e)
         go (Bind Prod x tx e) = do
@@ -532,12 +537,12 @@ type_of = yb maybeT . go
                     
                 rec_subst (y:t) (Bind Prod _ tx e) = do
                   ty <- go y
-                  _ <- return (convertible tx ty)^.maybeT
+                  _ <- return (convertDelta tx ty)^.maybeT
                   rec_subst t (subst y e)
                 rec_subst [] x = return x
                 rec_subst _ _ = zero
 
-mu_type :: MonadReader (Env str a) m => Node str a -> m (Maybe (Node str a))
+mu_type :: MonadReader (Env str (Term str a)) m => Term str a -> m (Maybe (Term str a))
 mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
   where
     root_args = go' root_type
@@ -586,8 +591,8 @@ mu_type (inc_depth 1 -> root_type) = yb maybeT $ go 0 root_type
               return $ Bind Prod xn tIH (Universe (u+1))
             go_col' _ _ _ = zero
 
-convertible :: Node str a -> Node str a -> Maybe (Int,Int)
-convertible = \x y -> map ((getMax<#>getMax) . fst) ((tell (Max 0,Max 0) >> go False x y)^..writerT)
+convertDelta :: Term str a -> Term str a -> Maybe (Int,Int)
+convertDelta = \x y -> map ((getMax<#>getMax) . fst) ((tell (Max 0,Max 0) >> go False x y)^..writerT)
   where go inv (Bind b _ tx e) (Bind b' _ tx' e') = guard (b==b') >> go (not inv) tx tx' >> go inv e e'
         go inv (Cons ax) (Cons ay) = go_a inv ax ay
         go inv (Universe u) (Universe v) | u>v = tellInv inv (Max (u-v),zero)

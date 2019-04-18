@@ -177,7 +177,13 @@ main = do
       1 -> do
         (_,out) <- runWordsState (map toString $ stringWords (code :: JS.JSString)) st
         postMessage (reqID :: Int,fromString out :: JS.JSString)
-  
+
+      -- run a block of code, and return both its output, and the new state
+      2 -> do
+        (st',out) <- runWordsState (map toString $ stringWords (code :: JS.JSString)) st
+        id <- appendState capriconObject st'
+        postMessage (reqID :: Int,fromString out :: JS.JSString,id)
+
       _ -> error "Unhandled request type"
   
 appendState :: MonadIO m => JS.JSAny -> a -> m Int
@@ -188,71 +194,3 @@ postMessage msg = liftIO $ JS.ffi "(function (m) { postMessage(m); })" (JS.toAny
 
 capriconObject :: JS.JSAny
 capriconObject = JS.constant "CaPriCon"
-    
-  -- maybe unit JS.focus =<< JS.elemById "content-scroll"
-  -- JS.wait 200
-
-  -- let withSubElem root cl = JS.withElemsQS root ('.':cl) . traverse_
-  --     withSubElems _ [] k = k []
-  --     withSubElems root (h:t) k = withSubElem root h $ \h' -> withSubElems root t $ \t' -> k (h':t')
-  
-  -- prelude <- JS.withElem "capricon-prelude" (\e -> JS.getProp e "textContent")
-  -- (initState,_) <- runWordsState (map fromString $ stringWords prelude) (defaultState hasteDict (COCState False [] zero id))
-
-  -- roots <- JS.elemsByQS JS.documentBody ".capricon-steps, code.capricon"
-  -- Just console <- JS.elemById "capricon-console"
-
-  -- (\k -> foldr k (\_ _ -> unit) roots initState "") $ \root next state pref -> do
-  --   isCode <- JS.hasClass root "capricon"
-
-  --   if isCode
-  --     then do
-  --     p <- JS.getProp root "textContent"
-  --     next state (pref+p+" pop ")
-  --     else do
-  --       JS.wait 10
-    
-  --       root' <- cloneNode root
-  --       JS.toggleClass root' "capricon-frame"
-  --       rootChildren <- JS.getChildren root'
-  --       rootTitle <- JS.newElem "h3" <*= \head -> JS.appendChild head =<< JS.newTextElem "CaPriCon Console"
-  --       closeBtn <- JS.newElem "button" <*= \but -> JS.appendChild but =<< JS.newTextElem "Close"
-  --       JS.appendChild rootTitle closeBtn
-  --       JS.appendChild console root'
-  --       JS.setChildren root' (rootTitle:rootChildren)
-
-  --       withSubElems root ["capricon-trigger"] $ \[trig] -> void $ do
-  --         withSubElems root' ["capricon-input"] $ \[inpCons] -> void $ do
-  --           let toggleActive = do
-  --                 JS.toggleClass root' "active"
-  --                 JS.focus inpCons
-  --           JS.onEvent closeBtn JS.Click (const toggleActive)
-  --           JS.onEvent trig JS.Click $ \_ -> toggleActive
-            
-  --       withSubElems root ["capricon-input"] $ \[inpMain] -> do
-  --         withSubElems root' ["capricon-input","capricon-output"] $ \[inp,out] -> do
-  --           JS.withElemsQS root' ".capricon-context" $ \case
-  --             [con] -> do
-  --               context <- JS.getProp con "textContent"
-  --               let text = pref+" "+context
-  --               -- JS.alert ("Running "+fromString text)
-  --               (state',_) <- runWordsState (stringWords text) state
-  --               let onEnter x = \case
-  --                     JS.KeyData 13 False False False False -> x
-  --                     _ -> return ()
-  --                   runCode inp = do
-  --                     Just v <- JS.getValue inp
-  --                     (_,x) <- runWordsState (stringWords v) state'
-  --                     JS.setProp out "textContent" (toString x)
-  --                     return v
-  --               JS.onEvent inp JS.KeyPress $ onEnter $ void $ runCode inp
-  --               JS.onEvent inpMain JS.KeyPress $ onEnter $ do
-  --                 v <- runCode inpMain
-  --                 JS.setClass root' "active" True
-  --                 JS.focus inp
-  --                 JS.setProp inp "value" v
-  --               JS.setClass inpMain "ready" True
-  --               next state' ""
-
--- cloneNode :: MonadIO m => JS.Elem -> m JS.Elem
--- cloneNode x = liftIO $ JS.ffi "(function (n) { return n.cloneNode(true); })" x
