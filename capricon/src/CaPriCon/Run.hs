@@ -172,7 +172,7 @@ literate = liftA2 (\pref r -> pref + [Left (TextComment $ fromString r)])
 
 data COCState str = COCState {
   _endState :: Bool,
-  _context :: [(str,Term str (COCAxiom str))],
+  _context :: Env str (ContextTerm str (COCAxiom str)),
   _showDir :: NodeDir str (COCAxiom str) ([str],StringPattern str),
   _outputText :: str -> str
   }
