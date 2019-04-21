@@ -48,7 +48,7 @@ Type=Application
 Exec=$root/curly/handlers/curly-uri %U
 Name=Install Curly Program
 Comment=Installs a program from a Curly URI
-Terminal=false
+Terminal=true
 MimeType=x-scheme-handler/curly
 EOF
 
