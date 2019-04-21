@@ -71,13 +71,15 @@ EOF
 	lib="${1#uri%%/*}"
 	prog="${uri#$lib}"
 	printf "uri: %s; lib: %s; prog: %s\n" "$uri" "$lib" "$prog"
-	while (
-	    case "$prog" in
-		*/*) prog="${prog%%/*}:${prog#*/}";;
-		*) exit 1;;
+	contains-slash() {
+	    case "$1" in
+		*/*) return 0;;
+		*)   return 1;;
 	    esac
-	)
-	do :; done
+	}
+	while contains-slash "$prog"; do
+	    prog="${prog%%/*}:${prog#*/}"
+	done
 	printf "uri: %s; lib: %s; prog: %s\n" "$uri" "$lib" "$prog"
 	;;
 esac
