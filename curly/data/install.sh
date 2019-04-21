@@ -37,19 +37,29 @@ EOF
 	;;
 
     handlers)
-	root="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+	root="${XDG_DATA_HOME:-$HOME/.local/share}"
 	mkdir -p "$root"
 
-	echo "Installing $root/curly-uri.desktop" >&2
-	cat > "$root/curly-uri.desktop" <<EOF
+	echo "Installing desktop file at $root/applications/curly-uri.desktop" >&2
+	cat > "$root/applications/curly-uri.desktop" <<EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Exec=/usr/bin/env curly-uri %U
+Exec=$root/curly/handlers/curly-uri %U
 Name=Install Curly Program
 Comment=Installs a program from a Curly URI
 Terminal=false
 MimeType=x-scheme-handler/curly
 EOF
+
+	echo "Installing handler $root/curly/handlers/curly-uri" >&2
+	mkdir -p "$root/curly/handlers"
+	
+	cat > "$root/curly/handlers/curly-uri" <<EOF
+#!/bin/sh
+curly --goody install.sh | sh -s - "$@"
+EOF
+	chmod +x "$root/curly/handlers/curly-uri"
+	
 	;;
 esac
