@@ -35,4 +35,20 @@ EOF
 	get_data "$root/completions/curly.script.shf"	bash/completions/curly.script.shf
 	get_data "$root/completions/curly.sh"	        bash/completions/curly.sh
 	;;
+
+    handlers)
+	root="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+	mkdir -p "$root"
+	
+	cat > "$root/curly-uri.desktop" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Exec=/usr/bin/env curly-uri %U
+Name=Install Curly Program
+Comment=Installs a program from a Curly URI
+Terminal=false
+MimeType=x-scheme-handler/curly
+EOF
+	;;
 esac
