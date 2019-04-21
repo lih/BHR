@@ -39,7 +39,8 @@ EOF
     handlers)
 	root="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 	mkdir -p "$root"
-	
+
+	echo "Installing $root/curly-uri.desktop" >&2
 	cat > "$root/curly-uri.desktop" <<EOF
 [Desktop Entry]
 Version=1.0
