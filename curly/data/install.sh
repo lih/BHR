@@ -84,7 +84,7 @@ EOF
 	while contains "$prog" /; do
 	    prog="${prog%%/*}.${prog#*/}"
 	done
-	if [ -t 1 ]; then
+	if [ -t 1 ] || [ -f 1 ]; then
 	    curly --mount p=library:"$lib" %"run p.$prog"
 	else
 	    cmd="curly --mount p=library:$lib %'run p.$prog'"
