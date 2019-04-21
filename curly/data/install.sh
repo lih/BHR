@@ -84,6 +84,20 @@ EOF
 	while contains "$prog" /; do
 	    prog="${prog%%/*}.${prog#*/}"
 	done
-	curly --mount p=library:"$lib" %"run p.$prog"
+	if [ -t 1 ]; then
+	    curly --mount p=library:"$lib" %"run p.$prog"
+	else
+	    cmd="curly --mount p=library:$lib %'run p.$prog'"
+	    cat <<EOF
+<!DOCTYPE html>
+<html>
+  <head></head>
+  <body>
+    <h1>Command <code>$cmd</code></h1>
+    <pre style="background:black; color:white;">`eval "$cmd"`</pre>
+  </body>
+</html>
+EOF
+	fi
 	;;
 esac
