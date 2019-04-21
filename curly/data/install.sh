@@ -72,7 +72,7 @@ EOF
 		*/*) prog="${prog%%/*}:${prog#*/}";;
 		*) exit 1;;
 	    esac
-	}; do :; done
+	); do :; done
 	printf "uri: %s; lib: %s; prog: %s\n" "$uri" "$lib" "$prog"
 	;;
 esac
