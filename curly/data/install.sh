@@ -52,6 +52,9 @@ Terminal=false
 MimeType=x-scheme-handler/curly
 EOF
 
+	echo "Updating desktop database" >&2
+	update-desktop-database "$root/applications"
+
 	echo "Installing handler $root/curly/handlers/curly-uri" >&2
 	mkdir -p "$root/curly/handlers"
 	
@@ -60,7 +63,7 @@ EOF
 curly --goody install.sh | sh -s - "\$@"
 EOF
 	chmod +x "$root/curly/handlers/curly-uri"
-	
+
 	;;
 
     curly:*)
