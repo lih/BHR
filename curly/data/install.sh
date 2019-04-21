@@ -3,6 +3,10 @@ get_data() {
     printf "Installing goody %s at location %s\n" "$2" "$1"
     curly --goody="$2" > "$1"
 }
+trace() {
+    printf "Running: %s\n" "$*" >&2
+    "$@"
+}
 case "$1" in
     emacs)
 	ver=`curly -v | cut -d' ' -f3`
@@ -80,10 +84,6 @@ EOF
 	while containsSlash "$prog"; do
 	    prog="${prog%%/*}.${prog#*/}"
 	done
-	trace() {
-	    printf "Running: %s\n" "$*" >&2
-	    "$@"
-	}
 	curly --mount p=library:"$lib" %"run p.$prog"
 	;;
 esac
