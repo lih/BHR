@@ -62,4 +62,17 @@ EOF
 	chmod +x "$root/curly/handlers/curly-uri"
 	
 	;;
+
+    curly:*)
+	uri="${1#curly:}"
+	lib="${1#uri%%/*}"
+	prog="${uri#$lib}"
+	while (
+	    case "$prog" in
+		*/*) prog="${prog%%/*}:${prog#*/}";;
+		*) exit 1;;
+	    esac
+	}; do :; done
+	printf "uri: %s; lib: %s; prog: %s\n" "$uri" "$lib" "$prog"
+	;;
 esac
