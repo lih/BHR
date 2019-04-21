@@ -70,7 +70,7 @@ EOF
 	uri="${1#curly:}"
 	lib="${1#uri%%/*}"
 	prog="${uri#$lib}"
-	echo 'Called !!'
+	printf "uri: %s; lib: %s; prog: %s\n" "$uri" "$lib" "$prog"
 	while (
 	    case "$prog" in
 		*/*) prog="${prog%%/*}:${prog#*/}";;
