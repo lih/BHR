@@ -93,8 +93,8 @@ EOF
 <html>
   <head></head>
   <body>
-    <h4>Command <code>$cmd</code></h4>
-    <pre style="background:black; color:white;">`eval "$cmd"`</pre>
+    <pre style="background:black; color:white;"><span style="font-weight: bold">\$ $cmd</span>
+`eval "$cmd"`</pre>
   </body>
 </html>
 EOF
