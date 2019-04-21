@@ -37,7 +37,9 @@ metaDoc = [q_string|
 |]
 metaCmd = withDoc metaDoc $ fill False $ withMountain $ do
   path <- many' (nbhspace >> dirArg)
-  let mod = ?mountain >>= \fl -> mapF (\m -> ModDir (m^.ascList)) (Join (fl^.flLibrary.metadata.iso (\(Metadata m) -> m) Metadata))
+  let mod = ?mountain >>= \fl -> mapF (\m -> ModDir (m^.ascList))
+                                 (Join (insert "library-id" (Pure (show (fl^.flID)))
+                                        $ (fl^.flLibrary.metadata.iso (\(Metadata m) -> m) Metadata)))
   serveStrLn $ maybe "" showMetaDir (mod^?atMs path)
 
 reloadDoc = [q_string|
