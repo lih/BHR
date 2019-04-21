@@ -87,8 +87,11 @@ EOF
 	if [ -t 1 ] || [ -f 1 ]; then
 	    curly --mount p=library:"$lib" %"run p.$prog"
 	else
+	    cache="${XDG_CACHE_HOME:-$HOME/.cache}/curly/logs"
+	    mkdir -p "$cache"
 	    cmd="curly --mount p=library:$lib %'run p.$prog'"
-	    cat <<EOF
+	    ts=`date +%s,%F,%T`
+	    cat > "$cache/cmd-$ts.log.html" <<EOF
 <!DOCTYPE html>
 <html>
   <head></head>
@@ -98,6 +101,7 @@ EOF
   </body>
 </html>
 EOF
+	    xdg-open "$cache/cmd-$ts.log.html"
 	fi
 	;;
 esac
