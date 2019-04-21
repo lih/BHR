@@ -12,7 +12,7 @@ maintainer:          marc.coiffier@univ-grenoble-alpes.fr
 -- copyright:
 category:            Graphics
 build-type:          Simple
-extra-source-files:  CHANGELOG.md
+extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
                      
 library

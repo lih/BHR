@@ -28,3 +28,8 @@ doc: build
 
 install: STACK_FLAGS += --copy-bins
 install: build
+
+FORCE:
+%/ChangeLog.md: FORCE
+	scripts/changelog $* > $@
+
