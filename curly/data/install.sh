@@ -57,7 +57,7 @@ EOF
 	
 	cat > "$root/curly/handlers/curly-uri" <<EOF
 #!/bin/sh
-curly --goody install.sh | sh -s - "$@"
+curly --goody install.sh | sh -s - "\$@"
 EOF
 	chmod +x "$root/curly/handlers/curly-uri"
 	
