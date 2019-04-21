@@ -79,7 +79,7 @@ EOF
 	    esac
 	}
 	while containsSlash "$prog"; do
-	    prog="${prog%%/*}:${prog#*/}"
+	    prog="${prog%%/*}.${prog#*/}"
 	done
 	printf "uri: %s; lib: %s; prog: %s\n" "$uri" "$lib" "$prog"
 	;;
