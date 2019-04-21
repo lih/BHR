@@ -70,6 +70,7 @@ EOF
 	uri="${1#curly:}"
 	lib="${uri%%/*}"
 	prog="${uri#$lib}"
+	prog="${prog#/}"
 	printf "uri: %s; lib: %s; prog: %s\n" "$uri" "$lib" "$prog"
 	containsSlash() {
 	    case "$1" in
