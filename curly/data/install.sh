@@ -71,7 +71,6 @@ EOF
 	lib="${uri%%/*}"
 	prog="${uri#$lib}"
 	prog="${prog#/}"
-	printf "uri: %s; lib: %s; prog: %s\n" "$uri" "$lib" "$prog"
 	containsSlash() {
 	    case "$1" in
 		*/*) return 0;;
@@ -81,6 +80,10 @@ EOF
 	while containsSlash "$prog"; do
 	    prog="${prog%%/*}.${prog#*/}"
 	done
-	printf "uri: %s; lib: %s; prog: %s\n" "$uri" "$lib" "$prog"
+	trace() {
+	    printf "Running: %s\n" "$*" >&2
+	    "$@"
+	}
+	trace curly
 	;;
 esac
