@@ -75,13 +75,13 @@ EOF
 	lib="${uri%%/*}"
 	prog="${uri#$lib}"
 	prog="${prog#/}"
-	containsSlash() {
+	contains() {
 	    case "$1" in
-		*/*) return 0;;
+		*"$2"*) return 0;;
 		*)   return 1;;
 	    esac
 	}
-	while containsSlash "$prog"; do
+	while contains "$prog" /; do
 	    prog="${prog%%/*}.${prog#*/}"
 	done
 	curly --mount p=library:"$lib" %"run p.$prog"
