@@ -1,0 +1,43 @@
+#!/bin/bash
+case "$#" in
+    0)
+	cat >&2 <<EOF
+Usage: $0 <package> 
+    OR $0 <package> <commit>...
+
+Show a changelog for the given package. In the second form, include
+additional commits into that changelog.
+
+This script uses git notes ('man git notes') to identify commits that
+belong to a particular changeset. This method allows some commits to
+be included into multiple changelogs, if need be.
+
+EOF
+	;;
+    1)
+	if [ -z "$SHOW_ALL" ]; then
+	    git_log_options=( --show-notes --grep="changelog-$1" --pretty=format:"  - %s" )
+	else
+	    git_log_options=( --pretty=format:"  - (%N) %s" )
+	fi
+	printf 'Revision history for %s\n===============\n' "$1"
+	
+	git tag | grep "^\\(package\\|release\\)-$1-[0-9]" | sort -t- -k3V | tail -n+"${2:-1}" | {
+	    read oldver
+	    while read ver; do
+		printf '### %s'$'\n' "$oldver"
+		git log "${git_log_options[@]}" "$oldver".."$ver" | grep -v "Successful build\|Autocommit"
+		printf '### %s'$'\n' "$ver"
+		oldver="$ver"
+	    done
+	} | uniq | tac \
+	    | sed -n '/^###/{h;:loop;n;/^###/{H;bloop}};x;s/\n###/ \//g;s/^\(###.*\)$/\n\1\n/m;p;x;:loopa;/^ /{p;n;/^###/{h;bloop;};bloopa;};' \
+	    | less
+	;;
+    *)
+	for commit in "${@:2}"; do
+	    git notes append -m "changelog-$1" "$commit"
+	done;;
+esac
+
+	

@@ -45,7 +45,7 @@
   , green 0 0 0 point 0 0 1 point ]
   components 'LINES mesh def
 
-'Uniform { dup "set-%s" format swap { {@ dup uniform @} 1 dupn defuniform , {@ @} swap def } def } def
+'Uniform { dup "set-%s" format swap { ,{ dup uniform } 1 dupn defuniform ,{ } swap def } def } def
 
 'modelMat Uniform
 'viewMat Uniform
@@ -64,7 +64,7 @@
 'ambiantLuminosity Uniform , 0.6 set-ambiantLuminosity
 
 identity set-modelMat
-'=> { {@ 'modelMat uniform @} swap [ 2 shaft ] } def
+'=> { ,{ 'modelMat uniform } swap [ 2 shaft ] } def
 
 'scene [
   10 range {
@@ -106,7 +106,7 @@ view-trans set-viewMat
 "press UP" { 'view-zy-angle { dyz ** } modify set-camera refresh } bind-key
 "press DOWN" { 'view-zy-angle { dzy ** } modify set-camera refresh } bind-key
 "press KP_ADD" { 'view-scale  { 1.1 ** } modify set-camera refresh } bind-key
-"press KP_SUBTRACT" { 'view-scale  { {@ {@ 1.1 recip @} @} ** } modify set-camera refresh } bind-key
+"press KP_SUBTRACT" { 'view-scale  { ,{ ,{ 1.1 recip } } ** } modify set-camera refresh } bind-key
 
 "press ESC" { quit } bind-key
 "press Q" { ctrl { quit } { } if } bind-key
