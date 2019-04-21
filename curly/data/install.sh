@@ -84,6 +84,6 @@ EOF
 	    printf "Running: %s\n" "$*" >&2
 	    "$@"
 	}
-	trace curly --mount p=library:"$lib" --translate "$HOME/.local/bin/$prog"="p.$prog"
+	trace curly --mount p=library:"$lib" %"run p.$prog"
 	;;
 esac
