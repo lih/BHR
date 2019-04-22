@@ -49,10 +49,9 @@ EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Exec=$root/curly/handlers/curly-uri %U
+Exec=$root/curly/handlers/curly-uri %u
 Name=Install Curly Program
 Comment=Installs a program from a Curly URI
-Terminal=true
 MimeType=x-scheme-handler/curly
 EOF
 
