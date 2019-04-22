@@ -70,6 +70,7 @@ EOF
 	;;
 
     curly:*)
+	printf "Called !"
 	uri="${1#curly:}"
 	lib="${uri#//*/}"
 	host="${uri%$lib}"
