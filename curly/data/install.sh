@@ -98,7 +98,7 @@ EOF
 		cmd="curly --mount p=library:$lib %'run p.$prog'"
 		;;
 	esac
-	if [ -t 1 ] || [ -f 1 ]; then
+	if [ -t 1 ]; then
 	    eval "$cmd"
 	else
 	    cache="${XDG_CACHE_HOME:-$HOME/.cache}/curly/logs"
