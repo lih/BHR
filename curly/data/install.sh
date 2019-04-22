@@ -99,7 +99,7 @@ EOF
 		;;
 	esac
 	if [ -t 1 ]; then
-	    eval "$cmd"
+	    time eval "$cmd"
 	else
 	    cache="${XDG_CACHE_HOME:-$HOME/.cache}/curly/logs"
 	    mkdir -p "$cache"
