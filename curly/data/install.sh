@@ -89,7 +89,7 @@ EOF
 	case "$host" in
 	    //*/)
 		host="${host#//}"; host="${host%/}"
-		curly %"key import $host $host" %"key set $host branches $lib follow true"
+		curly %"key import $host $host" %"key set $host branches $lib follow = true"
 		cmd="curly --mount p=package:$host:$lib %'run p.$prog'"
 		;;
 	    *)
