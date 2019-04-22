@@ -72,8 +72,10 @@ EOF
 
     curly:*)
 	uri="${1#curly:}"
-	lib="${uri%%/*}"
-	prog="${uri#$lib}"
+	lib="${uri#//*/}"
+	host="${uri%$lib}"
+	lib="${lib%%/*}"
+	prog="${uri#$host$lib}"
 	prog="${prog#/}"
 	contains() {
 	    case "$1" in
@@ -84,12 +86,21 @@ EOF
 	while contains "$prog" /; do
 	    prog="${prog%%/*}.${prog#*/}"
 	done
+	case "$host" in
+	    //*/)
+		host="${host#//}"; host="${host%/}"
+		curly %"key import $host $host" 
+		cmd="curly --mount p=package:$host:$lib %'run p.$prog'"
+		;;
+	    *)
+		cmd="curly --mount p=library:$lib %'run p.$prog'"
+		;;
+	esac
 	if [ -t 1 ] || [ -f 1 ]; then
-	    curly --mount p=library:"$lib" %"run p.$prog"
+	    eval "$cmd"
 	else
 	    cache="${XDG_CACHE_HOME:-$HOME/.cache}/curly/logs"
 	    mkdir -p "$cache"
-	    cmd="curly --mount p=library:$lib %'run p.$prog'"
 	    ts=`date +%s,%F,%T`
 	    cat > "$cache/cmd-$ts.log.html" <<EOF
 <!DOCTYPE html>
