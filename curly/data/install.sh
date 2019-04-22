@@ -88,7 +88,9 @@ EOF
 	case "$host" in
 	    //*/)
 		host="${host#//}"; host="${host%/}"
-		curly %"key import $host $host"
+		if [ -z "`curly %"key meta $host"`" ]; then
+		    curly %"key import $host $host" 2>/dev/null
+		fi
 		cmd="curly --mount p=package:$host:$lib %'run p.$prog'"
 		;;
 	    *)
