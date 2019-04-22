@@ -102,16 +102,19 @@ EOF
 	    cache="${XDG_CACHE_HOME:-$HOME/.cache}/curly/logs"
 	    mkdir -p "$cache"
 	    ts=`date +%s,%F,%T`
-	    cat > "$cache/cmd-$ts.log.html" 2>&1 <<EOF
+	    (
+		exec 2>&1
+		cat > "$cache/cmd-$ts.log.html" <<EOF
 <!DOCTYPE html>
 <html>
   <head></head>
   <body>
     <pre style="background:black; color:white;"><span style="font-weight: bold">\$ $cmd</span>
-`eval "$cmd"`</pre>
+`eval "$cmd" 2>&1`</pre>
   </body>
 </html>
 EOF
+	    )
 	    xdg-open "$cache/cmd-$ts.log.html"
 	fi
 	;;
