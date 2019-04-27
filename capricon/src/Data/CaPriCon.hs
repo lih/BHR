@@ -170,16 +170,18 @@ instance (Show a,IsCapriconString str,MonadReader (Env str (Term str a)) m,Monad
     return (ContextTerm d' $ inc_depth (d'-d) e)
 
   substHyp h vh = do
-    ContextTerm dm vh' <- pullTerm (Just h) vh
+    ContextTerm dh vh' <- pullTerm (Just h) vh
+    dm <- length <$> ask
     first (\f cv@(ContextTerm d v) ->
-             if d <= dm then cv
-             else ContextTerm (d-1) (inc_depth (d-dm) $ f $ inc_depth (dm-d) v)) <$>
+              if d <= dh then cv
+              else ContextTerm (d-1) (inc_depth (d-dm) $ f $ inc_depth (dm-d) v)) <$>
       substHyp h vh'
   insertHypBefore h h' cth' = do
     ContextTerm dh th' <- pullTerm h cth'
+    dm <- length <$> ask
     first (\f cx@(ContextTerm d x) ->
              if d <= dh then cx
-             else ContextTerm (d+1) (inc_depth (d-dh) $ f $ inc_depth (dh-d) x))
+             else ContextTerm (d+1) (inc_depth (d-dm) $ f $ inc_depth (dm-d) x))
             <$> insertHypBefore h h' th'
 
 data NodeDir str ax a = NodeDir

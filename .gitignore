@@ -10,3 +10,4 @@ Curly_Test.hs
 *.jsmod
 config.mk
 */dist
+*.tar.gz
