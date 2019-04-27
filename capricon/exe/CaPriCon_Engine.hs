@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, NoMonomorphismRestriction, DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings, NoMonomorphismRestriction, DeriveGeneric, StandaloneDeriving #-}
 module Main where
 
 import Definitive
@@ -21,6 +21,9 @@ import qualified Haste.JSString as JSS
 import qualified Haste.Binary as JS hiding (get)
 import qualified Prelude as P
 import qualified Data.Array.Unboxed as Arr
+
+deriving instance Show BraceKind
+deriving instance Show s => Show (AtomClass s)
 
 instance Semigroup JS.JSString where (+) = JSS.append
 instance Monoid JS.JSString where zero = JSS.empty
@@ -142,12 +145,15 @@ setString f v = setFSItem (fromString f) (fromString v :: JS.JSString)
 setBytes :: String -> [Word8] -> FSIO ()
 setBytes f v = setString f (map (toEnum . fromIntegral) v)
 
+
 type WiQEEState = StackState (COCState String) String (COCBuiltin FSIO String) (COCValue FSIO String)
 runWordsState :: [String] -> WiQEEState -> FSIO (WiQEEState,String)
 runWordsState ws st = ($st) $ from (stateT.concatT) $^ do
   foldr (\w tl -> do
             x <- runExtraState (getl endState)
-            unless x $ do execSymbol runCOCBuiltin runComment (atomClass w); tl) unit ws
+            let cl = atomClass w
+            liftIO (JS.ffi ("console.log" :: JS.JSString) (fromString ("Executing symbol: "+show w+" (class "+show cl+")") :: JS.JSString) :: IO ())
+            unless x $ do execSymbol runCOCBuiltin runComment cl; tl) unit ws
   out <- runExtraState (outputText <~ \x -> (id,x))
   return (out "")
 
@@ -169,7 +175,7 @@ main = do
     case req :: Int of
       -- run a block of code, and return a handle to a new state
       0 -> do
-        (st',_) <- runWordsState (map toString $ stringWords (code :: JS.JSString)) st
+        (st',_) <- runWordsState (stringWords (toString (code :: JS.JSString))) st
         id <- appendState capriconObject st'
         postMessage (reqID :: Int,id)
   

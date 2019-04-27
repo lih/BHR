@@ -135,6 +135,7 @@ instance StackSymbol String where
   atomClass "${" = Open (Splice CloseExec)
   atomClass "}" = Close
   atomClass ('\'':t) = Quoted t
+  atomClass ('\x8217':t) = Quoted t
   atomClass ('"':t) = Quoted (init t)
   atomClass (':':t) = Comment (TextComment t)
   atomClass x = maybe (Other x) Number (matches Just readable x)
