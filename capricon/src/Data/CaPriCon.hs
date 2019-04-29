@@ -170,9 +170,9 @@ instance (Show a,IsCapriconString str,MonadReader (Env str (Term str a)) m,Monad
     return (ContextTerm d' $ inc_depth (d'-d) e)
 
   substHyp h vh = do
-    ContextTerm dm vh' <- pullTerm Nothing vh
+    ContextTerm dm vh' <- pullTerm (Just h) vh
     first (\f cv@(ContextTerm d v) ->
-              if d <= dm then trace "no" cv
+              if d <= debug dm then trace "no" cv
               else trace "yes" $ ContextTerm (d-1) (inc_depth (d-dm) $ f $ inc_depth (dm-d) v)) <$>
       substHyp h vh'
   insertHypBefore h h' cth' = do
