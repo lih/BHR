@@ -172,8 +172,8 @@ instance (Show a,IsCapriconString str,MonadReader (Env str (Term str a)) m,Monad
   substHyp h vh = do
     ContextTerm dm vh' <- pullTerm (Just h) vh
     first (\f cv@(ContextTerm d v) ->
-             if d+1 <= dm then cv
-             else ContextTerm (d-1) (inc_depth (d-dm) $ f $ inc_depth (dm-(d+1)) v)) <$>
+             if d <= dm then cv
+             else ContextTerm (d-1) (inc_depth ((d-1)-dm) $ f $ inc_depth (dm-d) v)) <$>
       substHyp h vh'
   insertHypBefore h h' cth' = do
     ContextTerm dh th' <- pullTerm h cth'
