@@ -534,7 +534,7 @@ type_of = yb maybeT . go
                 go' (Ap (Mu env _ a') subs) = do
                   ta <- local (map (\(x,tx,_) -> (x,tx)) env +) (go' a')
                   preret <- maybeT $^ mu_type $ foldl' (\e (x,tx,_) -> Bind Prod x tx e) ta env
-                  rec_subst subs (subst (Cons a') preret)
+                  rec_subst subs (subst (foldl' (\e (x,tx,_) -> Bind Lambda x tx e) (Cons a') env) preret)
                 go' (Ap (Axiom t _) subs) = rec_subst subs t
                     
                 rec_subst (y:t) (Bind Prod _ tx e) = do
