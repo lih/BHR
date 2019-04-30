@@ -160,7 +160,7 @@ runWordsState ws st = ($st) $ from (stateT.concatT) $^ do
 runWithFS :: JS.JSString -> FSIO a -> JS.CIO a
 runWithFS fsname (FSIO r) = newFS fsname >>= r^..readerT
 
-hasteDict = cocDict ("0.13.1.1-js" :: String) getString getBytes setString setBytes
+hasteDict = cocDict ("0.13.1.2-js" :: String) getString getBytes setString setBytes
 
 main :: IO ()
 main = do

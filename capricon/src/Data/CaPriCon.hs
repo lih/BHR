@@ -483,16 +483,16 @@ showNode' dir = go 0
                                                     [DocSpace,DocAssoc x' (go 0 env' tx)] + bind_tail ((x',tx):env') e
                   where x' = fresh (map fst env') x
                 bind_tail env' x = [bind_sep t,DocSpace,go 0 env' x]
-        go d env (Cons a) = showA d a
-          where showA _ (Ap h xs) =
+        go d env (Cons a) = showA d env a
+          where showA _ envA (Ap h xs) =
                   let ni = case h of
-                             Sym i -> DocVarName $ case drop i env of
+                             Sym i -> DocVarName $ case drop i envA of
                                (h',_):_ -> h'
                                _ -> "#"+fromString (show i)
-                             Mu _ _ a' -> DocMu (showA 0 a')
+                             Mu envD _ a' -> DocMu (showA 0 (map (\(x,tx,_) -> (x,tx)) envD + envA) a')
                              Axiom _ ax -> DocText (fromString $ show ax)
                       lvl = if empty xs then 1000 else 1
-                  in par lvl d $ DocSeq $ intercalate [DocSpace] $ map pure (ni:map (go 2 env) xs)
+                  in par lvl d $ DocSeq $ intercalate [DocSpace] $ map pure (ni:map (go 2 envA) xs)
 
         toPat d env x
           | (pats,(_,k)):_ <- findPattern dir x =
@@ -534,7 +534,7 @@ type_of = yb maybeT . go
                 go' (Ap (Mu env _ a') subs) = do
                   ta <- local (map (\(x,tx,_) -> (x,tx)) env +) (go' a')
                   preret <- maybeT $^ mu_type $ foldl' (\e (x,tx,_) -> Bind Prod x tx e) ta env
-                  rec_subst subs (subst (Cons a') preret)
+                  rec_subst subs (subst (foldl' (\e (x,tx,_) -> Bind Lambda x tx e) (Cons a') env) preret)
                 go' (Ap (Axiom t _) subs) = rec_subst subs t
                     
                 rec_subst (y:t) (Bind Prod _ tx e) = do
