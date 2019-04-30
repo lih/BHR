@@ -1,6 +1,11 @@
 Revision history for capricon
 ===============
 
+### release-capricon-0.13.1.1 / package-capricon-0.13.1.1
+
+  - Start updating the CaPriCon interpreter to enable "automatic universes"
+  - Correct the 'substitute' and 'intro before' builtins
+
 ### release-capricon-0.13.1 / package-capricon-0.13.1
 
   - Implement a new kind of "quiet" mustache in CaPriCon, to allow precise formatting commands to be inserted into a document
